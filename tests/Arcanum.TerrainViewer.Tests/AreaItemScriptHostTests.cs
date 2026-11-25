@@ -99,10 +99,11 @@ public sealed class AreaItemScriptHostTests
             }
             Write("tig.dat", AreaOwnerFixture.Dat());
             Write("modules/Syn.dat", AreaOwnerFixture.Dat());
-            foreach (var name in new[] { "00500plain", "00501named", "00502silent", "00503acting", "00504same" }) Write($"scr/{name}.scr", PrintAndSkip());
+            foreach (var name in new[] { "00500plain", "00501named", "00502silent", "00503acting", "00504same", "00505touch" }) Write($"scr/{name}.scr", PrintAndSkip());
             Write("scr/00510tome.scr", TomeScript());
             Write("dlg/00500plain.dlg", Encoding.Latin1.GetBytes("{1}{It hums for @pcname@.}{It hums softly.}{}{}{}{}"));
             Write("dlg/00501named.dlg", Encoding.Latin1.GetBytes("{1}{@npcname@ hums.}{}{}{}{}{}"));
+            Write("dlg/00505touch.dlg", Encoding.Latin1.GetBytes("{1}{@pcname@ touches @npcname@.}{@pcname@ touches @npcname@.}{}{}{}{}"));
             Write("dlg/00504same.dlg", Encoding.Latin1.GetBytes("{1}{It hums.}{It hums.}{}{}{}{}"));
             Write("dlg/00503acting.dlg", Encoding.Latin1.GetBytes("{1}{It hums.}{}{}{}{}{gf 5 1}"));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
@@ -122,6 +123,36 @@ public sealed class AreaItemScriptHostTests
             var host = new AreaItemScriptHost(session, [Map()], content);
             Assert.AreEqual((SessionPrintedLineStatus.Shown, "It hums for Zed."), Pair(host.PrintedLine(500, 1)));
             Assert.AreEqual(SessionPrintedLineStatus.Unsupported, host.PrintedLine(501, 1).Status);
+            return 0;
+        });
+    }
+
+    [TestMethod]
+    public void A_printed_line_names_an_item_attachee_and_an_npc_triggerer_through_the_shown_maps_use_host()
+    {
+        // ARC-SCRIPT-2811 (0x44B390 → 0x416B00, ledger NM3, NM4): @npcname@ is the attachee item's shown name (its own observer), @pcname@ with an NPC triggerer that NPC's not-yet-met description (no observer); a name the host cannot read is refused.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetHeroPlayerName(session.Version, System.Text.Encoding.Latin1.GetBytes("Zed")).Disposition);
+            var npcRow = Row(9, 16, 14, 20, 0);
+            var shown = new AreaUseScriptHost(session, 1, [npcRow], [], content) { ObjectName = (row, recognition, marked) => $"[{row.Type}:{recognition}:{marked}]" };
+            var host = new AreaItemScriptHost(session, [Map()], content, null, () => shown);
+            var pc = new ScrObjectRef(1, AreaScriptHost.PcCode);
+            var item = new ScrObjectRef(1, Entity(0));
+            var npc = new ScrObjectRef(1, AreaUseScriptHost.EntityId(npcRow));
+            Assert.AreEqual((SessionPrintedLineStatus.Shown, "Zed touches [7:Recognized:False]."), Pair(host.PrintedLineOf(505, 1, pc, item, npcTriggerer: false)), "the hero triggers: its player name; the item: its description");
+            Assert.AreEqual((SessionPrintedLineStatus.Shown, "[16:NotRecognized:False] touches [7:Recognized:False]."), Pair(host.PrintedLineOf(505, 1, npc, item, npcTriggerer: true)), "an NPC triggers: its unmet description");
+            Assert.AreEqual((SessionPrintedLineStatus.Shown, "Zed touches Zed."), Pair(host.PrintedLineOf(505, 1, pc, pc, npcTriggerer: false)), "the hero as attachee: its player name");
+            // A triggerer the use host has no row of, an attachee no loaded row names (a made item), and a host without a name source are refused.
+            Assert.AreEqual(SessionPrintedLineStatus.Unsupported, host.PrintedLineOf(505, 1, new ScrObjectRef(1, Entity(5)), item, npcTriggerer: true).Status);
+            Assert.AreEqual(SessionPrintedLineStatus.Unsupported, host.PrintedLineOf(505, 1, pc, new ScrObjectRef(1, "made:1"), npcTriggerer: false).Status);
+            Assert.AreEqual(SessionPrintedLineStatus.Unsupported, new AreaItemScriptHost(session, [Map()], content).PrintedLineOf(505, 1, pc, item, npcTriggerer: false).Status);
+            shown.ObjectName = null;
+            Assert.AreEqual(SessionPrintedLineStatus.Unsupported, host.PrintedLineOf(505, 1, pc, item, npcTriggerer: false).Status);
+            // Without the run's objects the old readings stand: a line naming either is refused.
+            Assert.AreEqual(SessionPrintedLineStatus.Unsupported, host.PrintedLine(505, 1).Status);
+            Assert.AreEqual(SessionPrintedLineStatus.Unsupported, host.PrintedLineForNpc(505, 1).Status);
             return 0;
         });
     }

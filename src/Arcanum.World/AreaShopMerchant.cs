@@ -164,8 +164,10 @@ public sealed class AreaShopSession : IDisposable
     /// hero's check, as in the dialog's barter window); null: the merchant has no sheet and the bet gate refuses.</param>
     /// <param name="scriptContent">ARC-UI-1806: the script content (the generated dialog texts and the merchant's override dialog) the merchant's bet lines are read from, borrowed
     /// and asked at each line; null or no content: no line is said (the gate's refusals then print nothing, as the dialog's window does without texts).</param>
+    /// <param name="npcName">ARC-SCRIPT-2811 (ledger NM3): the merchant's name as a line's <c>@npcname@</c> prints it, its description taken as a recognized NPC (<see cref="AreaDialogNames.NpcNameSource"/>; the window's <paramref name="merchantName"/> is the
+    /// not-yet-met description); null: the window's name.</param>
     public static AreaShopSession? Open(GameSessionOwner owner, AreaShopMap map, AreaBarterData data, Func<string, SessionItemKind, string> name,
-        string merchantName, out string? refused, Func<int, EffectRule?>? effects = null, Func<ScriptContent?>? scriptContent = null)
+        string merchantName, out string? refused, Func<int, EffectRule?>? effects = null, Func<ScriptContent?>? scriptContent = null, Func<AreaObjectRecord, string?>? npcName = null)
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(map);
@@ -204,7 +206,7 @@ public sealed class AreaShopSession : IDisposable
         }
         var state = new AreaConversationState(owner, shopMap, [map.Merchant], AreaConversationProfile.Diagnostic.InitialReaction, scopes: [AreaConversationHost.Scope(row, owner)]);
         // ARC-UI-1806: the bet in this window as in the dialog's: the merchant's Gambling skill from its stored sheet and its generated lines.
-        var lines = new AreaShopLines(owner, row, state, scriptContent, merchantName);
+        var lines = new AreaShopLines(owner, row, state, scriptContent, npcName is null ? merchantName : AreaDialogNames.NpcName(npcName, row)!);
         var barter = new AreaBarter(owner, inventory, data, merchant, () => state.Reaction(0),
             delta => owner.AdjustReaction(owner.Version, map.Merchant, state.NpcFacts(), state.PcFactsFor(0), delta).Disposition == GameSessionDisposition.Changed, name,
             merchantGambling: () => effects is not null && AreaAdvancement.Npc(map.Merchant, map.MerchantFields, effects) is { } sheet

@@ -347,7 +347,7 @@ internal sealed class ScrInterpreter
                 // action: 2188 during a mind-controlled run, E6), operand 0 the line, operand 1 a number shown with it;
                 // without an attachee nothing is printed.
                 var at = Get(a, 0); var kind = Get(a, 1);
-                if (_roles.Attachee is not null) _lines.Add(new(_number, at, kind));
+                if (_roles.Attachee is not null) _lines.Add(new(_number, at, kind, _roles.Triggerer, _roles.Attachee));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.FloatLine: FloatLine(a); return (Step.Next, 0);

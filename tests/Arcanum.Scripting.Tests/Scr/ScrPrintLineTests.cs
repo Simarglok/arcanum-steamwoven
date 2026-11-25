@@ -35,7 +35,8 @@ public sealed class ScrPrintLineTests
 
         var run = ScrDispatcher.RunObject(new(InsertItem, Item, Pc, null), host, S6);
         Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.ReturnSkipDefault), (run.Outcome, run.Stop));
-        CollectionAssert.AreEqual(new[] { new ScrPrintLine(1341, 1, 6), new ScrPrintLine(1341, 3, 2) }, run.Effects.Lines.ToArray());
+        // ARC-SCRIPT-2811: each line carries the run's triggerer and attachee, which name @pcname@ and @npcname@.
+        CollectionAssert.AreEqual(new[] { new ScrPrintLine(1341, 1, 6, Pc, Item), new ScrPrintLine(1341, 3, 2, Pc, Item) }, run.Effects.Lines.ToArray());
         Assert.IsFalse(run.Effects.IsEmpty);
         Assert.IsNull(run.Effects.Writeback);
 
@@ -55,7 +56,7 @@ public sealed class ScrPrintLineTests
         Assert.AreEqual(0, tile.Effects.Lines.Count);
         // A deferred call has no attachment; its lines name the called script.
         var call = ScrDispatcher.RunCall(new(1341, 0, Pc, Item), host, S6);
-        CollectionAssert.AreEqual(new[] { new ScrPrintLine(1341, 1, 6), new ScrPrintLine(1341, 3, 2) }, call.Effects.Lines.ToArray());
+        CollectionAssert.AreEqual(new[] { new ScrPrintLine(1341, 1, 6, Pc, Item), new ScrPrintLine(1341, 3, 2, Pc, Item) }, call.Effects.Lines.ToArray());
 
         var wider = new ScrAdmissionSet("wider", ScrAdmissionSet.S6.Conditions, ScrAdmissionSet.S6.Actions.Append(UnsupportedAction),
             ScrAdmissionSet.S6.ValueKinds, ScrAdmissionSet.S6.FocusKinds);

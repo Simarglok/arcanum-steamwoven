@@ -373,6 +373,127 @@ class SurfaceComposeTests(unittest.TestCase):
         with self.assertRaises(surface_compose.ComposeError):
             surface_compose.erase_boxes(image, ((15, 5, 25, 9),))
 
+    # ARC-UI-3165: text boxes (text, digits and counters over a ground), paper boxes, wood boxes and the committed zone specs
+
+    def test_load_spec_reads_the_text_paper_and_wood_boxes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "spec.json"
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "text_boxes": [[1, 2, 30, 40]], "paper_boxes": [[5, 6, 70, 80]], "wood_boxes": [[9, 9, 20, 20]]}), encoding="utf-8")
+            spec = surface_compose.load_spec(path)
+            self.assertEqual((spec.text_boxes, spec.paper_boxes, spec.wood_boxes), (((1, 2, 30, 40),), ((5, 6, 70, 80),), ((9, 9, 20, 20),)))
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x"}), encoding="utf-8")
+            spec = surface_compose.load_spec(path)
+            self.assertEqual((spec.text_boxes, spec.paper_boxes, spec.wood_boxes), ((), (), ()))
+            for bad in ({"text_boxes": [[5, 5, 5, 9]]}, {"paper_boxes": None}, {"wood_boxes": [[1, 2, 3]]}, {"text_boxes": [[True, 0, 3, 3]]}):
+                path.write_text(json.dumps({"id": "a", "screen": "s", **bad}), encoding="utf-8")
+                with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
+                    surface_compose.load_spec(path)
+
+    @staticmethod
+    def _paint(image: "pngio.Image", x0: int, y0: int, x1: int, y1: int, rgb) -> None:
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                image.data[(y * image.w + x) * 4:(y * image.w + x) * 4 + 4] = bytes((*rgb, 255))
+
+    def test_erase_text_takes_the_text_out_of_a_black_field_and_leaves_the_ring_and_the_rest(self):
+        image = self._flat(120, 60, 4)
+        self._paint(image, 0, 0, 120, 8, (200, 160, 60))                        # a brass rim above the field, outside the box
+        for x0 in (30, 44, 58):                                                  # three thick digits, 8 x 20 px
+            self._paint(image, x0, 20, x0 + 8, 40, (250, 250, 250))
+        before_rim = image.pixel(60, 3)
+        replaced = surface_compose.erase_text(image, ((20, 15, 80, 45),))
+        self.assertGreater(replaced, 3 * 8 * 20)                                 # the digits and their halo
+        for x, y in ((33, 30), (47, 22), (61, 39), (20, 15), (79, 44)):
+            self.assertLessEqual(max(image.pixel(x, y)[:3]), 6, (x, y))          # the ground (black field) is back, up to its own grain
+        self.assertEqual(image.pixel(60, 3), before_rim)                         # outside the box nothing changes
+
+    def test_erase_text_keeps_the_shading_of_the_ground(self):
+        image = self._flat(100, 50, 0)
+        for y in range(50):
+            for x in range(100):
+                self._paint(image, x, y, x + 1, y + 1, (40 + x, 40 + x, 40 + x))   # a horizontal gradient: 40 at the left, 139 at the right
+        self._paint(image, 40, 15, 52, 35, (255, 255, 255))
+        surface_compose.erase_text(image, ((30, 10, 62, 40),))
+        for x in (36, 46, 56):
+            self.assertAlmostEqual(image.pixel(x, 25)[0], 40 + x, delta=6)       # the mean of the ground around: the gradient continues through the box
+
+    def test_erase_text_refuses_a_box_outside_and_a_box_that_is_no_text_on_a_ground(self):
+        image = self._flat(40, 40, 10)
+        with self.assertRaises(surface_compose.ComposeError):
+            surface_compose.erase_text(image, ((30, 30, 50, 45),))
+        self._paint(image, 10, 10, 30, 30, (250, 250, 250))
+        with self.assertRaises(surface_compose.ComposeError):                    # the box is a picture, not text: 100 % differs from the ring
+            surface_compose.erase_text(image, ((10, 10, 30, 30),))
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_erase_text_in_paper_mode_removes_blue_ink_from_a_shaded_page_and_not_the_shading(self):
+        image = self._flat(160, 90, 0)
+        for y in range(90):
+            for x in range(160):
+                self._paint(image, x, y, x + 1, y + 1, (200 - x // 2, 190 - x // 2, 160 - x // 2))    # a page darkening toward the right, 120 px of it in the box
+        for x0 in range(30, 120, 14):
+            self._paint(image, x0, 30, x0 + 5, 56, (10, 10, 170))                # blue strokes (bright in blue only)
+        self.assertLess(image.pixel(32, 40)[0], 20)
+        replaced = surface_compose.erase_text(image, ((20, 20, 135, 70),), paper=True)
+        self.assertGreater(replaced, 7 * 5 * 26)
+        for x in (32, 60, 88, 116):
+            r, g, b = image.pixel(x, 40)[:3]
+            self.assertAlmostEqual(r, 200 - x // 2, delta=8, msg=str((x, r)))
+            self.assertAlmostEqual(b, 160 - x // 2, delta=8, msg=str((x, b)))     # no blue left, and the shading is the page's
+
+    @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
+    def test_force_wood_makes_the_weight_one_in_the_box_and_leaves_the_rest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            solid = Path(tmp) / "w.png"
+            subprocess.run(["magick", "-size", "100x60", "xc:black", str(solid)], check=True)
+            surface_compose.force_wood(solid, ((30, 10, 70, 50),), solid, 100, 60)
+            data = pngio.read(solid)
+            self.assertGreater(data.pixel(50, 30)[0], 250)                       # the middle of the box is wood
+            self.assertLess(data.pixel(5, 5)[0], 5)                              # far from it nothing is
+            with self.assertRaises(surface_compose.ComposeError):
+                surface_compose.force_wood(solid, ((90, 10, 120, 50),), solid, 100, 60)
+
+    def test_tone_masks_exclude_the_text_and_paper_boxes_in_layout_units_and_only_when_there_are_some(self):
+        self.assertIsNone(surface_compose.tone_masks_for(surface_compose.ZoneSpec(id="a", screen="ctx-inventory")))
+        spec = surface_compose.ZoneSpec(id="a", screen="ctx-reading", paper_boxes=((800, 340, 1560, 1388),), text_boxes=((3, 7, 40, 80),))
+        masks = surface_compose.tone_masks_for(spec)
+        exclude = masks["screens"]["ctx-reading"]["exclude"]
+        self.assertIn([222, 94, 434, 386], exclude)                          # 800 / 3.6 = 222.2 down, 340 / 3.6 = 94.4 down, 1560 / 3.6 = 433.3 up, 1388 / 3.6 = 385.6 up
+        self.assertIn([0, 1, 12, 23], exclude)
+        self.assertNotIn([222, 94, 434, 386], surface_compose.tone_check.load_masks()["screens"]["ctx-reading"]["exclude"])   # the file's own masks are not changed
+
+    def test_erase_text_at_the_image_corner_and_with_a_halo_that_leaves_little_ground(self):
+        image = self._flat(30, 20, 5)
+        self._paint(image, 0, 0, 10, 14, (240, 240, 240))                       # a thick glyph touching the top left corner of the image: no ring above or left of the box
+        self.assertGreater(surface_compose.erase_text(image, ((0, 0, 14, 18),)), 10 * 14)
+        self.assertLessEqual(max(image.pixel(4, 6)[:3]), 8)
+        tight = self._flat(24, 24, 6)
+        self._paint(tight, 6, 6, 18, 18, (250, 250, 250))                        # a glyph that fills most of a small box: the widest halo would leave no ground, a narrower one is taken
+        surface_compose.erase_text(tight, ((4, 4, 20, 20),))
+        self.assertLessEqual(max(tight.pixel(12, 12)[:3]), 8)
+
+    def test_compose_refuses_a_box_outside_the_image_before_any_work(self):
+        spec = surface_compose.ZoneSpec(id="a", screen="ctx-inventory", text_boxes=((10, 10, 5000, 50),))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pngio.write(root / "o.png", self._flat(40, 40, 9))
+            with self.assertRaises(surface_compose.ComposeError):
+                surface_compose.compose(root / "o.png", root / "o.png", root / "out.png", root / "work", spec=spec)
+            self.assertFalse((root / "out.png").exists())
+
+    def test_the_committed_zone_specs_load_and_their_boxes_lie_in_the_window_zone(self):
+        folder = Path(__file__).parent / "zone_specs"
+        names = sorted(p.name for p in folder.glob("*.json"))
+        self.assertEqual(names, ["ctx-character.json", "ctx-inventory.json", "ctx-logbook.json", "ctx-reading.json", "ctx-schematic.json"])
+        for name in names:
+            spec = surface_compose.load_spec(folder / name)
+            self.assertEqual(spec.id + ".json", name)
+            for kind in ("text_boxes", "paper_boxes", "wood_boxes", "erase_boxes"):
+                for x0, y0, x1, y1 in getattr(spec, kind):
+                    self.assertTrue(0 <= x0 < x1 <= 2880 and 148 <= y0 < y1 <= 1588, (name, kind, (x0, y0, x1, y1)))    # inside the window zone of the 2880 x 2160 master
+        self.assertEqual(len(surface_compose.load_spec(folder / "ctx-character.json").wood_boxes), 8)       # the eight stat names
+        self.assertTrue(surface_compose.load_spec(folder / "ctx-logbook.json").paper_boxes and surface_compose.load_spec(folder / "ctx-reading.json").paper_boxes)
+
     def test_kit_parts_are_laid_over_with_alpha_and_recorded(self):
         with tempfile.TemporaryDirectory() as tmp:
             part = Path(tmp) / "plate.png"
@@ -410,7 +531,7 @@ class SurfaceComposeTests(unittest.TestCase):
             saved = surface_compose.build
             try:
                 for passed, code in ((False, 1), (True, 0)):
-                    record = {"zone": "z", "seams": [], "wood": {"after": {"mean_l": 1.0, "std_l": 1.0}, "target": {"mean_l": 1.0, "std_l": 1.0}}, "counts": {"erased_pixels": 0},
+                    record = {"zone": "z", "seams": [], "wood": {"after": {"mean_l": 1.0, "std_l": 1.0}, "target": {"mean_l": 1.0, "std_l": 1.0}}, "counts": {"erased_pixels": 0, "text_pixels": 0},
                               "kit_parts": [], "gates": {"passed": passed, "seam_target": 1.8, "seams_within_swi_ver_5": True, "tone_pass": passed, "tone_failed": []}}
                     surface_compose.build = lambda *a, **k: record
                     self.assertEqual(surface_compose.main(argv), code)
@@ -435,7 +556,7 @@ class SurfaceComposeTests(unittest.TestCase):
             for name in ("o.png", "a.png", "r.png"):
                 (root / name).write_bytes(name.encode())
             stats = {"mean_l": 20.0, "std_l": 4.0, "mean_chroma": 9.0}
-            info = {"speck_components": 3, "dots_kept": 4, "bevel_lines": 2, "chip_pixels": 0, "erased_pixels": 16, "kit_parts": [{"id": "p"}], "wood_target": stats,
+            info = {"speck_components": 3, "dots_kept": 4, "bevel_lines": 2, "chip_pixels": 0, "erased_pixels": 16, "text_pixels": 7, "kit_parts": [{"id": "p"}], "wood_target": stats,
                     "wood_before": stats, "wood_after": stats, "fit": {"mean_original": 20.0}}
             tone = {"pass": True, "failed": [], "regions": {"wood": {"pass": True, "values": {"mean_l_delta": 0.1}}, "brass": {"absent": 3}}}
             when = datetime.datetime(2026, 11, 24, 12, 0, tzinfo=datetime.timezone.utc)
@@ -446,6 +567,7 @@ class SurfaceComposeTests(unittest.TestCase):
             self.assertEqual(record["date"], "2026-11-24T12:00:00Z")
             self.assertEqual(record["inputs"]["original"]["sha256"], surface_compose.sha256_file(root / "o.png"))
             self.assertEqual(record["counts"]["erased_pixels"], 16)
+            self.assertEqual(record["counts"]["text_pixels"], 7)
             self.assertNotIn("brass", record["tone"]["regions"])                                # an absent region is left out
             self.assertTrue(record["gates"]["passed"])
             self.assertEqual(record["spec"]["screen"], "ctx-hud")
