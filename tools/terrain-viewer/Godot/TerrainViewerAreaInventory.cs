@@ -696,17 +696,25 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-DEV-339 (B54): the arrange button's release (0x573AA5..0x573B2D, ledger IW37): the hero's items are laid out again in the
     /// current layout (<see cref="GameSessionOwner.ArrangeHeroGrid"/>: sorted by size, no insert check, no event, no action points), then the flag
-    /// flips whatever came of it. The original prints nothing; the status line is PROJECT.</summary>
-    private string ArrangeHero(GameSessionOwner session)
+    /// flips whatever came of it. The original prints nothing; the status line is PROJECT. ARC-UI-3198 (IW38): with <paramref name="companion"/> (the barter
+    /// partner when it is the hero's follower, flag 0x6810FC) the same layout also arranges that holder's grid (<see cref="GameSessionOwner.ArrangeHolderGrid"/>, the
+    /// same rules, no checks, no events, no action points) before the one flip.</summary>
+    private string ArrangeHero(GameSessionOwner session, string? companion = null)
     {
         var layout = _arrangeLayout;
         var result = session.ArrangeHeroGrid(session.Version, layout);
+        var partner = companion is null ? null : session.ArrangeHolderGrid(session.Version, companion, layout);
         _arrangeLayout = layout == InventoryArrangeLayout.Horizontal ? InventoryArrangeLayout.Vertical : InventoryArrangeLayout.Horizontal;
         GD.Print($"ARC-DEV-339 arrange layout={layout} disposition={result.Disposition} failure={result.Failure} no-room={result.NoRoom} moved={result.Moved} " +
             $"next={_arrangeLayout} grid={string.Join(' ', session.QueryHeroGrid().Items.Select(placed => $"{placed.Entity}@{placed.Slot}:{placed.Width}x{placed.Height}"))}");
+        if (partner is not null)
+            GD.Print($"ARC-UI-3198 arrange companion={companion} layout={layout} disposition={partner.Disposition} failure={partner.Failure} no-room={partner.NoRoom} moved={partner.Moved} " +
+                $"grid={string.Join(' ', (session.QueryHolderItems(companion!) ?? []).Select(item => $"{item.Entity}@{item.Facts.InventoryLocation}"))}");
         var how = layout == InventoryArrangeLayout.Horizontal ? "row by row" : "column by column";
-        return result.Disposition == GameSessionDisposition.Rejected ? $"not arranged: {result.Failure}" : result.NoRoom ? "not arranged: an item finds no place"
+        var text = result.Disposition == GameSessionDisposition.Rejected ? $"not arranged: {result.Failure}" : result.NoRoom ? "not arranged: an item finds no place"
             : result.Moved == 0 ? $"items already lie {how}" : $"arranged {result.Moved} item(s) {how}";
+        return partner is null ? text : text + (partner.Disposition == GameSessionDisposition.Rejected ? $"; companion not arranged: {partner.Failure}" : partner.NoRoom ? "; companion: an item finds no place"
+            : partner.Moved == 0 ? "; companion's items already lie so" : $"; companion: {partner.Moved} item(s) arranged");
     }
 
     private void ArrangeFromWindow()
