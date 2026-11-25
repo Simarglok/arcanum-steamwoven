@@ -344,37 +344,45 @@ class SurfaceComposeTests(unittest.TestCase):
                     surface_compose.load_spec(path)
 
     @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
-    def test_a_plate_darkens_the_new_wood_by_the_originals_darkness_outside_the_wood_weight_only(self):
+    def test_a_plate_lays_grey_iron_brackets_by_the_originals_dark_mask_and_nothing_else(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             orig, image, solid = tmp_path / "o.png", tmp_path / "i.png", tmp_path / "s.png"
-            # the original: old wood luma 60, a dark bracket (luma 30) in the plate's upper left corner, a slight grain (luma 56) at the upper right, a dark bracket inside the disc area (weight 0)
-            subprocess.run(["magick", "-size", "200x200", "xc:gray(60)", "-fill", "gray(30)", "-draw", "rectangle 52,52 69,69", "-fill", "gray(56)", "-draw", "rectangle 130,52 147,69",
-                            "-fill", "gray(30)", "-draw", "rectangle 98,98 120,120", str(orig)], check=True)
+            # the original: old wood luma 60 and a 100 x 100 plate at 50,50; in its upper left corner a dark bracket (luma 30, 20 x 20) with a lighter gap (luma 60) inside, a 3 x 3 speck (luma 30)
+            # far from it, a dark patch in the plate's middle (inside the weight-0 disc)
+            subprocess.run(["magick", "-size", "200x200", "xc:gray(60)", "-fill", "gray(30)", "-draw", "rectangle 52,52 71,71", "-fill", "gray(60)", "-draw", "rectangle 60,60 62,62",
+                            "-fill", "gray(30)", "-draw", "rectangle 140,52 142,54", "-fill", "gray(30)", "-draw", "rectangle 98,98 120,120", str(orig)], check=True)
             subprocess.run(["magick", "-size", "200x200", "xc:gray(100)", str(image)], check=True)
             subprocess.run(["magick", "-size", "200x200", "xc:white", "-fill", "black", "-draw", "rectangle 90,90 129,129", str(solid)], check=True)
-            touched = surface_compose.lay_plates(image, pngio.read(orig), solid, ((50, 50, 150, 150),), 200, 200)
+            laid = surface_compose.lay_plates(image, pngio.read(orig), solid, ((50, 50, 150, 150),), 200, 200)
             data = surface_compose.gray_bytes(image)
             self.assertEqual(surface_compose.lay_plates(image, pngio.read(orig), solid, (), 200, 200), 0)    # no plate: nothing to do
             with self.assertRaises(surface_compose.ComposeError):
                 surface_compose.lay_plates(image, pngio.read(orig), solid, ((50, 50, 250, 150),), 200, 200)
         at = lambda x, y: data[y * 200 + x]
-        self.assertGreater(touched, 200)
-        self.assertLess(at(60, 60), 70)         # the bracket: the new wood is darker (luma 30 over 60 is 0.5, the gain takes it down to the floor share 0.4 or near)
-        self.assertEqual(at(140, 60), 100)      # grain under the dead zone darkens nothing
+        self.assertGreater(laid, 380)
+        low, high = round(100 * surface_compose.PLATE_TONE[0]), round(100 * surface_compose.PLATE_TONE[1])
+        self.assertTrue(low - 3 <= at(55, 55) <= low + 3, msg=str(at(55, 55)))      # the bracket: grey iron at the clamp's darkest share of the new wood (luma 30 over 60 is 0.5, under the 0.72 clamp)
+        self.assertTrue(low - 3 <= at(61, 61) <= high + 3, msg=str(at(61, 61)))     # the gap inside the bracket is filled: iron too
+        self.assertEqual(at(141, 53), 100)      # a speck under PLATE_MIN pixels is no bracket
         self.assertEqual(at(110, 110), 100)     # weight 0 (the disc): untouched
         self.assertEqual(at(20, 20), 100)       # outside the plate: untouched
-        self.assertEqual(at(60, 140), 100)      # plate wood of the same luma as the reference: untouched
+        self.assertEqual(at(100, 60), 100)      # between the brackets: the wood, untouched
+        self.assertEqual(at(72, 72), 100)       # just outside the bracket: untouched (the mask is hard)
 
     def test_load_spec_reads_plate_boxes_and_refuses_a_bad_one(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "spec.json"
-            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "plate_boxes": [[0, 0, 100, 100]]}), encoding="utf-8")
-            self.assertEqual(surface_compose.load_spec(path).plate_boxes, ((0, 0, 100, 100),))
-            for bad in ([[0, 0, 100]], [[50, 0, 50, 100]], "x"):
-                path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "plate_boxes": bad}), encoding="utf-8")
+            disc = [0, 0, 120, 120, 10, 10, 110, 110]
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "disc_boxes": [disc], "plate_boxes": [[10, 10, 110, 110]]}), encoding="utf-8")
+            self.assertEqual(surface_compose.load_spec(path).plate_boxes, ((10, 10, 110, 110),))
+            for bad in ([[0, 0, 100]], [[50, 0, 50, 100]], "x", [[10, 10, 130, 110]]):     # a short entry, an empty box, no list, a plate outside every disc box
+                path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "disc_boxes": [disc], "plate_boxes": bad}), encoding="utf-8")
                 with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
                     surface_compose.load_spec(path)
+            path.write_text(json.dumps({"id": "ctx-x", "screen": "ctx-x", "plate_boxes": [[10, 10, 110, 110]]}), encoding="utf-8")      # no disc box at all
+            with self.assertRaises(surface_compose.ComposeError):
+                surface_compose.load_spec(path)
 
     def test_the_inventory_plates_lie_inside_their_disc_boxes(self):
         spec = surface_compose.load_spec(Path(__file__).parent / "zone_specs" / "ctx-inventory.json")
