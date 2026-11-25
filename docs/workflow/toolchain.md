@@ -1315,8 +1315,8 @@ python3 -B tools/steamwoven_ui/board_build.py strips [--dry-run]      # compose 
 python3 -B tools/steamwoven_ui/board_build.py caps --variant plain    # the cap bars keyed from the sheet, the soft shadow, mirror, fit (--soft-shadow)
 ```
 
-The strip heights are the grid ones, 150 and 570 px (decided by this batch, [TRD](../ui/steamwoven-interface-trd.md#open-questions)). Each strip is one Codex item at the generator's size (method A); the generator draws a 19.2:1 strip at about 21:1 inside a
-padded canvas, so the band is cropped and stretched by a recorded few percent (only the wood is taken from it). `surface_compose.py build` puts the generated wood into the original's wood, every other pixel (metal, rails, sockets, the
+The strip heights are the grid ones, 150 and 570 px (decided by this batch, [TRD](../ui/steamwoven-interface-trd.md#open-questions)). Each strip is one Codex item at the generator's size (method A); the generator draws a 19.2:1 strip at about 20:1 inside a
+padded canvas (the play screen's top strip is therefore asked at 2880 x 144 and resized back to 150 px), so the band is cropped and stretched by a recorded few percent (only the wood is taken from it). `surface_compose.py build` puts the generated wood into the original's wood, every other pixel (metal, rails, sockets, the
 original's rows of dots) stays the original's as the stand-in of the hardware batch ([#2481](https://github.com/Simarglok/arcanum-steamwoven/issues/2481)), and the original's transparent openings (sockets, portrait holes) stay transparent (alpha of the original frame).
 The strips of one pair stand beside the inventory screen's window zone in the compose step, a neighbour that is not their own, so the seam at a join is gated **not worse than the same join of the original composition** (the 1.8 / 1.5 seam of the
 window batches is measured there, with the generated window zone) and the tone check must pass; all numbers are in `provenance/surface/board-<pair>.json` (`board_gate`). A cap is the brass bar of one strip end (24 px, drawn by Codex on a flat

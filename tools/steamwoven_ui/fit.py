@@ -350,8 +350,9 @@ def decontaminate(image: pngio.Image, opaque_min: int, radius: int, keep_de: flo
 def edge_halo(image: pngio.Image, radius: int = EDGE_RADIUS, soft_shadow: bool = False) -> dict:
     """SWI-VER-3: the colour difference of the semi-transparent edge band to the nearest opaque interior (see the module text).
 
-    `soft_shadow` (ARC-UI-2927, `--soft-shadow`): the part carries a designed soft shadow (an end cap): a semi-transparent pixel with no opaque pixel in reach is the
-    shadow, counted as `shadow_pixels`, not as an orphan; the pixels that touch the art are measured as always."""
+    `soft_shadow` (ARC-UI-2927, `--soft-shadow`): the part carries a designed soft shadow (an end cap, whose art is an opaque bar): every semi-transparent pixel is the
+    shadow, counted as `shadow_pixels`, neither measured nor an orphan (its colour is the shadow's by design, not a contamination of the art's edge). The edge
+    decontamination is skipped for such a part too (it would recolour the shadow to the art's colour)."""
     data, w, h = image.data, image.w, image.h
     diffs: list[float] = []
     orphans = 0
@@ -359,13 +360,13 @@ def edge_halo(image: pngio.Image, radius: int = EDGE_RADIUS, soft_shadow: bool =
     for i, a in enumerate(data[3::4]):
         if a == 0 or a == 255:
             continue
+        if soft_shadow:
+            shadow += 1
+            continue
         y, x = divmod(i, w)
         inner = nearest_opaque(data, w, h, x, y, 255, radius)
         if inner is None:
-            if soft_shadow:
-                shadow += 1
-            else:
-                orphans += 1
+            orphans += 1
             continue
         o = i * 4
         diffs.append(delta_e(lab_of((data[o], data[o + 1], data[o + 2])), lab_of(inner)))
@@ -712,7 +713,7 @@ def fit_image(source: pngio.Image, want: tuple[int, int], crop: tuple[int, int, 
         report["alpha"] = "opaque"
     if report["alpha"] != "opaque":
         crush_alpha(work)  # alpha 252..254 is opaque to every later step, so it is cleaned as opaque, not left as a contaminated "interior"
-        report["source_decontaminated"] = decontaminate(work, 255, SOURCE_EDGE_RADIUS)
+        report["source_decontaminated"] = 0 if soft_shadow else decontaminate(work, 255, SOURCE_EDGE_RADIUS)  # a designed shadow is semi-transparent by intent: its colour is not contamination
     master = resample_image(work, rect, want[0], want[1])
     report["alpha_crushed"] = crush_alpha(master)
     report["specks_removed_px"] = remove_specks(master, min_speck)
@@ -721,7 +722,7 @@ def fit_image(source: pngio.Image, want: tuple[int, int], crop: tuple[int, int, 
         report["lock"] = colour_lock(master, reference, strength, force_lock)
         report["hf"] = hf_check(before, hf_energy(master))
     report["halo"] = edge_halo(master, soft_shadow=soft_shadow)  # what the pipeline made: the gate (the safety net below can only make the final edge better)
-    report["master_decontaminated"] = decontaminate(master, 255, EDGE_RADIUS)
+    report["master_decontaminated"] = 0 if soft_shadow else decontaminate(master, 255, EDGE_RADIUS)
     report["halo_final"] = edge_halo(master, soft_shadow=soft_shadow)
     report["opaque_share"] = round(sum(1 for a in master.data[3::4] if a == 255) / (master.w * master.h), 5)
     report["size"] = [master.w, master.h]

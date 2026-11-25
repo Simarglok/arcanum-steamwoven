@@ -1,8 +1,8 @@
 """ARC-UI-2927: the B-BOARD batch of the Steamwoven kit: the four strip masters and the four end caps (TRD SWI-LAY-12, SWI-BDR-4).
 
-    python3 -B tools/steamwoven_ui/board_build.py refs   [--frames DIR] [--local-root DIR]
+    python3 -B tools/steamwoven_ui/board_build.py refs   [--frames DIR] [--local-root DIR]   (--frames: the census frames, default <local root>/census/frames, for every command)
     python3 -B tools/steamwoven_ui/board_build.py crop   [--local-root DIR]
-    python3 -B tools/steamwoven_ui/board_build.py strips [--window-source IMG] [--local-root DIR] [--bevel lighten|original] [--dry-run]
+    python3 -B tools/steamwoven_ui/board_build.py strips [--window-source IMG] [--local-root DIR] [--bevel lighten|original] [--reuse] [--dry-run]
     python3 -B tools/steamwoven_ui/board_build.py caps   [--local-root DIR] [--variant plain|rivets] [--dry-run]
     python3 -B tools/steamwoven_ui/board_build.py self-test
 
@@ -91,6 +91,9 @@ def upscale_strip(frame: Path, width: int, height: int, out: Path, *, with_alpha
 def composition(top: Path, bottom: Path, window_source: Path, out: Path, work: Path) -> None:
     """The 2880 x 2160 composition: the top strip, the window zone rows of the inventory original, the bottom strip."""
     window = work / "window-zone.png"
+    size = band_crop.run_magick(["identify", "-format", "%wx%h", str(window_source)]).strip()
+    if size != f"{MASTER_W}x2160":
+        raise BoardError(f"the window source {window_source.name} is {size}, {MASTER_W}x2160 is needed")
     y0, y1 = WINDOW_ROWS
     run(["magick", str(window_source), "-crop", f"{MASTER_W}x{y1 - y0}+0+{y0}", "+repage", "-alpha", "off", str(window)])
     run(["magick", str(top), "-alpha", "off", str(window), "-alpha", "off", str(bottom), "-alpha", "off", "-append", "-alpha", "off", str(out)])
@@ -130,7 +133,7 @@ def cap_image(bar: pngio.Image, height: int, mirrored: bool) -> pngio.Image:
     return img
 
 
-MAX_STRETCH = 0.12  # the band's own aspect against the zone's: the generator draws a strip flatter than asked (20:1 for 19.2:1); the band is only the wood donor of the compose step
+MAX_STRETCH = 0.06  # the band's own aspect against the zone's: the generator draws a strip flatter than asked (20:1 for 19.2:1); the band is only the wood donor of the compose step
 
 
 def band_from_canvas(canvas: Path, width: int, height: int, out: Path, ask_height: int | None = None) -> dict:
@@ -158,7 +161,7 @@ TRIM_SETTINGS = ((4.0, 3), (2.0, 1), (3.0, 2), (6.0, 3))  # (fuzz percent, shave
 def band_with(canvas: Path, width: int, height: int, out: Path, ask_height: int | None, shave: int, fuzz: float) -> dict:
     """The padded canvas of the generator (bars above and below) -> the band, shaved `shave` px at each edge (the light line of the bars), resized to the zone.
 
-    Unlike `band_crop` the band is not refused for an aspect error up to MAX_STRETCH (12 %: the generator drew the 19.2:1 strip at about 21:1) and is resized to the zone with that stretch (recorded): the result is only the source
+    Unlike `band_crop` the band is not refused for an aspect error up to MAX_STRETCH (6 %: the generator draws the 19.2:1 strip at about 20:1, which the ask height of the top strip absorbs) and is resized to the zone with that stretch (recorded): the result is only the source
     of the wood surface, every non-wood pixel and every position of the strip is the original's (`surface_compose.py`)."""
     cw, ch = (int(v) for v in band_crop.run_magick(["identify", "-format", "%w %h", str(canvas)]).split())
     x, y, w, h = band_crop.parse_box(band_crop.run_magick([str(canvas), "-fuzz", f"{fuzz:g}%", "-format", "%@", "info:"]))
@@ -174,31 +177,33 @@ def band_with(canvas: Path, width: int, height: int, out: Path, ask_height: int 
     return {"canvas": [cw, ch], "trim_box": [x, y, w, h], "rect": list(rect), "band_aspect": round(aspect, 4), "asked_aspect": round(asked, 4), "shave": shave, "fuzz_percent": fuzz, "asked_height": ask_height or height, "vertical_stretch": round(-stretch, 4)}
 
 
-def latest_canvas(local: Path, item: str) -> Path | None:
-    found = sorted((local / "codex-work" / "B-BOARD").glob(f"*/{item}.png"))
-    return found[-1] if found else None
-
-
 def cmd_crop(args) -> int:
-    """Strip results the runner refused (a padded canvas): cropped into the outbox with the record saying so (the runner's own outcome is kept as `runner_outcome`)."""
+    """Strip results the runner did not accept (Codex or the runner call a padded canvas a refusal): the band is cropped into the outbox and the record gets `crop` and
+    the new `image_sha256`; its `outcome` stays what the runner reported (nothing is relabelled as ok). The canvas is the one the record names (`run`)."""
     local = args.local_root
     for part, (_, w, h, _) in STRIPS.items():
         item = prompt_id(part)
         out = local / "outbox" / "B-BOARD" / f"{item}.png"
-        canvas = latest_canvas(local, item)
-        if canvas is None:
-            print(f"CROP {item}: no canvas in the work folder")
+        record_path = local / "outbox" / "B-BOARD" / f"{item}.provenance.json"
+        if not record_path.is_file():
+            print(f"CROP {item}: no generator record {record_path.name} (run the batch first)")
+            continue
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        if "runner_outcome" in record:   # an earlier version of this step relabelled the outcome; the runner's own word is restored
+            record["outcome"] = record.pop("runner_outcome")
+        canvas = local / "codex-work" / "B-BOARD" / str(record.get("run")) / f"{item}.png"
+        if record.get("outcome") == "ok" and "crop" not in record:
+            print(f"CROP {item}: the runner accepted its own result")
+            continue
+        if not canvas.is_file():
+            print(f"CROP {item}: the canvas of run {record.get('run')} is not in the work folder")
             continue
         report = band_from_canvas(canvas, w, h, out, ASK_HEIGHT.get(part))
-        record_path = local / "outbox" / "B-BOARD" / f"{item}.provenance.json"
-        record = json.loads(record_path.read_text(encoding="utf-8"))
-        if record.get("outcome") != "ok":
-            record["runner_outcome"] = record.get("outcome")
-            record["outcome"] = "ok"
-        record["crop"] = {**report, "tool": "board_build.py crop", "canvas_file": canvas.name, "canvas_sha256": sha256_file(canvas), "result_sha256": sha256_file(out)}
+        record["crop"] = {**report, "tool": "board_build.py crop", "canvas_file": f"{record.get('run')}/{canvas.name}", "canvas_sha256": sha256_file(canvas), "result_sha256": sha256_file(out)}
+        record["image_sha256"] = sha256_file(out)
         record["pixel_size"] = [w, h]
         record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-        print(f"CROP {item}: band {report['rect'][2]}x{report['rect'][3]} -> {w}x{h}, vertical stretch {report['vertical_stretch']:+.1%}")
+        print(f"CROP {item}: band {report['rect'][2]}x{report['rect'][3]} -> {w}x{h}, vertical stretch {report['vertical_stretch']:+.1%} (runner outcome {record.get('outcome')})")
     return 0
 
 
@@ -236,9 +241,14 @@ def board_gate(record: dict, original: Path, built: Path) -> dict:
 
 def derived_record(local: Path, part: str, frame: Path, final: Path, surface_record: Path, work: Path) -> Path:
     """The generator record of a strip master source (`image_sha256` is what the fit tool checks): the Codex record of the item plus the derivation."""
+    result = local / "outbox" / "B-BOARD" / f"{prompt_id(part)}.png"
     gen = json.loads((local / "outbox" / "B-BOARD" / f"{prompt_id(part)}.provenance.json").read_text(encoding="utf-8"))
+    wood_hash = sha256_file(result)
+    if wood_hash != gen.get("crop", {}).get("result_sha256", gen.get("image_sha256")):
+        raise BoardError(f"{result.name} is not the image the generator record of {part} describes (run `board_build.py crop` again or rerun the batch)")
+    gen["generator_image_sha256"] = gen.get("image_sha256")
     gen["image_sha256"] = sha256_file(final)
-    gen["derived"] = {"tool": "board_build.py strips (surface_compose.py build: the generated wood over the original's pixels, the original's alpha)",
+    gen["derived"] = {"tool": "board_build.py strips (surface_compose.py build: the generated wood over the original's pixels, the original's alpha)", "wood_source_sha256": wood_hash,
                       "original_frame_sha256": sha256_file(frame), "surface_record": surface_record.name, "surface_record_sha256": sha256_file(surface_record)}
     out = work / f"master-{prompt_id(part)}.provenance.json"
     out.write_text(json.dumps(gen, indent=2) + "\n", encoding="utf-8")
@@ -276,11 +286,20 @@ def cmd_strips(args) -> int:
         prov = local / "provenance" / "surface" / f"board-{pair}.json"
         command = [sys.executable, "-B", str(HERE / "surface_compose.py"), "build", "--original", str(original), "--a", str(a_comp), "--out", str(out), "--work", str(pwork / "w"),
                    "--spec", str(spec), "--bevel", args.bevel, "--provenance", str(prov)]
-        if args.reuse and out.is_file() and prov.is_file():
+        fresh = False   # the record names the hashes of the original and of method A it was made from: the composed pair is kept only for the same inputs
+        if out.is_file() and prov.is_file():
+            old = json.loads(prov.read_text(encoding="utf-8"))
+            fresh = (old.get("inputs", {}).get("original", {}).get("sha256") == sha256_file(original) and old.get("inputs", {}).get("method_a", {}).get("sha256") == sha256_file(a_comp)
+                     and old.get("result", {}).get("sha256") == sha256_file(out) and old.get("spec", {}).get("joins") == spec_for(pair)["joins"])
+        if args.reuse and fresh:
             print(f"REUSE {out.name} of {pair}")
         else:
+            if prov.is_file():
+                prov.unlink()   # a stale record must not survive a failed compose
             proc = subprocess.run(command, capture_output=True, text=True)
             print(proc.stdout.strip() or proc.stderr.strip())
+            if proc.returncode not in (0, 1):   # 1 = a gate of the surface step failed, which the board gate below judges; anything else is an error
+                raise BoardError(f"surface_compose.py build failed for {pair} (exit {proc.returncode})")
         if not prov.is_file():
             raise BoardError(f"surface_compose wrote no record for {pair}")
         record = json.loads(prov.read_text(encoding="utf-8"))
@@ -289,6 +308,9 @@ def cmd_strips(args) -> int:
         prov.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(f"GATE {pair}: {'PASS' if gate['passed'] else 'FAIL'} {gate['note']}")
         results.append({"pair": pair, "exit": 0 if gate["passed"] else 1})
+        if not gate["passed"]:
+            print(f"FIT skipped for {pair}: the board gate failed")
+            continue
         for part, (folder, w, h, _) in parts.items():
             y = 0 if h == TOP_H else TOP_H + WINDOW_H
             strip, alpha, final = pwork / f"strip-{prompt_id(part)}.png", pwork / f"alpha-{prompt_id(part)}.png", pwork / f"master-{prompt_id(part)}.png"
@@ -315,18 +337,24 @@ def cmd_caps(args) -> int:
     work = local / "work" / "B-BOARD" / "caps"
     work.mkdir(parents=True, exist_ok=True)
     sheet = local / "outbox" / "B-BOARD" / f"cap-{args.variant}.png"
-    if not sheet.is_file():   # the runner refuses a ground that is not flat; the canvas is in its work folder and the bars are keyed by trimming below
-        sheet = latest_canvas(local, f"cap-{args.variant}")
-    if sheet is None or not sheet.is_file():
+    if not sheet.is_file():   # the runner refuses a ground that is not flat; the canvas of the run the record names is in its work folder, the bars are trimmed below
+        run_name = json.loads((local / "outbox" / "B-BOARD" / f"cap-{args.variant}.provenance.json").read_text(encoding="utf-8")).get("run")
+        sheet = local / "codex-work" / "B-BOARD" / str(run_name) / f"cap-{args.variant}.png"
+    if not sheet.is_file():
         raise BoardError(f"no cap sheet for {args.variant} (run the batch first)")
     # the two bars on the flat ground: find them by trimming columns, the tall one (bottom cap) at the left, the short one (top cap) at the right
     w, h = (int(v) for v in run(["magick", "identify", "-format", "%w %h", str(sheet)]).split())
     box = {}
     for name, half in (("bottom", f"{w // 2}x{h}+0+0"), ("top", f"{w - w // 2}x{h}+{w // 2}+0")):
-        text = run(["magick", str(sheet), "-crop", half, "+repage", "-fuzz", "8%", "-trim", "-format", "%@", "info:"]).strip()
+        text = run(["magick", str(sheet), "-crop", half, "+repage", "-fuzz", "8%", "-format", "%@", "info:"]).strip()
+        bw, bh = (int(v) for v in text.split("+")[0].split("x"))
+        expected = BAR_W / (BOTTOM_H if name == "bottom" else TOP_H)
+        if not (bh >= h * 0.15 and 0.7 <= (bw / bh) / expected <= 1.3 and bw < (w // 2) * 0.3):
+            raise BoardError(f"the {name} bar of {sheet.name} is {bw} x {bh} px: not a clean bar of aspect {expected:.3f} (flat ground wanted)")
         box[name] = text
-        print(f"BAR {name}: trim box {text}")
+        print(f"BAR {name}: bar {bw} x {bh}")
     parts = {"bottom": BOTTOM_H, "top": TOP_H}
+    codes = []
     for part, (height, mirrored) in CAPS.items():
         which = "top" if height == TOP_H else "bottom"
         half = f"{w // 2}x{h}+0+0" if which == "bottom" else f"{w - w // 2}x{h}+{w // 2}+0"
@@ -349,7 +377,8 @@ def cmd_caps(args) -> int:
             fit.append("--dry-run")
         proc = subprocess.run(fit, capture_output=True, text=True)
         print(f"FIT {part}: exit {proc.returncode} {(proc.stdout.strip() or proc.stderr.strip()).splitlines()[-1:]}")
-    return 0
+        codes.append(proc.returncode)
+    return 0 if all(c == 0 for c in codes) else 1
 
 
 def self_test() -> int:

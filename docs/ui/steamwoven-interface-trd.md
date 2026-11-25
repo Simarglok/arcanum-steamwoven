@@ -40,7 +40,7 @@ issues and PRs cite the ids. Values marked *provisional* are fixed by the named 
   no filtering; otherwise with linear filtering from the baked set.
 - **SWI-LAY-6** W × H are device (backing) pixels, including the macOS backing scale.
 - **SWI-LAY-7** Every kit master length and offset is a multiple of 6 px, so it is a whole number of pixels at every step
-  (6 px = 4, 3 and 2 px); the strip heights are the one exception: they are the grid heights 150 and 570, drawn at the exact unit height (147.6 and 572.4 px; [fixed by ARC-UI-2927](#open-questions)). A device position is `round(master position · f)`, computed per edge (not per size), so
+  (6 px = 4, 3 and 2 px); the strips are the one place where the unit height (147.6 and 572.4 px) is off the grid: their masters are the grid heights 150 and 570 ([fixed by ARC-UI-2927](#open-questions)), drawn scaled to the exact unit height. A device position is `round(master position · f)`, computed per edge (not per size), so
   neighbouring parts share their edges; halves round up. The two strips are the exception: each is `round(units · s)` high from the composition's own top or bottom edge (41 and 159 units) and the window zone is what is left
   between them, so a strip never loses a pixel to a neighbour's rounding.
 

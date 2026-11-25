@@ -195,7 +195,7 @@ public static class SteamwovenKitTable
     /// <summary>
     /// ARC-UI-3038 (census M05, M06, BD-G): the two-strip screens' kit parts. The screen is the original's 800 × 600 plate (the column menu's fitted plate, <see cref="SteamwovenColumnMenu"/>): the top strip over the first 41 units, the body
     /// over the 400 units of its own 800 × 400 window and the bottom strip over the last 159 (the family's geometry, <see cref="TwoStripBodyTopUnits"/> and <see cref="TwoStripBodyBottomUnits"/>); the master heights 150 + 1440 + 570
-    /// make the plate's 2160. The strips are drawn scaled into their 41 and 159 units like the HUD strips (their master heights are the provisional 150 and 570, SWI-LAY-7's open exception), so the window's own content keeps the
+    /// make the plate's 2160. The strips are drawn scaled into their 41 and 159 units like the HUD strips (their master heights are the grid heights 150 and 570, fixed by ARC-UI-2927), so the window's own content keeps the
     /// positions of the original's body.
     /// </summary>
     public static IReadOnlyDictionary<SteamwovenKitScreen, SteamwovenKitScreenSpec> Screens { get; } = new Dictionary<SteamwovenKitScreen, SteamwovenKitScreenSpec>
@@ -346,7 +346,7 @@ public static class SteamwovenKitComposer
     /// <summary>
     /// ARC-UI-3038 (census M05, M06): the kit parts of a two-strip screen on its plate in the window: the top strip, the body background and the bottom strip, each with its rectangle in device pixels. The plate is the column menu's fitted
     /// 800 × 600 (<paramref name="plan"/>: its zone and its device pixels per unit); the strips and the body meet at edges rounded from their unit positions (41 and 441, halves up) and together are exactly the plate (no gap), the strips scaled into
-    /// their rows, the body exactly its own 800 × 400. The strip arts must be the composition's 2880 px wide at the step (their heights are the provisional 150 and 570 master px and are not checked, as the HUD strips'); the body must be
+    /// their rows, the body exactly its own 800 × 400. The strip arts must be the composition's 2880 px wide at the step (their heights are 150 and 570 master px and are not checked, as the HUD strips'); the body must be
     /// 2880 × 1440. A part the set lacks or holds at another size makes the whole screen missing and names it, so the viewer draws the screen's own art whole (SWI-RUN-3): a half kit, half original screen never happens.
     /// </summary>
     /// <summary>ARC-UI-3041: the device offset of a body joint at <paramref name="masterX"/> master px (3.6 an original unit) on a plate <paramref name="plateHeight"/> device px high (600 units), halves up, in exact integer arithmetic.</summary>
