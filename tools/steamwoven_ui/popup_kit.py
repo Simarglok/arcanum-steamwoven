@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""ARC-UI-3278 (batch B-HARDWARE, slice 4): the pop-up panel bases and their frames as kit parts BY RULE from the original's own arts (no Codex): the 410 x 107 "Rot" family (arts 7 128 200 274 288 290 291 354 564 642 842)
-and the framed panels (822 DialogueBox, 298 MultiMove_Base, 826 FollwerComandMenu, 292 Fate_Base, 565 Sleep_Base, 328 MenuPlaque): 17 arts, one master each (the art's whole rectangle at the kit's 3.6 scale).
+"""ARC-UI-3278 (batch B-HARDWARE, slice 4): the pop-up panel bases and their frames as kit parts, PACK-FIRST (owner rule 2026-11-25) and otherwise BY RULE from the original's own arts (no Codex): the 410 x 107 "Rot" family
+(arts 7 128 200 274 288 290 291 354 564 642 842) and the framed panels (822 DialogueBox, 298 MultiMove_Base, 826 FollwerComandMenu, 292 Fate_Base, 565 Sleep_Base, 328 MenuPlaque): 17 arts, one master each (the art's whole
+rectangle at the kit's 3.6 scale). An art with a good frame in the old HD pack is that frame resampled plus an analytic alpha (`pack_master`); an art with none, or whose frame does not fit the original's window, is built by rule (`render`).
 
     python3 -B tools/steamwoven_ui/popup_kit.py plan
-    python3 -B tools/steamwoven_ui/popup_kit.py rule  [--only ID,...] [--dry-run] [--frames DIR] [--local-root DIR]    (the masters, their rule records)
-    python3 -B tools/steamwoven_ui/popup_kit.py sheet --out FILE [--only ID,...] [--zoom N] [--frames DIR] [--local-root DIR]   (before / after composite with English labels, needs ImageMagick)
+    python3 -B tools/steamwoven_ui/popup_kit.py build [--only ID,...] [--dry-run] [--pack DIR] [--alt-dir DIR] [--frames DIR] [--local-root DIR]   (the masters, their records; --alt-dir: the rule build of the pack-first arts, for the composite)
+    python3 -B tools/steamwoven_ui/popup_kit.py sheet --out FILE [--only ID,...] [--zoom N] [--alt-dir DIR] [--frames DIR] [--local-root DIR]    (composite original | kit master | alternative, English labels, needs ImageMagick)
     python3 -B tools/steamwoven_ui/popup_kit.py self-test
 
-Each art is an iron plate with brass frames, dark text windows, recessed slots and rows, and round sockets. The rule rebuilds every one of them at the master's resolution (TRD SWI-KIT, the owner's rules of #3259: opaque details, the light from the
+Each art is an iron plate with brass frames, dark text windows, recessed slots and rows, and round sockets. The rule build rebuilds every one of them at the master's resolution (TRD SWI-KIT, the owner's rules of #3259: opaque details, the light from the
 top left, thin dark slot frames, the fill visible through a window, the muted original palette, nothing added):
 
 * **Shapes** come from the original's own pixels: each pixel of the art is classified (brass, window dark, olive socket, iron, transparent), the classes are smoothed and enlarged with a cubic filter and cut with a steep threshold, so every outline is the original's own
@@ -46,7 +47,7 @@ except ImportError:  # run as a script
     import fit  # type: ignore
     import pngio  # type: ignore
 
-TOOL_VERSION = 1
+TOOL_VERSION = 2
 BATCH = "B-HARDWARE"
 GRID = 6
 LABEL_FONT = "/System/Library/Fonts/Supplemental/Arial.ttf"   # the labels of a composite are English (project rule)
@@ -112,9 +113,9 @@ SPECS: tuple[Spec, ...] = (
     Spec("hardware.combine_rot", "288", "Combine_Rot", "rot", pack="schematics/buttons/combine_rot", rings=((277.6, 42.1, 17.3),), wells=((9, 7, 106, 72), (155, 7, 254, 72), (303, 7, 402, 72)),
          emboss=((35, 18, 76, 62), (190, 18, 220, 62), (328, 18, 376, 62), (120, 28, 142, 50)), note="three recessed piece wells, a plus sign, a round socket opening and a text window"),
     Spec("hardware.trap_rot", "290", "Trap_Rot", "rot", pack="logbook/buttons/trap_rot", note="four square openings (transparent) over a text window"),
-    Spec("hardware.broadcast_rot", "291", "Broadcast_Rot", "rot", pack="dialogue/buttons/broadcast_rot", rivets=RIV_L + ((396.0, 30.0), (396.0, 56.0), (396.0, 79.5)), note="the big window with the riveted side tabs"),
-    Spec("hardware.dialoguewindow", "354", "DialogueWindow", "rot", pack="dialogue/panels/dialoguewindow", note="the big window in a brass frame"),
-    Spec("hardware.magickweapon_rot", "564", "MagickWeapon_Rot", "rot", pack="logbook/buttons/magickweapon_rot", pack_clear=((32, 58, 128, 95),), force_w=((32, 58, 128, 95),), wells=((155, 48, 191, 84), (204, 48, 240, 84), (253, 48, 289, 84), (303, 48, 339, 84), (352, 48, 388, 84)), note="a window, a picture field, a text window and five recessed slots"),
+    Spec("hardware.broadcast_rot", "291", "Broadcast_Rot", "rot", rivets=RIV_L + ((396.0, 30.0), (396.0, 56.0), (396.0, 79.5)), note="the big window with the riveted side tabs (the pack frame's window is smaller than the original's, so no pack frame)"),
+    Spec("hardware.dialoguewindow", "354", "DialogueWindow", "rot", note="the big window in a brass frame (the pack frame's window is smaller than the original's, so no pack frame)"),
+    Spec("hardware.magickweapon_rot", "564", "MagickWeapon_Rot", "rot", pack="logbook/buttons/magickweapon_rot", pack_clear=((33, 58, 127, 94),), force_w=((32, 58, 128, 95),), wells=((155, 48, 191, 84), (204, 48, 240, 84), (253, 48, 289, 84), (303, 48, 339, 84), (352, 48, 388, 84)), note="a window, a picture field, a text window and five recessed slots"),
     Spec("hardware.privmes_window", "642", "PrivMes_Window", "rot", force_w=((90, 68, 366, 94),), rings=((391.5, 28.4, 11.9),), copies=(face(391.5, 28.4, 11.9),), note="the private message window with a small round socket"),
     Spec("hardware.mp_kickbanrotwindow", "842", "MP_KickBanRotWindow", "rot", pack="multiplayer/panels/mp_kickbanrotwindow", rings=((119.0, 63.0, 32.4), (288.0, 63.0, 32.4)), copies=(face(119.0, 63.0, 32.4), face(288.0, 63.0, 32.4)), note="two big round buttons on the plain plate"),
     Spec("hardware.dialoguebox", "822", "DialogueBox", "frame", pack="dialogue/panels/dialoguebox", note="the thin brass window frame with the original's curled corners over an iron plate"),
@@ -139,9 +140,12 @@ def provenance_of(part: str) -> str:
 
 def note_of(part: str) -> str:
     spec = BY_ID[part]
-    how = ("the old HD pack's frame of the art (pack-first) at the master's size with the original's alpha enlarged analytically; the pack frame's baked sample icon painted out" if spec.pack_clear else
-           "the old HD pack's frame of the art (pack-first) at the master's size with the original's alpha enlarged analytically") if spec.pack else \
-        "no good pack frame: iron, brass, wells and sockets by rule from the original art's own shapes"
+    if not spec.pack:
+        how = "no good pack frame: iron, brass, wells and sockets by rule from the original art's own shapes"
+    else:
+        how = "the old HD pack's frame of the art (pack-first) at the master's size with the original's alpha enlarged analytically"
+        if spec.pack_clear:
+            how += "; the pack frame's baked sample icon painted out"
     return f"{spec.note}; {how}; popup_kit.py, ARC-UI-3278, no Codex"
 
 
@@ -720,15 +724,58 @@ def hole_mask(original: pngio.Image, size: tuple[int, int]) -> list[float]:
     return [clamp((v - 0.5) * EDGE_K + 0.5, 0.0, 1.0) for v in up]
 
 
+FIT_TOLERANCE = 3         # original px: how far the pack frame's biggest brass frame may lie from the original's (the game draws its text in the original's window)
+
+
+def biggest_brass_box(brass: list[bool], w: int, h: int) -> tuple[int, int, int, int]:
+    """The bounding box (x0, y0, x1, y1) of the biggest 4-connected brass component and of every component at least a quarter of its size (a frame the shading splits in two is one frame)."""
+    seen = [False] * (w * h)
+    found: list[tuple[int, tuple[int, int, int, int]]] = []
+    for start in range(w * h):
+        if not brass[start] or seen[start]:
+            continue
+        stack, n = [start], 0
+        seen[start] = True
+        x0 = x1 = start % w
+        y0 = y1 = start // w
+        while stack:
+            i = stack.pop()
+            n += 1
+            y, x = divmod(i, w)
+            x0, x1, y0, y1 = min(x0, x), max(x1, x), min(y0, y), max(y1, y)
+            for j, ok in ((i - 1, x > 0), (i + 1, x < w - 1), (i - w, y > 0), (i + w, y < h - 1)):
+                if ok and brass[j] and not seen[j]:
+                    seen[j] = True
+                    stack.append(j)
+        found.append((n, (x0, y0, x1, y1)))
+    top = max(n for n, _ in found)
+    boxes = [box_ for n, box_ in found if n * 4 >= top]
+    return (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+
+
+def check_pack_fit(spec: Spec, frame: pngio.Image, original: pngio.Image) -> None:
+    """A pack frame is a drop-in only if its biggest brass frame lies where the original's does (within FIT_TOLERANCE original px on every side): the screens draw text and slots in the original's rectangles."""
+    ow, oh = original.w, original.h
+    mine = [classify(*original.pixel(x, y)) == BRASS for y in range(oh) for x in range(ow)]
+    if not any(mine):
+        return                                  # an art with no brass frame (list rows, plain plates): nothing to compare
+    theirs = [classify(*frame.pixel(x * PACK_SCALE + PACK_SCALE // 2, y * PACK_SCALE + PACK_SCALE // 2)) == BRASS for y in range(oh) for x in range(ow)]
+    a, b = biggest_brass_box(mine, ow, oh), biggest_brass_box(theirs, ow, oh)
+    if any(abs(p - q) > FIT_TOLERANCE for p, q in zip(a, b)):
+        raise KitError(f"{spec.ident}: the pack frame's brass frame {b} is not where the original's {a} is (more than {FIT_TOLERANCE} px): not a drop-in, use the rule build")
+
+
 def pack_master(spec: Spec, frame: pngio.Image, original: pngio.Image, size: tuple[int, int]) -> tuple[pngio.Image, dict]:
     """Pack-first: the old HD pack's frame of the art at the master's size (a premultiplied, linear-light resample, so what is transparent in the pack bleeds no colour), a stand-in baked into the frame
     painted out with the window's colour, and the ALPHA analytic: the original's transparent places, enlarged smoothly (the pack's own alpha is not used)."""
     if abs(frame.w - original.w * PACK_SCALE) > 1 or abs(frame.h - original.h * PACK_SCALE) > 1:
         raise KitError(f"{spec.ident}: the pack frame is {frame.w}x{frame.h}, not {PACK_SCALE} times the original's {original.w}x{original.h}")
+    frame = pngio.Image(frame.w, frame.h, bytearray(frame.data))        # the caller's frame stays as it was
+    check_pack_fit(spec, frame, original)
     w, h = size
     for x0, y0, x1, y1 in spec.pack_clear:
         sx, sy = frame.w / original.w, frame.h / original.h
-        probe = frame.pixel(int((x0 + x1) / 2 * sx), int((y0 - 12) * sy))      # the window's dark fill just above the stand-in's box
+        probe = frame.pixel(int((x0 + x1) / 2 * sx), max(0, int((y0 - 12) * sy)))      # the window's dark fill just above the stand-in's box
         if probe[3] != 255 or max(probe[:3]) > 40:
             raise KitError(f"{spec.ident}: the pack frame has no dark window fill above the stand-in's box")
         for y in range(int(y0 * sy), int(y1 * sy)):
@@ -742,14 +789,23 @@ def pack_master(spec: Spec, frame: pngio.Image, original: pngio.Image, size: tup
     image = fit.resample_image(frame, (0, 0, frame.w, frame.h), w, h)
     hole = hole_mask(original, size)
     alpha = bytearray(w * h)
+    repair = bytearray(image.data[3::4])                      # the alpha the colour repair sees: where the resample had little pack colour (beside a hole) it is a band pixel even though the final alpha is opaque
     for i, m in enumerate(hole):
         a = 1.0 - m
         alpha[i] = 0 if a <= 0.02 else 255 if a >= 0.98 else int(a * 255 + 0.5)
         if alpha[i] == 0:
+            repair[i] = 0
             image.data[i * 4:i * 4 + 3] = b"\x00\x00\x00"
-    image.data[3::4] = alpha
-    if any(0 < a < 255 for a in alpha):
+        elif alpha[i] < 255:
+            repair[i] = max(1, min(repair[i], alpha[i]))           # the edge band the gate measures
+        elif repair[i] < 250:
+            repair[i] = max(1, repair[i])
+        else:
+            repair[i] = 255
+    if any(0 < a < 255 for a in repair):
+        image.data[3::4] = repair
         fit.decontaminate(image, 250, fit.EDGE_RADIUS)
+    image.data[3::4] = alpha
     return image, {"pack_frame": f"{spec.pack}-f000", "pack_frame_size": [frame.w, frame.h], "pack_scale": PACK_SCALE, "alpha": "analytic (the original's transparent places, enlarged)",
                    "stand_in_cleared": [list(b) for b in spec.pack_clear]}
 
@@ -833,6 +889,8 @@ def cmd_build(args: argparse.Namespace) -> int:
     frames = args.frames or local / "census" / "frames"
     masters = local / "masters"
     pack_root = args.pack or default_pack()
+    if args.alt_dir and args.alt_dir.resolve() == masters.resolve():
+        raise KitError("--alt-dir is the masters folder: the alternative would overwrite the kit masters")
     manifest = load_manifest()
     only = chosen(args.only)
     brass = None
@@ -855,6 +913,9 @@ def cmd_build(args: argparse.Namespace) -> int:
             variants.append((image, extra, brass, None, masters if pack_file is None else args.alt_dir))
         for image, extra, used, source, folder in variants:
             failures = gates(spec, image, size, original, rule_build=source is None)
+            if failures and folder != masters:                 # the alternative is not a kit part: its failure is a warning
+                print(f"warning: {spec.ident}: the rule alternative is not written: " + "; ".join(failures))
+                continue
             if failures:
                 raise GateError(f"{spec.ident}: " + "; ".join(failures))
             blob = pngio.encode(image)
@@ -901,7 +962,7 @@ def cmd_sheet(args: argparse.Namespace) -> int:
                 continue
             master = masters / f"{spec.ident}.png"
             if not master.is_file():
-                raise KitError(f"{master} is missing: run `rule` first")
+                raise KitError(f"{master} is missing: run `build` first")
             original = work / f"{spec.art}-o.png"
             pngio.write(original, read_frame(frames, spec))
             width = int(round(read_frame(frames, spec).w * args.zoom))
