@@ -337,18 +337,31 @@ public sealed class AreaInventoryHost
     }
 
     /// <summary>The drawn objects of this map the PC has taken: they are neither drawn nor picked any more. ARC-WORLD-123: so are the seed
-    /// items the session deleted by taking them (a key folded into the ring, an ammunition stack merged into a held one).</summary>
+    /// items the session deleted by taking them (a key folded into the ring, an ammunition stack merged into a held one). ARC-WORLD-3122: so is
+    /// every seed item that lay on the ground and the session's ground no longer lists (the hero took it and then gave it to a companion or
+    /// another holder, an NPC picked it up): the hero's own list is not the only place a taken item can be.</summary>
     public IReadOnlySet<AreaObjectKey> Taken(GameSessionOwner session, int runtimeMap)
     {
         ArgumentNullException.ThrowIfNull(session);
         if (!_maps.TryGetValue(runtimeMap, out var map)) return new HashSet<AreaObjectKey>();
+        var current = session.QueryMapInventory(new(runtimeMap));
         return session.QueryPcInventory().Where(item => item.Origin.RuntimeMap == runtimeMap && map.TryGetRow(item.Entity, out _))
             .Select(item => map.Row(item.Entity).Key)
             .Concat(map.Seed.Items.Where(item => session.IsItemDestroyed(item.Entity) && map.TryGetRow(item.Entity, out _)).Select(item => map.Row(item.Entity).Key))
+            // ARC-WORLD-3122: the ground items of the seed the session's ground (the seed minus what was taken, plus what was dropped) no longer lists.
+            .Concat(LeftTheGround(current, map))
             // ARC-SCRIPT-2386 (IV15, hide mask 3): the seed's items lying on the ground that are switched off (a script's toggle, one thrown and in flight) are not drawn at their T0 cell either.
-            .Concat((session.QueryMapInventory(new(runtimeMap))?.Ground ?? []).Where(ground => session.QueryItemOff(new(runtimeMap), ground.Item.Entity, ground.Item.Facts.OffInData)
+            .Concat((current?.Ground ?? []).Where(ground => session.QueryItemOff(new(runtimeMap), ground.Item.Entity, ground.Item.Facts.OffInData)
                 && map.TryGetRow(ground.Item.Entity, out _)).Select(ground => map.Row(ground.Item.Entity).Key))
             .ToHashSet();
+    }
+
+    /// <summary>ARC-WORLD-3122: the rows of the seed's ground items the session no longer lists on the map's ground: taken by the hero and given on, or taken by an NPC.</summary>
+    private static IEnumerable<AreaObjectKey> LeftTheGround(SessionMapInventory? current, AreaInventoryMap map)
+    {
+        if (current is null) return [];
+        var lying = current.Ground.Select(ground => ground.Item.Entity).ToHashSet(StringComparer.Ordinal);
+        return map.Seed.Items.Where(item => item.Cell is not null && !lying.Contains(item.Entity) && map.TryGetRow(item.Entity, out _)).Select(item => map.Row(item.Entity).Key).ToArray();
     }
 
     /// <summary>ARC-WORLD-063: the drawn objects of this map that lie in a junk pile the session made: the pile is drawn instead.</summary>
