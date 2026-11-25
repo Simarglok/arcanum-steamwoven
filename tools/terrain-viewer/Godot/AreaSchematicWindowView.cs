@@ -93,7 +93,13 @@ public partial class AreaSchematicWindowView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
+        AddChild(_round);
     }
+
+    // ARC-UI-3101: over the kit's schematic background the lens ring is cut to its gold circle and casts the generated shadow (it is a separate art with the old wood in its four corners; the discipline tabs are parchment, not round).
+    private readonly AreaKitRoundPartsLayer _round = new();
+    private readonly List<AreaKitRoundPartsLayer.Item> _rings = [];
+    internal AreaKitRoundPartsLayer RoundPartsForSelfTest => _round;
 
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaSchematicWindowFonts fonts)
     {
@@ -233,8 +239,9 @@ public partial class AreaSchematicWindowView : Control
 
     public override void _Draw()
     {
-        if (_fonts is not { } fonts || _view is not { } view) return;
+        if (_fonts is not { } fonts || _view is not { } view) { _round.Clear(); return; }
         _drawnScale = DeviceScale();
+        _rings.Clear();
         DrawWindow();
         for (var discipline = 0; discipline < AreaSchematicWindowLayout.Disciplines; discipline++)
             DrawArt(AreaSchematicWindowLayout.DisciplineArt(discipline), AreaSchematicWindowLayout.DisciplineTab(discipline),
@@ -262,8 +269,10 @@ public partial class AreaSchematicWindowView : Control
         if (Art(AreaSchematicWindowLayout.RoundViewArt) is { } lens)
         {
             var (x, y, _, _) = AreaSchematicWindowLayout.RoundView;
-            DrawTextureRect(lens, new Rect2(x, y, lens.GetWidth(), lens.GetHeight()), false);
+            if (KitBackgroundShown && AreaKitRoundPartsLayer.Applies(AreaSchematicWindowLayout.RoundViewArt, lens)) _rings.Add(new(AreaSchematicWindowLayout.RoundViewArt, lens, new Rect2(x, y, lens.GetWidth(), lens.GetHeight())));
+            else DrawTextureRect(lens, new Rect2(x, y, lens.GetWidth(), lens.GetHeight()), false);
         }
+        if (_rings.Count > 0) _round.Show(_rings); else _round.Clear();
     }
 
     // The window art; with the round view under it the lens's square is left out.

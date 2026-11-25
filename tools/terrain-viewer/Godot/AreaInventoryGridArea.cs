@@ -26,6 +26,10 @@ public partial class AreaInventoryGridArea : Control
 {
     private AreaInventoryView? _view;
     private float _scale = 1;
+    // ARC-UI-3101: over a kit background (the inventory's, the loot window's, the barter window's) the lens ring is cut to its gold circle and casts the generated shadow (it is a separate art with the old wood in its four corners).
+    private readonly AreaKitRoundPartsLayer _round = new();
+    private readonly List<AreaKitRoundPartsLayer.Item> _roundItems = [];
+    internal AreaKitRoundPartsLayer RoundPartsForSelfTest => _round;
     private Func<float>? _deviceScale;
     private Vector2 _pointer;
     // ARC-UI-1740: an item is held over the bet box now, and what the gate said as it entered (art 344 passes, 346 refuses).
@@ -224,6 +228,7 @@ public partial class AreaInventoryGridArea : Control
     {
         MouseFilter = MouseFilterEnum.Stop;
         FocusMode = FocusModeEnum.None;
+        AddChild(_round);
         _textLayer = new TextLayer { Name = "Texts" };
         AddChild(_textLayer);
         Fit(AreaInventoryDrag.FrameWidth);
@@ -739,7 +744,9 @@ public partial class AreaInventoryGridArea : Control
     public override void _Draw()
     {
         _runs.Clear();
+        _roundItems.Clear();
         DrawFrame();
+        if (_roundItems.Count > 0) _round.Show(_roundItems); else _round.Clear();
         if (_textLayer is null) return;
         _textLayer.Runs = [.. _runs];
         _textLayer.TextScale = _scale;
@@ -841,7 +848,10 @@ public partial class AreaInventoryGridArea : Control
         else AreaKitStandIns.Inventory(this, _scale);
         // ARC-UI-054: the view window's art over the round view (0x551080 draws it after the copy, IW33).
         var (holeX, holeY) = AreaInventoryHole.Corner(AreaInventoryMode.Own);
-        Art(AreaInventoryHole.Art(AreaInventoryMode.Own), holeX, holeY);
+        var ownHole = AreaInventoryHole.Art(AreaInventoryMode.Own);
+        if (AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Inventory && look.Art.GetValueOrDefault(ownHole) is { } ownLens && AreaKitRoundPartsLayer.Applies(ownHole, ownLens))
+            _roundItems.Add(new(ownHole, ownLens, Scaled(holeX, holeY, ownLens.GetWidth(), ownLens.GetHeight())));
+        else Art(ownHole, holeX, holeY);
         var fonts = look.Fonts;
         if (_view is null) return;
         // ARC-UI-1765 (0x576520 modes 5 and 6): the NPC's image at half its size, then its quote line in its rectangle; the weight lines are mode 0's alone (IW24) and the boxes are not made (IW19).
@@ -986,7 +996,13 @@ public partial class AreaInventoryGridArea : Control
         if (barterKit is not null) KitFields(barter is not null);
         else if (backgrounds is null || backgrounds.Contains(AreaLootArtLayout.LootArt)) Background(look, barter?.Background ?? AreaLootArtLayout.LootArt, LookMode);
         var (holeX, holeY) = AreaInventoryHole.Corner(LookMode);
-        if (!_menuUp) Art(AreaInventoryHole.Art(LookMode), holeX, holeY);
+        var hole = AreaInventoryHole.Art(LookMode);
+        if (!_menuUp)
+        {
+            if ((kit || barterKit is not null) && look.Art.GetValueOrDefault(hole) is { } lens && AreaKitRoundPartsLayer.Applies(hole, lens))
+                _roundItems.Add(new(hole, lens, Scaled(holeX, holeY, lens.GetWidth(), lens.GetHeight())));
+            else Art(hole, holeX, holeY);
+        }
         // ARC-UI-1908 (0x576520 modes 1-4, IW27): a portrait the image function answers is drawn at its own size at the image's corner by 0x4CE470; PROJECT: a portrait file that
         // did not read leaves the flag-and-race art in its place, so the window is not empty.
         if (view.HolderPortrait is { } portraitId && PortraitTextures?.Invoke(portraitId) is { } portrait)

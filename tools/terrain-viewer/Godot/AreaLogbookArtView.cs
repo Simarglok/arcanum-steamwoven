@@ -76,7 +76,12 @@ public partial class AreaLogbookArtView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         AreaArtTextDraw.Prepare(this);
         Visible = false;
+        AddChild(_round);
     }
+
+    // ARC-UI-3101: over the kit's logbook background the lens ring is cut to its gold circle and casts the generated shadow (it is a separate art with the old wood in its four corners).
+    private readonly AreaKitRoundPartsLayer _round = new();
+    internal AreaKitRoundPartsLayer RoundPartsForSelfTest => _round;
 
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaTextFonts fonts)
     {
@@ -216,7 +221,7 @@ public partial class AreaLogbookArtView : Control
 
     public override void _Draw()
     {
-        if (_fonts is null || _view is null) return;
+        if (_fonts is null || _view is null) { _round.Clear(); return; }
         // ARC-UI-3037: over the kit's logbook background (594 + 2286 master px) the side panel 264 and the book 260 are not drawn; the page art 261 (the cloth frame round the text), the tabs, the lens art and the text stay.
         var kit = KitBackgroundShown;
         if (kit) AreaKitStandIns.Logbook();
@@ -230,7 +235,12 @@ public partial class AreaLogbookArtView : Control
         }
         // ARC-UI-098: the lens's art over the copy of the game view (0x51DA80 after the mode's copy, LB23), drawn when it reads.
         if (Texture(AreaLogbookArtLayout.LensArt) is { } lens)
-            DrawTextureRect(lens, new Rect2(AreaLogbookArtLayout.Lens.X, AreaLogbookArtLayout.Lens.Y, lens.GetWidth(), lens.GetHeight()), false);
+        {
+            var lensRect = new Rect2(AreaLogbookArtLayout.Lens.X, AreaLogbookArtLayout.Lens.Y, lens.GetWidth(), lens.GetHeight());
+            if (kit && AreaKitRoundPartsLayer.Applies(AreaLogbookArtLayout.LensArt, lens)) _round.Show([new(AreaLogbookArtLayout.LensArt, lens, lensRect)]);
+            else { _round.Clear(); DrawTextureRect(lens, lensRect, false); }
+        }
+        else _round.Clear();
         if (HasPrevious && Texture(AreaLogbookArtLayout.PreviousArt, PageFrame(-1, AreaLogbookArtLayout.PreviousArt)) is { } previous)
             DrawTextureRect(previous, new Rect2(AreaLogbookArtLayout.PreviousCorner.X, AreaLogbookArtLayout.PreviousCorner.Y, previous.GetWidth(), previous.GetHeight()), false);
         if (HasNext && Texture(AreaLogbookArtLayout.NextArt, PageFrame(1, AreaLogbookArtLayout.NextArt)) is { } next)

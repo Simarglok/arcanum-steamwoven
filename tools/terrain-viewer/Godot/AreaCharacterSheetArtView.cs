@@ -95,6 +95,7 @@ public partial class AreaCharacterSheetArtView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
+        AddChild(_round);
         AddChild(Pages);
         AddChild(Spells);
         AddChild(Schemes);
@@ -258,6 +259,10 @@ public partial class AreaCharacterSheetArtView : Control
             }
     }
 
+    // ARC-UI-3101: over the kit's character background the lens ring is cut to its gold circle and casts the generated shadow (it is a separate art with the old wood in its four corners).
+    private readonly AreaKitRoundPartsLayer _round = new();
+    internal AreaKitRoundPartsLayer RoundPartsForSelfTest => _round;
+
     public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
 
     public override void _ExitTree()
@@ -291,7 +296,7 @@ public partial class AreaCharacterSheetArtView : Control
 
     public override void _Draw()
     {
-        if (_fonts is not { } fonts || _view is not { } view) return;
+        if (_fonts is not { } fonts || _view is not { } view) { _round.Clear(); return; }
         ClaimScale();
         // ARC-UI-3037: over the kit's character background the main page draws no art 22 of its own (its lens art, portrait, markers, tabs, buttons and pages stay).
         OwnBackgroundDrawnForSelfTest = false;
@@ -320,7 +325,12 @@ public partial class AreaCharacterSheetArtView : Control
         KitLabelsDrawnForSelfTest = kitLabels;
         // ARC-UI-2694: the lens's cover art over the round view (0x51DA80 after the mode's copy, as in the logbook), when it reads.
         if (!MenuScreen && Art(AreaCharacterSheetArtLayout.LensArt) is { } lens)
-            DrawTextureRect(lens, new Rect2(AreaCharacterSheetArtLayout.Lens.X, AreaCharacterSheetArtLayout.Lens.Y, lens.GetWidth(), lens.GetHeight()), false);
+        {
+            var lensRect = new Rect2(AreaCharacterSheetArtLayout.Lens.X, AreaCharacterSheetArtLayout.Lens.Y, lens.GetWidth(), lens.GetHeight());
+            if (KitBackgroundShown && AreaKitRoundPartsLayer.Applies(AreaCharacterSheetArtLayout.LensArt, lens)) _round.Show([new(AreaCharacterSheetArtLayout.LensArt, lens, lensRect)]);
+            else { _round.Clear(); DrawTextureRect(lens, lensRect, false); }
+        }
+        else _round.Clear();
         // The portrait in its slot (141, 21), at its own size (0x4CE470).
         if (_portrait is not null) DrawTextureRect(_portrait, new Rect2(141, 21, _portrait.GetWidth(), _portrait.GetHeight()), false);
         // ARC-UI-1791 (ledger CHW25): an NPC without a portrait to show has its icon blitted at the same place at its own size (0x559ABC); the hero never has one.
