@@ -109,7 +109,13 @@ public sealed class AreaNoteCalleeRealDataTests
                 Assert.IsTrue(ran, $"carried {carried}, script {script}: {detail}");
                 Assert.AreEqual((script, 1, talker.Entity), (host.LastCallDialog?.Script, host.LastCallDialog?.Node, host.LastCallDialog?.Npc?.Code), $"carried {carried}, script {script}: {detail}");
                 // The viewer opens it as a scripted conversation (BeginScriptedConversation): the DLG has no local flag or counter operation, so the scripted start admits it.
-                if (script == 1687) Assert.IsFalse(uses.GlobalFlag(2301), "the first node's action sets the flag that script 1687's line 0 tests");
+                if (script == 1687)
+                {
+                    // Line 1 queued the same script again 2 seconds of play on (16 game seconds), before the dialog action of line 2.
+                    var again = session.QueryScriptCalls().Single(c => c.Call.Script == 1687);
+                    Assert.AreEqual((0, 16000L, talker.Entity), (again.Call.Line, again.DeadlineMs - session.QueryClockSnapshot().GameTimestampMs, again.Call.Attachee?.Entity), "the polling call");
+                    Assert.IsFalse(uses.GlobalFlag(2301), "the first node's action sets the flag that script 1687's line 0 tests");
+                }
                 var started = host.BeginScripted(speaker, host.LastCallDialog!);
                 Console.WriteLine($"NOTE-CALLEE|carried={carried}|{script}|open={started.Status} {started.Detail}");
                 Assert.AreEqual(AreaConversationStartStatus.Started, started.Status, started.Detail);
