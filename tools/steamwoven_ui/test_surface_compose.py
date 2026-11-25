@@ -348,9 +348,9 @@ class SurfaceComposeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             orig, image, solid = tmp_path / "o.png", tmp_path / "i.png", tmp_path / "s.png"
-            # the original: old wood luma 60 and a 100 x 100 plate at 50,50; in its upper left corner a dark bracket (luma 30, 20 x 20) with a lighter gap (luma 60) inside, a 3 x 3 speck (luma 30)
-            # far from it, a dark patch in the plate's middle (inside the weight-0 disc)
-            subprocess.run(["magick", "-size", "200x200", "xc:gray(60)", "-fill", "gray(30)", "-draw", "rectangle 52,52 71,71", "-fill", "gray(60)", "-draw", "rectangle 60,60 62,62",
+            # the original: old wood luma 60 and a 100 x 100 plate at 50,50; in its upper left corner a dark bracket (luma 30, 20 x 20) with a 10 x 10 lighter gap (luma 60) inside, a 3 x 3 speck (luma 30)
+            # far from it, a dark patch (x 98..120, y 98..120) reaching into the lower right window and lying in the weight-0 disc
+            subprocess.run(["magick", "-size", "200x200", "xc:gray(60)", "-fill", "gray(30)", "-draw", "rectangle 52,52 71,71", "-fill", "gray(60)", "-draw", "rectangle 56,56 65,65",
                             "-fill", "gray(30)", "-draw", "rectangle 140,52 142,54", "-fill", "gray(30)", "-draw", "rectangle 98,98 120,120", str(orig)], check=True)
             subprocess.run(["magick", "-size", "200x200", "xc:gray(100)", str(image)], check=True)
             subprocess.run(["magick", "-size", "200x200", "xc:white", "-fill", "black", "-draw", "rectangle 90,90 129,129", str(solid)], check=True)
@@ -363,9 +363,9 @@ class SurfaceComposeTests(unittest.TestCase):
         self.assertGreater(laid, 380)
         low, high = round(100 * surface_compose.PLATE_TONE[0]), round(100 * surface_compose.PLATE_TONE[1])
         self.assertTrue(low - 3 <= at(55, 55) <= low + 3, msg=str(at(55, 55)))      # the bracket: grey iron at the clamp's darkest share of the new wood (luma 30 over 60 is 0.5, under the 0.72 clamp)
-        self.assertTrue(low - 3 <= at(61, 61) <= high + 3, msg=str(at(61, 61)))     # the gap inside the bracket is filled: iron too
+        self.assertTrue(low - 3 <= at(60, 60) <= high + 3, msg=str(at(60, 60)))     # the 10 x 10 gap inside the bracket is wider than the closing: the fill makes it iron too
         self.assertEqual(at(141, 53), 100)      # a speck under PLATE_MIN pixels is no bracket
-        self.assertEqual(at(110, 110), 100)     # weight 0 (the disc): untouched
+        self.assertEqual(at(110, 118), 100)     # weight 0 (the disc), in the lower right window and dark in the original: untouched
         self.assertEqual(at(20, 20), 100)       # outside the plate: untouched
         self.assertEqual(at(100, 60), 100)      # between the brackets: the wood, untouched
         self.assertEqual(at(72, 72), 100)       # just outside the bracket: untouched (the mask is hard)

@@ -76,7 +76,8 @@ PLATE_EDGE = 0.85         # ARC-UI-3275: a pixel of the original darker than thi
 PLATE_CLOSE = 2           # px: ARC-UI-3275: the mask is closed by this many px (a square) and its enclosed gaps are filled, so a bracket is a solid L, not the grain's lace
 PLATE_MIN = 40            # ARC-UI-3275: a dark component of fewer pixels is grain or the old shadow's speck, not a bracket
 PLATE_TONE = (0.72, 0.92)  # ARC-UI-3275: the bracket's luma over the new wood's: the original's darkness over the old wood, clamped to this range (the old shadow's black and the lit edge's near white stay out)
-PLATE_IRON = (0.99, 1.0, 1.03)   # ARC-UI-3275: the iron's tint over its grey: the brackets are grey iron plates, the wood round them is warm brown
+PLATE_RIM = 1.0           # ARC-UI-3275: the bracket's thin lit rim (its outline pixels that border the wood, not the ellipse or the window's cut): this share of the new wood's luma (the original's lit edge is 1.07 of its wood)
+PLATE_IRON = (0.99, 1.0, 1.01)   # ARC-UI-3275: the iron's tint over its grey: the brackets are grey iron plates, the wood round them is warm brown
 SHADOW_DX = 13            # px: ARC-UI-3101: the soft shadow of a disc (a lens, an oval, a round button) falls down and to the right (light from the top left), the ellipse shifted by this much ...
 SHADOW_DY = 13
 SHADOW_SIGMA = 16.0       # px: ... blurred by this (Gaussian sigma) ...
@@ -826,7 +827,7 @@ def lay_plates(image: Path, original: "pngio.Image", solid: Path, plates: tuple,
     plate's top or bottom edge, an arm along its side), the wood between them is plain. The wood weight (`disc_boxes`) took the brackets for old wood and cut them. Each entry (x0, y0, x1, y1) is the
     plate's rectangle (the oval's rim box); in each of its four PLATE_CORNER windows the bracket is the original's pixels darker than PLATE_EDGE of the old wood's luma (the median of the original in a
     PLATE_RING ring round the plate), outside the ellipse (wood weight at least 1/2), closed by PLATE_CLOSE px, its enclosed gaps filled, and cleared of components under PLATE_MIN pixels. The mask is hard: the bracket has the original's
-    sharp edge and the original's place and size, nothing between the brackets is touched. Its pixels are laid as grey iron: the luma is the original's darkness over the old wood (clamped to PLATE_TONE) times the median luma of the new wood in the same ring, tinted by PLATE_IRON, so the arms keep the original's inner shading (the darker core, the lit edge) at the original's depth relative
+    sharp edge and the original's place and size, nothing between the brackets is touched. Its pixels are laid as grey iron: the luma is the original's darkness over the old wood (clamped to PLATE_TONE) times the median luma of the new wood in the same ring, tinted by PLATE_IRON, with a thin lit rim (PLATE_RIM) on the outline that borders the wood, so the arms keep the original's inner shading (the darker core, the lit edge) at the original's depth relative
     to the wood. `image` is rewritten in place; returns the number of pixels laid. A plate outside the image is an error."""
     if not plates:
         return 0
@@ -880,9 +881,12 @@ def lay_plates(image: Path, original: "pngio.Image", solid: Path, plates: tuple,
                                 stack.append(q)
                 if len(part) < PLATE_MIN:
                     continue
+                body = set(part)
                 for x, y in part:
                     p = y * width + x
                     lum = wood * min(PLATE_TONE[1], max(PLATE_TONE[0], _luma(src, p) / ref))
+                    if any((x + dx, y + dy) in open_ and (x + dx, y + dy) not in body for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
+                        lum = wood * PLATE_RIM
                     for c in range(3):
                         data[p * 4 + c] = min(255, int(lum * PLATE_IRON[c] + 0.5))
                     laid += 1
