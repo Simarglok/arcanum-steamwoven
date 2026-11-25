@@ -165,6 +165,22 @@ class AlphaTest(unittest.TestCase):
         _, clean = fit.fit_image(source, (96, 96))
         self.assertEqual(fit.gates(clean, (96, 96)), [])
 
+    def test_a_halo_override_is_checked_and_the_final_edge_stays_standard(self) -> None:
+        """ARC-UI-2483: `halo_limits` raises the gate on what the pipeline made only; the final edge after the safety net is still held to the standard limits."""
+        source = fit.synthetic_disc(96, None)
+        for i in range(96 * 96):
+            o = i * 4
+            if 0 < source.data[o + 3] < 255:
+                source.data[o:o + 3] = bytes((255, 0, 255))
+        with mock.patch.object(fit, "decontaminate", return_value=0):
+            _, report = fit.fit_image(source, (96, 96))
+        self.assertTrue(fit.gates(report, (96, 96)))
+        self.assertTrue(any("edge halo" in f for f in fit.gates(report, (96, 96), (1.0, 2.0))))
+        relaxed = fit.gates(report, (96, 96), (1000.0, 1000.0))
+        self.assertEqual([f for f in relaxed if f.startswith("edge halo:")], [])
+        report["halo_final"] = {"mean_de": 9.0, "p95_de": 20.0}
+        self.assertTrue(any("after the safety net" in f for f in fit.gates(report, (96, 96), (1000.0, 1000.0))))
+
     def test_explicit_key_needs_a_border_of_that_colour(self) -> None:
         full = textured(60, 60, (100, 80, 60))  # fills the frame: nothing of it is background
         with self.assertRaises(fit.FitError):

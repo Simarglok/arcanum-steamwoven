@@ -58,6 +58,19 @@
         "plate-square-hud"
       ],
       "after": null
+    },
+    "B-GAUGES": {
+      "prompts": [
+        "gauge-bars",
+        "gauge-clock",
+        "gauge-xp-pips",
+        "gauge-clock-moons",
+        "gauge-ammo",
+        "gauge-watch",
+        "gauge-scroll",
+        "gauge-pointers"
+      ],
+      "after": null
     }
   },
   "prompts": [
@@ -572,6 +585,142 @@
       "screen": null,
       "batch": "B-BUTTONS",
       "notes": "slice B-BUTTONS-1 (ARC-UI-2482): one Codex item, idle plate only; every state, glyph and lit face of these buttons is made by rule from the original frames (button_kit.py); fitted to the five plate parts of the top-strip buttons"
+    },
+    {
+      "id": "gauge-bars",
+      "group": "part",
+      "kind": "gauge",
+      "title": "Message health, fatigue and poison bars (full, empty) and the skill gauge (arts 463-466, 665, 666, 623)",
+      "file": "gauge-bars.txt",
+      "size": [
+        1836,
+        1272
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-GAUGES",
+      "notes": "B-GAUGES (ARC-UI-2483): seven bars in one column on the ground; cut by gauge_kit.py and fitted to seven parts"
+    },
+    {
+      "id": "gauge-xp-pips",
+      "group": "part",
+      "kind": "gauge",
+      "title": "Experience strip pieces, ten pips (arts 773-782)",
+      "file": "gauge-xp-pips.txt",
+      "size": [
+        1062,
+        972
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-GAUGES",
+      "notes": "B-GAUGES: ten pips on the ground, keyed and fitted to ten parts"
+    },
+    {
+      "id": "gauge-clock",
+      "group": "part",
+      "kind": "gauge",
+      "title": "Time strip of the clock (art 207) and its night piece without a moon (art 208)",
+      "file": "gauge-clock.txt",
+      "size": [
+        2214,
+        678
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-GAUGES",
+      "notes": "B-GAUGES: two bands on one ground (a lone band of this aspect is re-composed or padded by the generator); the night piece is the base of the eight moon pieces"
+    },
+    {
+      "id": "gauge-clock-moons",
+      "group": "part",
+      "kind": "gauge",
+      "title": "Moon phases of the clock, lit part only (arts 209-215)",
+      "file": "gauge-clock-moons.txt",
+      "size": [
+        2808,
+        1440
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-GAUGES",
+      "notes": "B-GAUGES: seven lit discs on the ground, keyed and laid over the night base at the original place by gauge_kit.py"
+    },
+    {
+      "id": "gauge-ammo",
+      "group": "part",
+      "kind": "gauge",
+      "title": "Ammunition counters: two panels, two rollers, four pictures (arts 165, 5, 167, 168 and the counter pictures)",
+      "file": "gauge-ammo.txt",
+      "size": [
+        1716,
+        1152
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-GAUGES",
+      "notes": "B-GAUGES: panels and rollers are parts, the four pictures are laid over the empty panel by gauge_kit.py"
+    },
+    {
+      "id": "gauge-watch",
+      "group": "part",
+      "kind": "gauge",
+      "title": "Pocket watch load indicator (art 601, frame 0)",
+      "file": "gauge-watch.txt",
+      "size": [
+        1008,
+        1224
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-GAUGES",
+      "notes": "B-GAUGES: the idle frame of the 30-frame load indicator; the runtime draws the hand from the value"
+    },
+    {
+      "id": "gauge-scroll",
+      "group": "part",
+      "kind": "gauge",
+      "title": "Scroll chain strip in six segments and thumb pieces (arts 316, 238, 239, 240, 787)",
+      "file": "gauge-scroll.txt",
+      "size": [
+        1368,
+        1368
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-GAUGES",
+      "notes": "B-GAUGES: six chain segments joined top to bottom by gauge_kit.py; ON is the same picture as OFF"
+    },
+    {
+      "id": "gauge-pointers",
+      "group": "part",
+      "kind": "gauge",
+      "title": "Alignment needle, aptitude arrow and time marker (arts 254, 255, 216)",
+      "file": "gauge-pointers.txt",
+      "size": [
+        1260,
+        756
+      ],
+      "references": [
+        "original"
+      ],
+      "screen": null,
+      "batch": "B-GAUGES",
+      "notes": "B-GAUGES: the idle frame of the needle (21 angles in the original), the aptitude arrow and the time marker"
     }
   ]
 }

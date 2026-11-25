@@ -1,0 +1,6 @@
+KIND: GAUGE (layered gauge parts), variant: pocket watch, one part on a ground
+Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original watch enlarged, on a flat magenta ground: the layout truth and the image to edit).
+
+Redraw the ORIGINAL pocket watch, in the same place and at the same size, on the same flat pure magenta ground (colour FF00FF, nothing else on it: no shadow, no gradient). It is a round brass-cased watch seen from the front, upright, with a small ring and crown at the top, a grey-white dial with a ring of small dark markings (not numbers; keep them as marks), a small subsidiary dial near the bottom, and a dull, dark brass case. There is no hand on it. Draw it finer, with the same proportions and the same dull tones.
+
+Keep the colours of the ORIGINAL exactly, no new gloss, no bright gold, no reflection, no glow, no ornament, no text and no numerals. Plain magenta ground around the watch.
