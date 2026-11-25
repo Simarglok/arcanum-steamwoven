@@ -89,15 +89,24 @@ public sealed class TransferParityStateTests
     }
 
     [TestMethod]
-    public void A_move_list_that_carries_or_waits_a_member_with_the_wait_bit_is_refused()
+    public void A_move_list_that_names_its_left_members_wrongly_is_refused_and_the_list_decides_not_the_bit_now()
     {
         using var owner = PartyWithFlagged(Sogg, Virgil);
         var revision = owner.Version.Revision;
-        var carried = new SessionMoveList([], [Sogg, Virgil]);
-        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], carried).Failure);
-        var left = new SessionMoveList([], [Virgil]) { Left = [Sogg, Virgil] };
-        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], left).Failure, "a member without the bit is not left behind");
+        // Every direct follower must be waiting, travelling or left; a left one must be a member, once, and not also waiting or travelling.
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], new SessionMoveList([], [Virgil])).Failure, "Sogg is neither");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], new SessionMoveList([], [Virgil]) { Left = [Sogg, Sogg] }).Failure, "twice");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], new SessionMoveList([], [Sogg, Virgil]) { Left = [Sogg] }).Failure, "left and travelling");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion,
+            owner.ApplyChanges(owner.Version, Inside, [], new SessionMoveList([new SessionWaitOrder(Sogg, null)], [Virgil]) { Left = [Sogg] }).Failure, "left and waiting");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], new SessionMoveList([], [Sogg, Virgil]) { Left = [Rat] }).Failure, "not a member");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, owner.ApplyChanges(owner.Version, Inside, [], new SessionMoveList([], [Virgil]) { Left = null! }).Failure);
         Assert.AreEqual(revision, owner.Version.Revision);
+        // The list built before the bit changed still stands: Sogg is left behind though its bit went in between (a wait timer ran out).
+        var list = owner.QueryTransferMoveList(new());
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.UnwaitParty(owner.Version, Sogg, PartyStateTests.Facts(), true).Disposition);
+        Assert.IsFalse(owner.QueryCompanion(Sogg).WaitFlag);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (owner.ApplyChanges(owner.Version, Inside, [], list).Disposition, GameSessionFailure.None));
     }
 
     [TestMethod]

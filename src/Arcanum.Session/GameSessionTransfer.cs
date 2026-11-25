@@ -77,13 +77,13 @@ public sealed partial class GameSessionOwner
         var travelling = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entity in list.Travelling)
             if (!SessionEventKinds.AiTickNpc(entity) || waiting.Contains(entity) || !travelling.Add(entity)) return GameSessionFailure.InvalidCompanion;
-        // ARC-WORLD-2969: a member left behind carries the WAIT bit while it follows, is neither ordered to wait nor travelling, and nothing is written for it.
+        // ARC-WORLD-2969: a member left behind is a direct follower that is neither ordered to wait nor travelling, and nothing is written for it. The list says who is left, not the bit now: a wait timer that clears the bit
+        // between the list and its application (the destination opens in between) does not stop the change of place.
         var left = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entity in list.Left)
-            if (!order.Contains(entity) || !_party.Get(entity).WaitFlag || waiting.Contains(entity) || travelling.Contains(entity) || !left.Add(entity)) return GameSessionFailure.InvalidCompanion;
-        // Every direct follower that is not told to wait or left behind travels; one with the WAIT bit is left behind.
+            if (!order.Contains(entity) || waiting.Contains(entity) || travelling.Contains(entity) || !left.Add(entity)) return GameSessionFailure.InvalidCompanion;
+        // Every direct follower that is not told to wait or left behind travels.
         if (order.Any(entity => !waiting.Contains(entity) && !travelling.Contains(entity) && !left.Contains(entity))) return GameSessionFailure.InvalidCompanion;
-        if (order.Any(entity => _party.Get(entity).WaitFlag && !left.Contains(entity))) return GameSessionFailure.InvalidCompanion;
         var waits = new List<(string, long?, int)>();
         foreach (var wait in list.Waiting)
         {

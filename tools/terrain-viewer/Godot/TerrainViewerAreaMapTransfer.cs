@@ -496,6 +496,9 @@ public partial class TerrainViewerApp
         if (_mapTransfers is not { } transfers || _areaSession is not { } session || UseScriptHost(transfers.Map.Snapshot) is not { } host) return;
         foreach (var follower in session.QueryParty().Followers)
         {
+            // ARC-WORLD-2969 (ledger TQ30a): a member left behind by the change of place (the WAIT bit) has no body on the shown map; the original runs its point 27 with a null attachee (nothing), so none runs here, even where the shown map
+            // lists a row of the same entity (its home map).
+            if (follower.WaitFlag && !GroupHolds(follower.Entity) && _aiHost?.Holds(follower.Entity) != true) continue;
             var obj = new Arcanum.Scripting.Scr.ScrObjectRef(CompanionHomeMap(follower.Entity) ?? CurrentAreaMap, follower.Entity);
             var ran = Awarded(host, host.RunNewSector(obj, session.Rules.Scripts));
             if (ran.Run is null) { if (NpcTileLogAll) GD.Print("ARC-SCRIPT-2822 new-sector none " + follower.Entity + " map " + obj.Map + ": " + ran.Detail); continue; }
