@@ -1139,9 +1139,11 @@ public sealed class ScrEffects
         var floats = Floats.Select(c => c with { Speaker = map(c.Speaker), Pc = map(c.Pc) }).ToArray();
         var ammoUses = AmmoUses.Select(c => c with { Holder = map(c.Holder) }).ToArray();
         var newspapers = Newspapers.Select(c => c with { Speaker = Opt(c.Speaker), Listener = Opt(c.Listener) }).ToArray();
+        // ARC-SCRIPT-2811: a line's roles follow a rebind (a made placeholder the line's triggerer or attachee names), but are not asked by Names (every line names its run's own attachee).
+        var lines = build ? Lines.Select(c => c with { Triggerer = Opt(c.Triggerer), Attachee = Opt(c.Attachee) }).ToArray() : Lines;
         var dialog = Dialog is null ? null : Dialog with { Pc = map(Dialog.Pc), Npc = Opt(Dialog.Npc) };
         if (!build) return this;
-        return new ScrEffects(Writeback, DestroyTrapObject, GlobalFlags, StoryState, dialog, calls, Lines, sounds, teleports, schemes, schematics, readings, skillUses, states, effectChanges, eyeCandies, slotWrites, creations,
+        return new ScrEffects(Writeback, DestroyTrapObject, GlobalFlags, StoryState, dialog, calls, lines, sounds, teleports, schemes, schematics, readings, skillUses, states, effectChanges, eyeCandies, slotWrites, creations,
             objectStates, floats, new ScrStoreWrites(GlobalVariables, PcVariables, PcFlags), TownMaps, ammoUses, Fades, WorldChanges, Slides, newspapers);
     }
 }

@@ -197,15 +197,15 @@ public sealed class AreaCombatPointScriptTests
             var weapon = Row(1, WeaponType, 940, ScrPoint.Hit);
             var attacker = Row(2, NpcType, 0, ScrPoint.Heartbeat);
             var host = Host(session, content, null, weapon, attacker);
-            host.NpcName = row => $"{row.Type}:recognized";
-            host.ObjectName = (row, recognition, _) => $"{row.Type}:{recognition}";
+            host.NpcName = row => $"{row.Type}:npc-source";
+            host.ObjectName = (row, recognition, marked) => $"{row.Type}:{recognition}:{marked}";
             var byHero = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), host.Pc, null, session.Rules.Scripts);
-            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "Zed strikes with 5:recognized.") }, byHero.Printed.ToArray(), "the hero triggers: its player name");
+            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "Zed strikes with 5:Recognized:False.") }, byHero.Printed.ToArray(), "the hero triggers: its player name");
             var byNpc = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), null, session.Rules.Scripts);
-            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "16:NotRecognized strikes with 5:recognized.") }, byNpc.Printed.ToArray(), "an NPC triggers: its description as no observer sees it");
-            // No object-name source wired: the hero's name, as before.
+            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "16:NotRecognized:False strikes with 5:Recognized:False.") }, byNpc.Printed.ToArray(), "an NPC triggers: its description as no observer sees it");
+            // No object-name source wired: the hero's name for the triggerer and the speaker source for the attachee, as before.
             host.ObjectName = null;
-            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "Zed strikes with 5:recognized.") }, host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), null, session.Rules.Scripts).Printed.ToArray());
+            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "Zed strikes with 5:npc-source.") }, host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), null, session.Rules.Scripts).Printed.ToArray());
         });
     }
 

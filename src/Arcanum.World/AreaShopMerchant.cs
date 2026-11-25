@@ -206,7 +206,7 @@ public sealed class AreaShopSession : IDisposable
         }
         var state = new AreaConversationState(owner, shopMap, [map.Merchant], AreaConversationProfile.Diagnostic.InitialReaction, scopes: [AreaConversationHost.Scope(row, owner)]);
         // ARC-UI-1806: the bet in this window as in the dialog's: the merchant's Gambling skill from its stored sheet and its generated lines.
-        var lines = new AreaShopLines(owner, row, state, scriptContent, AreaDialogNames.NpcName(npcName, row) ?? merchantName);
+        var lines = new AreaShopLines(owner, row, state, scriptContent, npcName is null ? merchantName : AreaDialogNames.NpcName(npcName, row)!);
         var barter = new AreaBarter(owner, inventory, data, merchant, () => state.Reaction(0),
             delta => owner.AdjustReaction(owner.Version, map.Merchant, state.NpcFacts(), state.PcFactsFor(0), delta).Disposition == GameSessionDisposition.Changed, name,
             merchantGambling: () => effects is not null && AreaAdvancement.Npc(map.Merchant, map.MerchantFields, effects) is { } sheet

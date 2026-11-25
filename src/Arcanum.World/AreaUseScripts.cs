@@ -526,7 +526,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private DialogSpeakerNames LineNames(ScrObjectRef? triggerer, ScrObjectRef? attachee)
     {
         var pcName = triggerer is { } who ? LineName(who, CritterRecognition.NotRecognized, false) : null;
-        var npcName = attachee is { } at ? IsPc(at) ? AreaDialogNames.PcName(_session) : AreaDialogNames.NpcName(NpcName, Row(at)) : AreaDialogNames.NpcName(NpcName, null);
+        // The attachee is its own observer; an item the session marked identified shows its identified name (ObjectName reads the marks, the NpcName source only the stored flags).
+        var npcName = attachee is not { } at ? AreaDialogNames.NpcName(NpcName, null)
+            : IsPc(at) ? AreaDialogNames.PcName(_session)
+            : Row(at) is { } row && ObjectName is not null ? LineName(row, CritterRecognition.Recognized, row.Type is >= 5 and <= 14 && _session.QueryItemIdentified(at.Code))
+            : AreaDialogNames.NpcName(NpcName, Row(at));
         return AreaDialogNames.Of(_session, AreaConversationProfile.Diagnostic.Names, pcName, npcName);
     }
 

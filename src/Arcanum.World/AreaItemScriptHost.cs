@@ -222,6 +222,6 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         var map = _maps.FirstOrDefault(candidate => candidate.RuntimeMap == attachee.Map);
         return map is not null && map.TryGetRow(attachee.Code, out var row)
             ? host.LineName(row, Arcanum.Data.Messages.CritterRecognition.Recognized, _session.QueryItemIdentified(attachee.Code))
-            : host.LineName(attachee, Arcanum.Data.Messages.CritterRecognition.Recognized, false);
+            : host.LineName(attachee, Arcanum.Data.Messages.CritterRecognition.Recognized, _session.QueryItemIdentified(attachee.Code));
     }
 }
