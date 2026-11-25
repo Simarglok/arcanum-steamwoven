@@ -248,10 +248,14 @@ public partial class TerrainViewerApp
     private void PushRelightMapLights()
     {
         if (!AreaRelight.Active) return;
+        AreaRelight.ClearMapLights();
         if (_areaAmbient is { Enabled: true } driver && _readyArea?.Lighting is { } lighting && LightsNow(lighting.Local, driver) is { } now)
-            AreaRelight.SetMapLights(now.PosedPlacements.Select(p => AreaRelight.FromPlacement(p.Light, p.Rect, driver.Effective))
-                .Where(light => light is not null).Select(light => light!.Value));
-        else AreaRelight.SetMapLights([]);
+        {
+            // ARC-RENDER-3127: filled light by light (no sequence built per push).
+            var placements = now.PosedPlacements;
+            for (var index = 0; index < placements.Count; index++)
+                if (AreaRelight.FromPlacement(placements[index].Light, placements[index].Rect, driver.Effective) is { } mapLight) AreaRelight.AddMapLight(mapLight);
+        }
     }
 
     private void PushAreaAmbientView() => _canvas?.SetAreaAmbient(_areaAmbient is { Enabled: true } driver && _readyArea?.Lighting is { } lighting

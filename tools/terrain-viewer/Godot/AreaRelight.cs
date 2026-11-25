@@ -1,5 +1,6 @@
 using Arcanum.Data.Lighting;
 using Arcanum.Data.Terrain;
+using Arcanum.TerrainViewer.Core;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -41,8 +42,16 @@ internal static class AreaRelight
     private static Image? _lightImage;
     private static readonly List<Light> MapLights = [];
     private static readonly List<Light> CarriedLights = [];
-    private static string _lastKey = "";
     private static Rect2? _view;
+    // ARC-RENDER-3127: the per-frame upload reuses these (no allocation once they are sized): the candidates and their geometry, the choice, the last upload to compare with.
+    private static Light[] _pool = new Light[64];
+    private static RelightCandidate[] _geometry = new RelightCandidate[64];
+    private static readonly RelightSelector Selector = new(MaxLights);
+    private static readonly Light[] LastUploaded = new Light[MaxLights];
+    private static int _lastCount;
+    private static float _lastHeight = float.NaN;
+    private static readonly List<Light> UploadedList = new(MaxLights);
+    private static readonly StringName ParamsName = new("relight_params"), KindsName = new("relight_kinds");
 
     private static Mode _developerMode = FromEnvironment();
     private static bool _look;
@@ -74,7 +83,8 @@ internal static class AreaRelight
     /// <summary>The lights of the last upload (for the smoke's report).</summary>
     internal static int UploadedCount { get; private set; }
     /// <summary>ARC-RES-2000: the lights of the last upload themselves (world pixels), for the Godot-native comparison of the smoke stage (the same lights drawn as <c>PointLight2D</c>).</summary>
-    internal static IReadOnlyList<Light> UploadedLights { get; private set; } = [];
+    /// <summary>ARC-RENDER-3127: the list is reused by the next upload (a caller that keeps the lights copies them).</summary>
+    internal static IReadOnlyList<Light> UploadedLights => UploadedList;
     /// <summary>ARC-RES-2007: how many lights reached the view at the last upload before the 32 cap (the cap's overflow is this minus <see cref="UploadedCount"/>), and how many of those were carried.</summary>
     internal static int InViewCount { get; private set; }
     internal static int CarriedInViewCount { get; private set; }
@@ -112,6 +122,11 @@ internal static class AreaRelight
     internal static IReadOnlyList<Light> MapLightList => MapLights;
     internal static void SetMapLights(IEnumerable<Light> lights) { MapLights.Clear(); MapLights.AddRange(lights); }
     internal static void SetCarriedLights(IEnumerable<Light> lights) { CarriedLights.Clear(); CarriedLights.AddRange(lights); }
+    /// <summary>ARC-RENDER-3127: the same lists filled one light at a time (the per-frame callers do not build a sequence for it).</summary>
+    internal static void ClearMapLights() => MapLights.Clear();
+    internal static void AddMapLight(Light light) => MapLights.Add(light);
+    internal static void ClearCarriedLights() => CarriedLights.Clear();
+    internal static void AddCarriedLight(Light light) => CarriedLights.Add(light);
 
     /// <summary>A placed light of a lighting field as a relit light: the rectangle's centre, half its width as the radius, the emitter's tint.</summary>
     internal static Light? FromPlacement(StationaryLight light, TerrainRect rect, AmbientPair pair)
@@ -135,38 +150,48 @@ internal static class AreaRelight
         _registered = true;
     }
 
-    /// <summary>Writes the lights and the parameters the shaders read this frame (cheap: a 64-texel image and two vectors).</summary>
+    /// <summary>Writes the lights and the parameters the shaders read this frame (cheap: a 64-texel image and two vectors). ARC-RENDER-3127: allocation-free in the steady state.</summary>
     internal static void Upload()
     {
         if (!Active) return;
         EnsureRegistered();
-        IEnumerable<Light> candidates = OnlyExtra ? Extra : CarriedLights.Concat(MapLights).Concat(Extra);
-        var reach = candidates.ToArray();
-        var centre = new Vector2(0, 0);
-        if (_view is { } view)
+        var total = (OnlyExtra ? 0 : CarriedLights.Count + MapLights.Count) + Extra.Count;
+        if (_pool.Length < total) { var size = Math.Max(total, _pool.Length * 2); _pool = new Light[size]; _geometry = new RelightCandidate[size]; }
+        var n = 0;
+        if (!OnlyExtra)
         {
-            centre = view.GetCenter();
-            reach = reach.Where(ReachesView).ToArray();
+            for (var i = 0; i < CarriedLights.Count; i++, n++) { var l = CarriedLights[i]; _pool[n] = l; _geometry[n] = new RelightCandidate(l.X, l.Y, l.Radius, true); }
+            for (var i = 0; i < MapLights.Count; i++, n++) { var l = MapLights[i]; _pool[n] = l; _geometry[n] = new RelightCandidate(l.X, l.Y, l.Radius, false); }
         }
-        InViewCount = reach.Length;
-        CarriedInViewCount = reach.Count(l => CarriedLights.Contains(l));
-        var all = (_view is null ? reach.AsEnumerable() : reach.OrderBy(l => (l.X - centre.X) * (l.X - centre.X) + (l.Y - centre.Y) * (l.Y - centre.Y))).Take(MaxLights).ToArray();
-        var key = string.Join('|', all.Select(l => $"{l.X:0.#},{l.Y:0.#},{l.Radius:0.#},{l.Colour.R:0.##},{l.Colour.G:0.##},{l.Colour.B:0.##}"));
-        if (key != _lastKey)
+        for (var i = 0; i < Extra.Count; i++, n++) { var l = Extra[i]; _pool[n] = l; _geometry[n] = new RelightCandidate(l.X, l.Y, l.Radius, false); }
+        if (_view is { } view) Selector.Select(_geometry.AsSpan(0, n), true, view.Position.X, view.Position.Y, view.Size.X, view.Size.Y);
+        else Selector.Select(_geometry.AsSpan(0, n), false, 0, 0, 0, 0);
+        InViewCount = Selector.InView;
+        CarriedInViewCount = Selector.CarriedInView;
+        var chosen = Selector.Chosen;
+        var changed = chosen.Length != _lastCount || Height != _lastHeight;
+        for (var i = 0; !changed && i < chosen.Length; i++) changed = !Same(_pool[chosen[i]], LastUploaded[i]);
+        UploadedList.Clear();
+        for (var i = 0; i < chosen.Length; i++) { LastUploaded[i] = _pool[chosen[i]]; UploadedList.Add(LastUploaded[i]); }
+        if (changed)
         {
-            _lastKey = key;
+            _lastCount = chosen.Length; _lastHeight = Height;
             _lightImage!.Fill(new Color(0, 0, 0, 0));
-            for (var i = 0; i < all.Length; i++)
+            for (var i = 0; i < chosen.Length; i++)
             {
-                _lightImage.SetPixel(i, 0, new Color(all[i].X, all[i].Y, Height, all[i].Radius));
-                _lightImage.SetPixel(i, 1, new Color(all[i].Colour.R, all[i].Colour.G, all[i].Colour.B, 1f));
+                var l = LastUploaded[i];
+                _lightImage.SetPixel(i, 0, new Color(l.X, l.Y, Height, l.Radius));
+                _lightImage.SetPixel(i, 1, new Color(l.Colour.R, l.Colour.G, l.Colour.B, 1f));
             }
             _lightTexture!.Update(_lightImage);
         }
-        UploadedCount = all.Length; UploadedLights = all;
-        RenderingServer.GlobalShaderParameterSet("relight_params", new Vector4((float)Current, EffectiveStrength, Delight, Height));
-        RenderingServer.GlobalShaderParameterSet("relight_kinds", new Vector4(NormalGain.Ground, NormalGain.Object, NormalGain.Critter, all.Length));
+        UploadedCount = chosen.Length;
+        RenderingServer.GlobalShaderParameterSet(ParamsName, new Vector4((float)Current, EffectiveStrength, Delight, Height));
+        RenderingServer.GlobalShaderParameterSet(KindsName, new Vector4(NormalGain.Ground, NormalGain.Object, NormalGain.Critter, chosen.Length));
     }
+
+    private static bool Same(Light a, Light b) =>
+        a.X == b.X && a.Y == b.Y && a.Radius == b.Radius && a.Colour.R == b.Colour.R && a.Colour.G == b.Colour.G && a.Colour.B == b.Colour.B;
 
     // The relit shader text is spliced into the Legacy program only for the relit variants; the Legacy programs are never edited.
     // h and a are 3x3 matrices indexed [x][y] of the neighbourhood: luminance (a transparent neighbour takes the centre's, so a silhouette

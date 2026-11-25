@@ -362,12 +362,31 @@ public partial class TerrainViewerApp
             AreaRelight.Extra.Clear(); AreaRelight.SetMode(AreaRelight.Mode.Off); PushAreaAmbient();
             DisplayServer.WindowSetVsyncMode(wasVsync);
 
+            // ARC-RENDER-3127: the per-frame light upload allocates nothing in the steady state (the map's lights, 20 more, the view as the area canvas set it).
+            long uploadBytes;
+            {
+                AreaRelight.SetMode(AreaRelight.Mode.NightAdd); AreaRelight.Extra.Clear();
+                var placed = _canvas.AreaActorPlacementNow;
+                var projectedHero = TerrainGeometry.Project(checked((int)(placed?.MapX ?? 0)), checked((int)(placed?.MapY ?? 0)));
+                var anchor = new Vector2(projectedHero.X + (placed?.InstanceOffsetX ?? 0) + 40, projectedHero.Y + (placed?.InstanceOffsetY ?? 0) + 20);
+                for (var i = 0; i < 20; i++) AreaRelight.Extra.Add(new AreaRelight.Light(anchor.X + i * 13f - 120f, anchor.Y + (i % 5) * 9f, 110f, new Color(1f, .75f, .45f)));
+                PushAreaAmbient(); await Frames(3);
+                for (var i = 0; i < 20; i++) AreaRelight.Upload();
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                for (var i = 0; i < 200; i++) AreaRelight.Upload();
+                uploadBytes = GC.GetAllocatedBytesForCurrentThread() - before;
+                GD.Print($"ARC-RENDER-3127 relight upload: {AreaRelight.UploadedCount} lights uploaded of {AreaRelight.InViewCount} in view, {uploadBytes} bytes allocated by 200 uploads");
+                Require(AreaRelight.UploadedCount > 0, "the allocation measure uploads lights");
+                Require(uploadBytes == 0, $"AreaRelight.Upload allocates nothing in the steady state ({uploadBytes} bytes over 200 uploads)");
+                AreaRelight.Extra.Clear(); AreaRelight.SetMode(AreaRelight.Mode.Off); PushAreaAmbient();
+            }
+
             // The normal maps a full-size RGBA8 texture per visible sprite frame would cost (terrain chunks are drawn from composed textures and not counted here).
             var sprites = _canvas.AreaVisibleCommands.Where(c => c.Identity is not null).GroupBy(c => c.Frame).Select(g => g.First()).ToArray();
             long bytes = sprites.Sum(c => (long)c.Source.Width * c.Source.Height * 4);
             var frames = sprites;
             report = new { Map = _readyMapName, Carrier = carrierReport, Setting = settingReport, Walk = walkReport, Hour = driver.Clock.Hour, Window = new { size.X, size.Y }, Differing = counts, Timing = timing,
-                VisibleSpriteFrames = frames.Length, NormalBytesFullRgba8 = bytes, Lights = AreaRelight.UploadedCount };
+                VisibleSpriteFrames = frames.Length, NormalBytesFullRgba8 = bytes, Lights = AreaRelight.UploadedCount, UploadBytes200 = uploadBytes };
             GD.Print("ARC-RES-1978 native-smoke relight PASS " + System.Text.Json.JsonSerializer.Serialize(report));
         }
         finally
