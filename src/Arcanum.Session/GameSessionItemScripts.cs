@@ -824,7 +824,7 @@ public sealed partial class GameSessionOwner
         }
         foreach (var line in effects.Lines)
         {
-            var printed = (npcTriggerer ? scripts.PrintedLineForNpc(line.Script, line.Line) : scripts.PrintedLine(line.Script, line.Line)) ?? throw new InvalidOperationException("ITEM_SCRIPT_LINE_NULL");
+            var printed = scripts.PrintedLineOf(line.Script, line.Line, line.Triggerer, line.Attachee, npcTriggerer) ?? throw new InvalidOperationException("ITEM_SCRIPT_LINE_NULL");
             if (printed.Status == SessionPrintedLineStatus.Unsupported) return GameSessionFailure.ItemScriptUnsupported;
             if (printed.Status == SessionPrintedLineStatus.Shown) messages.Add(new(line.Script, line.Line, line.Kind, printed.Text ?? string.Empty));
         }

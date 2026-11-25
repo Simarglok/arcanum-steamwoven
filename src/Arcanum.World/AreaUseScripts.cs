@@ -1,6 +1,8 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Maps;
+using Arcanum.Data.Messages;
 using Arcanum.Data.Scripts;
+using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
@@ -502,6 +504,31 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>ARC-SCRIPT-2787: where an object's shown name comes from for <c>@npcname@</c> in a printed or floated line (<see cref="AreaDialogNames.NpcNameSource"/>); null: the diagnostic placeholder.</summary>
     public Func<AreaObjectRecord, string?>? NpcName { get; set; }
+
+    /// <summary>ARC-SCRIPT-2811 (ledger NM3, NM4): where any object's shown name comes from as an observer sees it (<see cref="AreaDialogNames.ObjectNameSource"/>): the not-yet-met description an NPC triggerer's <c>@pcname@</c> prints, an item attachee's
+    /// name; null: those names are not read (a printed line prints the hero's name, an item host's line naming them is refused).</summary>
+    public AreaObjectNameSource? ObjectName { get; set; }
+
+    /// <summary>ARC-SCRIPT-2811: the name a printed line's token prints for <paramref name="row"/> (empty when its name has no text); null when this host has no name source.</summary>
+    public string? LineName(AreaObjectRecord row, CritterRecognition recognition, bool markedIdentified)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return ObjectName is { } source ? source(row, recognition, markedIdentified) ?? string.Empty : null;
+    }
+
+    /// <summary>ARC-SCRIPT-2811: <see cref="LineName(AreaObjectRecord, CritterRecognition, bool)"/> of the row this host reads for <paramref name="obj"/>; null for an object it has no row of (and for the hero, whose name is the session's).</summary>
+    public string? LineName(ScrObjectRef obj, CritterRecognition recognition, bool markedIdentified) => !IsPc(obj) && Row(obj) is { } row ? LineName(row, recognition, markedIdentified) : null;
+
+    /// <summary>
+    /// ARC-SCRIPT-2811 (ledger NM4): the names of a printed line: <c>@pcname@</c> is the first object of the line context, the run's triggerer: the hero's player name, or for an NPC (or any other object this host has a row of, observer none) its name
+    /// read by <see cref="ObjectName"/> (an NPC's not-yet-met description); <c>@npcname@</c> is the attachee, its own observer (a recognized NPC). An object with no row or a host with no source keeps the hero's name and the speaker name of <see cref="NpcName"/>.
+    /// </summary>
+    private DialogSpeakerNames LineNames(ScrObjectRef? triggerer, ScrObjectRef? attachee)
+    {
+        var pcName = triggerer is { } who ? LineName(who, CritterRecognition.NotRecognized, false) : null;
+        var npcName = attachee is { } at ? IsPc(at) ? AreaDialogNames.PcName(_session) : AreaDialogNames.NpcName(NpcName, Row(at)) : AreaDialogNames.NpcName(NpcName, null);
+        return AreaDialogNames.Of(_session, AreaConversationProfile.Diagnostic.Names, pcName, npcName);
+    }
 
     // SQ1–SQ12 (ARC-SCRIPT-1165): the story and time questions, from the session.
     public ScrGameTime? Time() => AreaScriptStoryQueries.Time(_session);
@@ -2397,8 +2424,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         foreach (var line in effects.Lines)
         {
             if (_content.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
-            // ARC-SCRIPT-2787 (0x44B390 → 0x416B00): @pcname@ is the triggerer (the hero) and @npcname@ the attachee of the running script.
-            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaDialogNames.For(_session, AreaConversationProfile.Diagnostic.Names, AreaDialogNames.NpcName(NpcName, attachee is { } at ? Row(at) : null)));
+            // ARC-SCRIPT-2787, ARC-SCRIPT-2811 (0x44B390 → 0x416B00): @pcname@ is the line context's first object, the triggerer, and @npcname@ the attachee of the running script.
+            var printed = ScrPrintedLine.Read(document, line.Line, false, LineNames(line.Triggerer, line.Attachee ?? attachee));
             if (printed.Status != ScrPrintedLineStatus.Shown) continue;
             lines.Add(printed.Text);
             printedLines.Add(new(line.Kind, printed.Text));

@@ -60,10 +60,16 @@ public static class ObjectDisplayName
 
     /// <summary>Resolves an Area object's shown name from its effective fields (absent instance
     /// fields inherit the prototype value there).</summary>
-    public static ObjectNameResolution Resolve(AreaObjectRecord record, ObjectDescriptionCatalog catalog, CritterRecognition recognition)
+    public static ObjectNameResolution Resolve(AreaObjectRecord record, ObjectDescriptionCatalog catalog, CritterRecognition recognition) => Resolve(record, catalog, recognition, false);
+
+    /// <summary>
+    /// ARC-SCRIPT-2811: <see cref="Resolve(AreaObjectRecord, ObjectDescriptionCatalog, CritterRecognition)"/> for an item the session has marked identified (the barter window's marks, Divine Magick's flag line), whose own stored flags the row does not
+    /// carry: <paramref name="markedIdentified"/> reads the item flags with the identified bit set (the same field the name branch tests).
+    /// </summary>
+    public static ObjectNameResolution Resolve(AreaObjectRecord record, ObjectDescriptionCatalog catalog, CritterRecognition recognition, bool markedIdentified)
     {
         ArgumentNullException.ThrowIfNull(record);
-        return Resolve(record.Type, slot => Int32(record, slot), catalog, recognition);
+        return Resolve(record.Type, slot => Int32(record, slot) is { } value && markedIdentified && slot == ItemFlagsSlot ? unchecked((int)((uint)value | IdentifiedItemFlag)) : Int32(record, slot), catalog, recognition);
     }
 
     /// <summary>Resolves the shown name for an object of <paramref name="type"/> whose fields

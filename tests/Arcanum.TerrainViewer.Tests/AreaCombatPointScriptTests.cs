@@ -143,6 +143,9 @@ public sealed class AreaCombatPointScriptTests
             // ARC-SCRIPT-2853: 932 (an item's drop script): the holder is the triggerer (an NPC), the attachee the item (a weapon), the run default ends it; 933 skips the default (a drop it refuses).
             Write("scr/00932drop.scr", Program([.. FlagIfType(Triggerer, NpcType, DropHolderIsNpc, 0), .. FlagIfType(Attachee, WeaponType, DropItemIsWeapon, 3), Do(new(ScrCatalogue.Action.ReturnRunDefault))]));
             Write("scr/00933dropskip.scr", Program(Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            // ARC-SCRIPT-2811 (0x44B390 → 0x416B00, ledger NM4): 940 prints one line naming both objects of its context.
+            Write("scr/00940names.scr", Program(Do(new(ScrCatalogue.Action.PrintLine, N(1), N(6))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("dlg/00940names.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{@pcname@ strikes with @npcname@.}{}{}{}{}{}"));
             Write("scr/00918eyecandy.scr", Program(Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(30), (Extra, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -181,6 +184,29 @@ public sealed class AreaCombatPointScriptTests
                 Assert.IsTrue(Flag(session, VictimIsPc), $"point {point}: the extra object is the victim");
                 Assert.IsTrue(Flag(session, AttacheeIsWeapon), $"point {point}: the attachee is the weapon");
             });
+    }
+
+    // ARC-SCRIPT-2811 (0x44B390 → 0x416B00, ledger NM4): the line's first object is the triggerer: the hero's player name, or for an NPC its not-yet-met description (observer none); the attachee names @npcname@ as its own observer.
+    [TestMethod]
+    public void A_printed_line_names_an_npc_triggerer_by_its_unmet_description_and_the_attachee_as_recognized()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetHeroPlayerName(session.Version, System.Text.Encoding.Latin1.GetBytes("Zed")).Disposition);
+            var weapon = Row(1, WeaponType, 940, ScrPoint.Hit);
+            var attacker = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, weapon, attacker);
+            host.NpcName = row => $"{row.Type}:recognized";
+            host.ObjectName = (row, recognition, _) => $"{row.Type}:{recognition}";
+            var byHero = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), host.Pc, null, session.Rules.Scripts);
+            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "Zed strikes with 5:recognized.") }, byHero.Printed.ToArray(), "the hero triggers: its player name");
+            var byNpc = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), null, session.Rules.Scripts);
+            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "16:NotRecognized strikes with 5:recognized.") }, byNpc.Printed.ToArray(), "an NPC triggers: its description as no observer sees it");
+            // No object-name source wired: the hero's name, as before.
+            host.ObjectName = null;
+            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "Zed strikes with 5:recognized.") }, host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), null, session.Rules.Scripts).Printed.ToArray());
+        });
     }
 
     // ARC-SCRIPT-2828 (0x4B47F8, ledger TQ23): a critical damage step runs the critical-hit point of each worn armour piece (object type 7) with the attacker as the triggerer and the victim as the extra object; a worn weapon runs none.

@@ -145,7 +145,7 @@ public sealed class ScrObjectVariableTests
         Assert.AreEqual(ScrStop.ReturnSkipDefault, run.Stop);
         CollectionAssert.AreEqual(new[] { 9, 20, 21, 22 }, run.Effects.GlobalFlags.Select(f => f.Index).ToArray(),
             "line 0 of the callee is skipped, the caller's flag 20 is seen, the header's local flag 1 holds, the caller goes on");
-        Assert.AreEqual(new ScrPrintLine(600, 3, 0), run.Effects.Lines.Single(), "the callee's own DLG, on its attachee (the PC)");
+        Assert.AreEqual((600, 3, 0), (run.Effects.Lines.Single().Script, run.Effects.Lines.Single().Line, run.Effects.Lines.Single().Kind), "the callee's own DLG, on its attachee (the PC)");
         Assert.IsNull(run.Effects.Writeback, "the caller's slot is unchanged; the callee's local flag is not kept");
     }
 

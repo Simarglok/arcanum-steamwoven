@@ -835,8 +835,10 @@ public sealed record ScrCallEvent(int Script, int Line, ScrObjectRef? Triggerer,
 /// number <paramref name="Kind"/> (the message window's entry type, read in the executable by ARC-DEV-309, ledger PW1). The original builds the line through
 /// the dialog's NPC-line step, which also runs the line's action field, and hands the text to the interface (ledger IS2);
 /// the host reads the DLG and decides whether it can show it. A run without an attachee prints nothing, as the original.
+/// ARC-SCRIPT-2811 (ledger NM4): the line context's first object is the run's <paramref name="Triggerer"/> and its 0x38 one the <paramref name="Attachee"/>
+/// at the action (a focus action may have changed the triggerer), which name <c>@pcname@</c> and <c>@npcname@</c> of the line; null when the line was made without them (tests).
 /// </summary>
-public readonly record struct ScrPrintLine(int Script, int Line, int Kind);
+public readonly record struct ScrPrintLine(int Script, int Line, int Kind, ScrObjectRef? Triggerer = null, ScrObjectRef? Attachee = null);
 
 /// <summary>
 /// ARC-SCRIPT-050: one object of a float line action (23, ledger FL1–FL5): line <paramref name="Line"/> of the DLG of <paramref name="Script"/>
