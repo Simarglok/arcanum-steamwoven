@@ -109,8 +109,13 @@ Every viewer run except a self-test prints one line every 30 s (the soak's inter
 a form a person reads, `grep "ARC-DEV-1398 resources"` in the log:
 
 ```
-ARC-DEV-1398 resources t=90s fps=59.9 texture=40.0MiB video=56.3MiB buffer=0.0MiB objects=3781 resources=22 nodes=378 orphans=0 godotStatic=44.0MiB gcLive=283.0MiB gcHeap=300.1MiB gc=8/3/2 workingSet=1200.0MiB threads=34 openFiles=61
+ARC-DEV-1398 resources t=90s fps=59.9 texture=40.0MiB video=56.3MiB buffer=0.0MiB objects=3781 resources=22 nodes=378 orphans=0 godotStatic=44.0MiB gcLive=283.0MiB gcHeap=300.1MiB gc=8/3/2 workingSet=1200.0MiB threads=34 openFiles=61 frameMs=17.2/21.5/84.0 gcRate=0.40/0.13/0.07/s over=30s
 ```
+
+`fps` is Godot's count of the last second, so one slow second can read 23 while the typical frame is 47 fps (ARC-DEV-3128). The tail gives the true frame cost over
+the last 30 s: `frameMs=avg/p95/max` is the gap between frames in ms (what the player sees; the idle cap of 60 fps counts as a 16.7 ms frame), and
+`gcRate=g0/g1/g2/s` is the .NET collections per second of generation 0, 1 and 2 over the same span (`over=`; `frameMs=?` before two frames are held).
+The window is a fixed ring filled once per frame without allocation (`ViewerFrameWindow`); the soak CSV keeps its columns.
 
 `openFiles` is the number of file descriptors the process holds (the listing of `/dev/fd`, which counts its own descriptor: a constant one more; `?` on
 Windows, where there is no such folder). The bug report (Ctrl+B) carries the log's last 120 s, so four of these lines, and a fresh reading as its
