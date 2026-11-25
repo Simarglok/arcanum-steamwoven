@@ -344,31 +344,29 @@ class SurfaceComposeTests(unittest.TestCase):
                     surface_compose.load_spec(path)
 
     @unittest.skipUnless(shutil.which("magick"), "ImageMagick is needed")
-    def test_a_plate_lays_grey_iron_brackets_by_the_originals_dark_mask_and_nothing_else(self):
+    def test_a_plate_lays_dark_triangles_between_its_rectangle_and_the_ellipse_and_nothing_else(self):
         with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            orig, image, solid = tmp_path / "o.png", tmp_path / "i.png", tmp_path / "s.png"
-            # the original: old wood luma 60 and a 100 x 100 plate at 50,50; in its upper left corner a dark bracket (luma 30, 20 x 20) with a 10 x 10 lighter gap (luma 60) inside, a 3 x 3 speck (luma 30)
-            # far from it, a dark patch (x 98..120, y 98..120) reaching into the lower right window and lying in the weight-0 disc
-            subprocess.run(["magick", "-size", "200x200", "xc:gray(60)", "-fill", "gray(30)", "-draw", "rectangle 52,52 71,71", "-fill", "gray(60)", "-draw", "rectangle 56,56 65,65",
-                            "-fill", "gray(30)", "-draw", "rectangle 140,52 142,54", "-fill", "gray(30)", "-draw", "rectangle 98,98 120,120", str(orig)], check=True)
+            image = Path(tmp) / "i.png"
             subprocess.run(["magick", "-size", "200x200", "xc:gray(100)", str(image)], check=True)
-            subprocess.run(["magick", "-size", "200x200", "xc:white", "-fill", "black", "-draw", "rectangle 90,90 129,129", str(solid)], check=True)
-            laid = surface_compose.lay_plates(image, pngio.read(orig), solid, ((50, 50, 150, 150),), 200, 200)
+            disc = (20, 20, 180, 160, 40, 40, 160, 140)       # the plate's rectangle is the disc's rim box here: the ellipse touches the four edges
+            painted = surface_compose.lay_plates(image, ((40, 40, 160, 140),), (disc,), 200, 200)
             data = surface_compose.gray_bytes(image)
-            self.assertEqual(surface_compose.lay_plates(image, pngio.read(orig), solid, (), 200, 200), 0)    # no plate: nothing to do
-            with self.assertRaises(surface_compose.ComposeError):
-                surface_compose.lay_plates(image, pngio.read(orig), solid, ((50, 50, 250, 150),), 200, 200)
+            self.assertEqual(surface_compose.lay_plates(image, (), (disc,), 200, 200), 0)       # no plate: nothing to do
+            for bad, discs in ((((40, 40, 260, 140),), (disc,)), (((10, 10, 30, 30),), (disc,)), (((40, 40, 160, 140),), ())):     # outside the image; in no disc box
+                with self.assertRaises(surface_compose.ComposeError, msg=str(bad)):
+                    surface_compose.lay_plates(image, bad, discs, 200, 200)
         at = lambda x, y: data[y * 200 + x]
-        self.assertGreater(laid, 380)
-        low, high = round(100 * surface_compose.PLATE_TONE[0]), round(100 * surface_compose.PLATE_TONE[1])
-        self.assertTrue(low - 3 <= at(55, 55) <= low + 3, msg=str(at(55, 55)))      # the bracket: grey iron at the clamp's darkest share of the new wood (luma 30 over 60 is 0.5, under the 0.72 clamp)
-        self.assertTrue(low - 3 <= at(60, 60) <= high + 3, msg=str(at(60, 60)))     # the 10 x 10 gap inside the bracket is wider than the closing: the fill makes it iron too
-        self.assertEqual(at(141, 53), 100)      # a speck under PLATE_MIN pixels is no bracket
-        self.assertEqual(at(110, 118), 100)     # weight 0 (the disc), in the lower right window and dark in the original: untouched
-        self.assertEqual(at(20, 20), 100)       # outside the plate: untouched
-        self.assertEqual(at(100, 60), 100)      # between the brackets: the wood, untouched
-        self.assertEqual(at(72, 72), 100)       # just outside the bracket: untouched (the mask is hard)
+        self.assertGreater(painted, 2000)
+        fill = round(100 * surface_compose.PLATE_DEPTH)
+        self.assertTrue(fill - 6 <= at(47, 47) <= fill + 6, msg=str(at(47, 47)))     # the corner triangle: the dark fill (a share of the wood's luma)
+        self.assertTrue(fill - 6 <= at(152, 133) <= fill + 6, msg=str(at(152, 133)))
+        self.assertGreater(at(42, 60), at(47, 60) + 5)    # the thin rim 2 px inside the straight left leg is lighter than the fill
+        self.assertLess(at(42, 60), 100)                  # and darker than the wood
+        self.assertEqual(at(100, 90), 100)                # inside the ellipse: untouched
+        self.assertEqual(at(100, 42), 100)                # just inside the ellipse's top: untouched (the arc is the ellipse, no teeth)
+        self.assertEqual(at(30, 30), 100)                 # outside the rectangle: untouched
+        self.assertEqual(at(39, 60), 100)                 # the leg is hard: one pixel outside it is the wood
+        self.assertTrue(fill - 6 <= at(40, 60) <= fill + 6, msg=str(at(40, 60)))     # the leg's outermost pixel is plate (the fill), not wood
 
     def test_load_spec_reads_plate_boxes_and_refuses_a_bad_one(self):
         with tempfile.TemporaryDirectory() as tmp:
