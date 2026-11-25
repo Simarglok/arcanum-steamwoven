@@ -514,7 +514,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         ArgumentNullException.ThrowIfNull(effects);
         // The viewer's set admits no use item with skill; a trap object is not modelled.
         if (effects.DestroyTrapObject is not null || effects.SkillUses.Count > 0) return false;
-        // ARC-SCRIPT-2440 (TI5, F10; issue #2507): a dialog action in the run of a transform would open the conversation with the made critter (a speaker no host here has): the run is left unapplied whole, so no conversation opens with the destroyed old NPC.
+        // ARC-SCRIPT-2440 (TI5, F10, TI5e): a dialog action in the run of a transform would open the conversation with the made critter (a speaker no host here has): the run is left unapplied whole, so no conversation opens with the destroyed old NPC. No installed script can run it (TI5e, the census `TransformThenDialogCensusRealDataTests`), so the refusal is the whole model until one does (issue #2507).
         if (effects.Dialog is not null && effects.ObjectStates.Any(r => r.Change == ScrObjectStateChange.Transform)) return false;
         // ARC-WORLD-2038 (TT20): a teleport the hosts cannot record leaves the run unapplied whole, checked before anything applies.
         if (TeleportRefusal(effects) is not null) return false;
