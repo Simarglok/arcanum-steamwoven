@@ -200,7 +200,8 @@ public sealed partial class GameSessionOwner
     {
         var pile = _inventory.Objects.PileOf(entity);
         // ARC-SCRIPT-3266 (ledger IE3, JP4, TQ20; exe read 0x43CCA0 → 0x466E00 → 0x467860): the item's remove-item script (28) of the removal from its pile, planned before its records go (it reads the item as it lies).
-        var removal = pile is null ? default : PlanPileRemoval(entity, pile);
+        // The pile's own loot (the window's take of a key, a merged stack or a whole stack or gold pile, _lootedPile) has run the item's 28 itself with the pile as the triggerer, so the destroy it ends with runs none again.
+        var removal = pile is null || _lootedPile == pile.Entity ? default : PlanPileRemoval(entity, pile);
         // ARC-WORLD-1284 (AM5): the destroy 0x43CCA0 takes an item an NPC holds out of its list first (0x467860), which sets NPC flag 0x40 on the NPC; read before the records go.
         if (!_destroyingHolder) MarkCheckWield(NpcHolderOfItem(entity));
         RemoveItemRecords(entity);
