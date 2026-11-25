@@ -160,7 +160,7 @@ carry their task code; the open ones are 5, 6, 7, 10, 11, 12, 13 and the rest of
 | 10 | Turn-based heartbeat | the subturn heartbeat 0x4B704A (point 19) in the round host | heartbeats in combat |
 | 11 | List conditions and vicinity order | conditions over focus kinds 8, 9, 15 (SG6, U2) and the list order (U1: read by ARC-SCRIPT-2960, built by #2975 and #2976) | scripts that test "anyone near" |
 | 12 | Item-script commands | toggle state (56) and loop for (18) at insert item, call script in (54) at wield on | 35 item attachments |
-| 13 | Conversation resume and DLG LF | TG8: "return to script" runs the speaker's dialog point; a use- or tile-opened talk then resumes his dialog slot, so its LF reads that slot; read the DLG LF field in the executable (now F0) | talks opened by use and tile scripts |
+| 13 | Conversation resume and DLG LF | TG8, TG10 (ARC-SCRIPT-2961, built): "return to script" runs the NPC's point-9 attachment at line −N or the held line + 1, whatever script or point started the talk; the DLG's LF and LC read that same attachment | talks opened by use and tile scripts |
 
 
 ## Reproduction

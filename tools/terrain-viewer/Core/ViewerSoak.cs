@@ -90,7 +90,8 @@ public sealed record ViewerSoakSample(
     int ElapsedSeconds, string Window, double Fps,
     long TextureBytes, long VideoBytes, long BufferBytes,
     long Objects, long Resources, long Nodes, long OrphanNodes,
-    long GodotStaticBytes, long GcHeapBytes, long GcLiveBytes, int Gen0, int Gen1, int Gen2, long WorkingSetBytes, int Threads, int OpenFiles = -1)
+    long GodotStaticBytes, long GcHeapBytes, long GcLiveBytes, int Gen0, int Gen1, int Gen2, long WorkingSetBytes, int Threads, int OpenFiles = -1,
+    ViewerFrameStats? Frames = null)
 {
     /// <summary>The CSV header of <see cref="Line"/>.</summary>
     public const string Header = "elapsed_s,window,fps,texture_bytes,video_bytes,buffer_bytes,objects,resources,nodes,orphan_nodes,godot_static_bytes,gc_heap_bytes,gc_live_bytes,gc0,gc1,gc2,working_set_bytes,threads,open_files";
@@ -107,7 +108,7 @@ public sealed record ViewerSoakSample(
     }
 
     /// <summary>ARC-DEV-1398: the reading as the one resource line the viewer's log prints every half minute and the bug report carries
-    /// (the CSV row holds the same numbers; this is the form a person reads).</summary>
+    /// (the CSV row holds the same numbers, but for the frame cost; this is the form a person reads).</summary>
     public string Text()
     {
         var c = CultureInfo.InvariantCulture;
@@ -116,7 +117,9 @@ public sealed record ViewerSoakSample(
         return $"{ViewerResourceLine.Prefix} t={ElapsedSeconds}s fps={Fps.ToString("0.0", c)} texture={M(TextureBytes)} video={M(VideoBytes)} buffer={M(BufferBytes)}"
             + $" objects={Objects} resources={Resources} nodes={Nodes} orphans={OrphanNodes} godotStatic={M(GodotStaticBytes)}"
             + $" gcLive={M(GcLiveBytes)} gcHeap={M(GcHeapBytes)} gc={Gen0}/{Gen1}/{Gen2} workingSet={M(WorkingSetBytes)} threads={Threads}"
-            + $" openFiles={(OpenFiles < 0 ? "?" : OpenFiles.ToString(c))}";
+            + $" openFiles={(OpenFiles < 0 ? "?" : OpenFiles.ToString(c))}"
+            // ARC-DEV-3128: fps is the last second's count; the frame cost and collection rates are over the last 30 s (the CSV row keeps its columns).
+            + (Frames is { } frames ? " " + frames.Text() : " frameMs=?");
     }
 }
 
