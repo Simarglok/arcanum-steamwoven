@@ -1351,14 +1351,15 @@ Local (`local/steamwoven-ui/`, never in git), standard-library Python plus Image
 python3 -B tools/steamwoven_ui/round_kit.py refs                       # references of the two plate prompts: the original face without its symbol (26 x), the ball (44 x), the brass-edge swatch, a round-button cut-out
 python3 -B tools/steamwoven_ui/prompt_library.py inbox B-BUTTONS       # the inbox (three items; the square one is skipped by the runner while its outbox file exists)
 python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS            # two items: plate-round-hud, plate-ball-hud (gpt-6.1-sol)
-for n in combat_button schematics_button skills_button spells_button; do python3 -B tools/steamwoven_ui/fit.py fit plate.$n --source local/steamwoven-ui/outbox/B-BUTTONS/plate-round-hud.png --provenance local/steamwoven-ui/outbox/B-BUTTONS/plate-round-hud.provenance.json; done
-python3 -B tools/steamwoven_ui/fit.py fit plate.lilgrnbut --source local/steamwoven-ui/outbox/B-BUTTONS/plate-ball-hud.png --provenance local/steamwoven-ui/outbox/B-BUTTONS/plate-ball-hud.provenance.json
+for n in combat_button schematics_button skills_button spells_button; do python3 -B tools/steamwoven_ui/fit.py fit plate.$n --masters local/steamwoven-ui/work/B-BUTTONS/fitted --source local/steamwoven-ui/outbox/B-BUTTONS/plate-round-hud.png --provenance local/steamwoven-ui/outbox/B-BUTTONS/plate-round-hud.provenance.json; done
+python3 -B tools/steamwoven_ui/fit.py fit plate.lilgrnbut --masters local/steamwoven-ui/work/B-BUTTONS/fitted --source local/steamwoven-ui/outbox/B-BUTTONS/plate-ball-hud.png --provenance local/steamwoven-ui/outbox/B-BUTTONS/plate-ball-hud.provenance.json
+python3 -B tools/steamwoven_ui/round_kit.py gloss [--dry-run]                                        # the original's gloss arc over the five fitted plates -> masters/, noted in each fit record
 python3 -B tools/steamwoven_ui/round_kit.py build [--dry-run] [--only combat_button,...,lilgrnbut]   # glyphs, overlays, the empty ball glyphs -> masters/ and provenance/rule/
 python3 -B tools/steamwoven_ui/round_kit.py sheet --out FILE [--zoom N] [--plate-dir DIR]          # the before / after composite (English labels)
 ```
 
 The fit tool's halo gate ([#3073](https://github.com/Simarglok/arcanum-steamwoven/issues/3073), open) fails the plates' real rim shading, so the fit above is run through a wrapper that relaxes the limits (the repository's constants stay); the safety net leaves p95 under 3.
-The plate template of a glyph is the flat dome colour inside radius 16 cells and the voted ring outside it; a pressed overlay is a soft black shade layer (alpha = the brightness the original loses outside the symbol's footprint) plus the lit symbol, clipped to the plate's alpha; art 137 has no symbol, so `glyph.fate_but` and `glyph.sleep_but` are empty layers.
+The glyph's outline is the pilot's glyph mask of the lit frames; the gloss arc of the dome is read from the template as a smooth curve of the original's shape and peak brightness. The plate template of a glyph is the flat dome colour inside radius 16 cells and the voted ring outside it; a pressed overlay is a soft black shade layer (alpha = the brightness the original loses outside the symbol's footprint) plus the lit symbol, clipped to the plate's alpha; art 137 has no symbol, so `glyph.fate_but` and `glyph.sleep_but` are empty layers.
 Tests: `python3 -B -m unittest tools.steamwoven_ui.test_round_kit` (about 7 s, in the batched `tools/local_dev/run_tests.py`).
 
 ## Controller test evidence summariser (ARC-GPAD-1376)

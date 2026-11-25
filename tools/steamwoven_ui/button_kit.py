@@ -264,6 +264,7 @@ def outside_cells(core: list[bool], units: int = UNITS) -> list[bool]:
     return out
 
 
+SPECK_DL = 2.0              # `silhouette_mask`: a cell outside the mask is kept only when it is not this much darker (CIE L) than its base
 SHADE_MIN_LOSS = 0.03         # `shade`: a cell that keeps at least this much less than the base's colour is a darkened one
 
 
@@ -276,7 +277,7 @@ def shade_share(pressed: tuple[int, int, int], base: tuple[int, int, int]) -> fl
     return None if share > 1.0 - SHADE_MIN_LOSS else max(0.0, share)
 
 
-def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixels: int = MASTER, halo: bool = False, owned_cell=None, shade: Image | bool = False, clip: Image | None = None, solid_cell=None) -> Image:
+def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixels: int = MASTER, halo: bool = False, owned_cell=None, shade: Image | bool = False, clip: Image | None = None, solid_cell=None, silhouette_mask: list[bool] | None = None) -> Image:
     """The pilot's symbol rule (#3058, v4, `glyph_cells.py`) for a layer of `frame` over `base`: the SYMBOL is the cells that differ from the base by `SOLID_DE` or more. Their colours stay the original's flat
     cells (so every inner line, dot, fold and continent of the original survives as it is drawn); the OUTLINE is a smooth sharp curve: a small Gaussian of the symbol's mask and a one-pixel soft threshold
     (no stair of original pixels, no blur; a hole or a dot of one original pixel survives: a 1-cell hole blurs to 0.38 < 0.5). With `glow` the cells that differ a little (the glow of a lit symbol, the darkening of
@@ -287,7 +288,7 @@ def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixel
     Round frames (ARC-UI-3202): the frame may be of any square size (`units` is its width); `owned_cell(x, y)` says which cells the layer may take (default: all but the outermost `RIM` rows and columns, unless
     `rim`); with `shade` the cells that are the base DARKENED (`shade_share`) and lie outside the footprint of the symbol (the cells where the frame `shade` differs from the base, e.g. the hover frame; with `shade=True` there is
     none) are not symbol: they are a soft black layer under the symbol, alpha = the share lost (a pressed ring darkens the plate, it does not repaint it in the original's flat colours); `solid_cell(x, y)` narrows the cells
-    that may be SYMBOL (default: the owned ones: a ring that brightens stays a soft layer, never flat stair cells); `clip` (a picture of the output's size) multiplies the layer's alpha by its own, so a soft layer never leaves the plate's silhouette."""
+    that may be SYMBOL (default: the owned ones: a ring that brightens stays a soft layer, never flat stair cells); `silhouette_mask` (ARC-UI-3202) is a per-cell mask of the symbol's SHAPE (read from the lit frames, where the checker is strong): a dull idle symbol whose edge cells fall under `SOLID_DE` takes its outline from it, in its own idle colours, and a dark speck outside it is dropped; `clip` (a picture of the output's size) multiplies the layer's alpha by its own, so a soft layer never leaves the plate's silhouette."""
     units = frame.w
     n = units * units
     p_cells, b_cells = cells_of(frame), cells_of(base)
@@ -308,7 +309,7 @@ def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixel
     if halo:
         core_de = max(SOLID_DE, min(CORE_DE, CORE_SHARE * contrast))
         core = [(d >= core_de or (d >= SOLID_DE and lab(*p_cells[i])[0] < lab(*b_cells[i])[0] - DARK_DL)) and owned[i] for i, d in enumerate(dist)]
-        outside = outside_cells(core)
+        outside = outside_cells(core, units)
         solid = [core[i] or (not outside[i] and dist[i] >= SOLID_DE and owned[i]) for i in range(n)]
         for i in range(n):
             if solid[i] or not outside[i] or dist[i] <= DEAD_DE or not owned[i]:
@@ -318,6 +319,8 @@ def render_crisp(frame: Image, base: Image, glow: bool, rim: bool = False, pixel
                 halo_cells.add(i)
     else:
         solid = [d >= SOLID_DE and may_be_symbol[i] and shares[i] is None for i, d in enumerate(dist)]
+        if silhouette_mask is not None:  # the outline comes from the mask: its cells are symbol (in the frame's own colours, dull or not); a cell the mask leaves out stays symbol only when it is not darker than the base (a relief band), a dark speck outside is dropped
+            solid = [(silhouette_mask[i] and may_be_symbol[i] and shares[i] is None) or (solid[i] and lab(*p_cells[i])[0] >= lab(*b_cells[i])[0] - SPECK_DL) for i in range(n)]
     # the colour of a cell: its own when solid; a cell the smooth outline grows into takes the mean of the solid cells around it (within two cells)
     cell_colour: list[tuple[float, float, float] | None] = [None] * n
     for i in range(n):

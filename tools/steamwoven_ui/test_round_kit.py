@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -225,6 +226,98 @@ class PartTests(unittest.TestCase):
         self.assertEqual(rk.source_folders("plate.skills_button_pressed"), (["472-Skills_Button"], 3))
         with self.assertRaises(rk.RoundError):
             rk.source_folders("glyph.key")
+
+
+class GlossTests(unittest.TestCase):
+    """The gloss arc of the dome (ARC-UI-3202, owner request 2026-11-25) and the mask-given silhouette."""
+
+    def arc_frame(self):
+        """A round frame whose upper-left bevel carries a light staircase line (radius about 17.5 cells) and whose lower-right bevel carries a light cell that is NOT gloss."""
+        frame = disc()
+        cells = []
+        for deg in range(185, 265, 3):
+            a = math.radians(deg)
+            cells.append((int(19.5 + 17.5 * math.cos(a)), int(19.5 + 17.5 * math.sin(a))))
+        out = paint(frame, cells, (230, 229, 190))
+        return paint(out, [(35, 30)], (230, 229, 190))  # lower right
+
+    def test_the_arc_is_a_smooth_curve_as_bright_as_the_original_and_only_on_the_upper_left(self):
+        layer = rk.gloss_layer(self.arc_frame(), DOME, M)
+        peak = max(range(0, len(layer.data), 4), key=lambda i: layer.data[i + 3])
+        self.assertGreaterEqual(layer.data[peak + 3], 250)
+        self.assertGreater(layer.data[peak], 215)  # the original's pale colour, not a dimmed mean
+        px, py = (peak // 4) % M, (peak // 4) // M
+        self.assertLess(px + py, M)  # on the upper-left side
+        self.assertEqual(layer.pixel(int(35.5 * M / N), int(30.5 * M / N))[3], 0)  # the lower-right light cell is no gloss
+        self.assertEqual(layer.pixel(M // 2, M // 2)[3], 0)  # nothing in the dome
+        radii = {round(math.hypot(i // 4 % M + 0.5 - M / 2, i // 4 // M + 0.5 - M / 2) * N / M) for i in range(0, len(layer.data), 4) if layer.data[i + 3] > 128}
+        self.assertTrue(radii <= {17, 18, 19}, radii)  # a thin line along the rim
+
+    def test_a_frame_without_a_lighter_arc_gives_a_clear_layer(self):
+        flat = disc()
+        for i in range(0, len(flat.data), 4):
+            if flat.data[i + 3]:
+                flat.data[i:i + 3] = bytes(DOME)
+        self.assertEqual(set(rk.gloss_layer(flat, DOME, M).data[3::4]), {0})
+
+    def test_the_gloss_command_lays_the_arc_over_the_fitted_plates_and_records_the_step(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp)
+            write_frames(local / "census" / "frames")
+            fitted = local / "work" / "B-BUTTONS" / "fitted"
+            fitted.mkdir(parents=True)
+            records = local / "provenance" / "fit"
+            records.mkdir(parents=True)
+            for b in rk.ROUND_BUTTONS:
+                pngio.write(fitted / f"plate.{b.name}.png", rk.upscaled(disc(), M))
+                (records / f"plate.{b.name}.json").write_text(json.dumps({"record": f"fit:plate.{b.name}", "master": {"sha256": "old"}, "limits": {"halo_mean_de": 15.0}}))
+            pngio.write(fitted / "plate.lilgrnbut.png", rk.upscaled(disc(rk.BALL_UNITS), rk.BALL_MASTER))
+            (records / "plate.lilgrnbut.json").write_text(json.dumps({"record": "fit:plate.lilgrnbut", "master": {"sha256": "old"}, "limits": {"halo_mean_de": 20.0}}))
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(rk.main(["gloss", "--local-root", str(local), "--dry-run"]), 0)
+                self.assertFalse((local / "masters").exists())
+                self.assertEqual(rk.main(["gloss", "--local-root", str(local)]), 0)
+            self.assertTrue((local / "masters" / "plate.combat_button.png").is_file())
+            record = json.loads((records / "plate.combat_button.json").read_text())
+            self.assertEqual(record["fit_master"], {"sha256": "old"})
+            self.assertEqual(record["master"]["size"], [M, M])
+            self.assertEqual(record["gloss"]["fitted_master_sha256"], bk.sha256_file(fitted / "plate.combat_button.png"))
+            self.assertTrue(record["halo_gate"]["relaxed"])
+            self.assertEqual(record["halo_gate"]["limits"], {"halo_mean_de": 15.0})
+            with redirect_stdout(io.StringIO()):
+                (fitted / "plate.skills_button.png").unlink()
+                self.assertEqual(rk.main(["gloss", "--local-root", str(local)]), 2)  # a missing fitted master is refused
+
+    def test_a_silhouette_mask_takes_the_outline_from_the_mask_and_drops_a_dark_speck_outside_it(self):
+        base = disc()
+        symbol_cells = [(x, y) for x in range(14, 22) for y in range(14, 24)]
+        dull = [(13, 18), (13, 19)]  # dull edge cells the frame does not show strongly: under SOLID_DE from the base
+        frame = paint(paint(paint(base, symbol_cells, ORANGE), dull, (46, 44, 15)), [(10, 18)], (5, 5, 2))  # and a dark speck outside the symbol
+        mask = [False] * (N * N)
+        for x, y in symbol_cells + dull:
+            mask[y * N + x] = True
+        plain = bk.render_crisp(frame, base, False, pixels=M, owned_cell=rk.own_cells(base, False))
+        shaped = bk.render_crisp(frame, base, False, pixels=M, owned_cell=rk.own_cells(base, False), silhouette_mask=mask)
+        at = lambda img, ux, uy: img.pixel(int((ux + 0.5) * M / N), int((uy + 0.5) * M / N))
+        self.assertLess(at(plain, 13, 18)[3], 200)  # without the mask the dull edge cell is no symbol
+        self.assertEqual(at(shaped, 13, 18)[3], 255)  # with it, it is, in its own colour
+        self.assertEqual(at(shaped, 13, 18)[:3], (46, 44, 15))
+        self.assertGreater(at(plain, 10, 18)[3], 128)  # the dark speck is a symbol cell by the plain rule
+        self.assertEqual(at(shaped, 10, 18)[3], 0)  # and dropped by the mask rule
+
+    def test_the_symbol_mask_reads_the_lit_frames(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            frames = Path(tmp)
+            write_frames(frames)
+            hover = rk.read_frame(frames, rk.ROUND_BUTTONS[0].folder, 2, N)
+            pressed = rk.read_frame(frames, rk.ROUND_BUTTONS[0].folder, 1, N)
+            for x, y in symbol(0):  # the synthetic symbols are flat; a checker is what the pilot's mask reads
+                if (x + y) % 2:
+                    for frame in (hover, pressed):
+                        frame.data[(y * N + x) * 4:(y * N + x) * 4 + 3] = bytes((200, 20, 20))
+            mask = rk.symbol_mask(hover, pressed)
+        self.assertEqual(len(mask), N * N)
+        self.assertTrue(mask[18 * N + 17])
 
 
 class ShadeTests(unittest.TestCase):

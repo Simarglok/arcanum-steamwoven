@@ -3,6 +3,7 @@
 (art 137, 23 x 23 units, two frames: idle 0, pressed 1) as kit parts: a generated plate per family, and the glyph, the state overlays BY RULE from the original's own frames (rule E of slice 1, `button_kit.py`).
 
     python3 -B tools/steamwoven_ui/round_kit.py refs   [--frames DIR] [--local-root DIR]
+    python3 -B tools/steamwoven_ui/round_kit.py gloss  [--fitted-dir DIR] [--out DIR] [--dry-run] [--frames DIR] [--local-root DIR]
     python3 -B tools/steamwoven_ui/round_kit.py build  [--out DIR] [--only NAME,...] [--dry-run] [--frames DIR] [--local-root DIR] [--plate-dir DIR]
     python3 -B tools/steamwoven_ui/round_kit.py sheet  --out FILE [--zoom N] [--plate-dir DIR] ...   (before / after composite with English labels, needs ImageMagick)
     python3 -B tools/steamwoven_ui/round_kit.py self-test
@@ -40,10 +41,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 try:
-    from . import button_kit, pngio, prompt_library
+    from . import button_kit, glyph_cells, pngio, prompt_library
 except ImportError:  # run as a script
     sys.path.insert(0, str(HERE))
     import button_kit  # type: ignore
+    import glyph_cells  # type: ignore
     import pngio  # type: ignore
     import prompt_library  # type: ignore
 
@@ -184,6 +186,14 @@ def read_plate(plate_dir: Path | None, name: str, pixels: int) -> Image | None:
     return master
 
 
+def symbol_mask(hover: Image, pressed: Image) -> list[bool]:
+    """The symbol's SHAPE as the pilot's glyph mask reads it (`glyph_cells.glyph_mask`: the checker of the lit frames, closed by one cell, specks dropped, the key's eye kept), the union of the hover frame (out to the dome)
+    and the pressed frame (out to the rim): the idle frame's checker is too weak at the edge (a key head with a corner)."""
+    mask, _ = glyph_cells.glyph_mask(glyph_cells.lab_grid(hover), glyph_cells.DOME_RADIUS)
+    other, _ = glyph_cells.glyph_mask(glyph_cells.lab_grid(pressed), glyph_cells.PRESSED_RADIUS)
+    return [a or b for a, b in zip(mask, other)]
+
+
 def round_parts(frames: Path, plate_dir: Path | None, only: set[str] | None = None) -> dict[str, Image]:
     """The glyphs and the overlays of the four round buttons by part id."""
     n, m = ROUND_UNITS, ROUND_MASTER
@@ -194,7 +204,7 @@ def round_parts(frames: Path, plate_dir: Path | None, only: set[str] | None = No
             continue
         idle, pressed, hover = (read_frame(frames, b.folder, k, n) for k in (0, 1, 2))
         clip = clip_of(idle, m, read_plate(plate_dir, b.name, m))
-        parts[f"glyph.{b.name}"] = button_kit.render_crisp(idle, template, False, pixels=m, owned_cell=own_cells(idle, False))
+        parts[f"glyph.{b.name}"] = button_kit.render_crisp(idle, template, False, pixels=m, owned_cell=own_cells(idle, False), silhouette_mask=symbol_mask(hover, pressed))
         parts[f"plate.{b.name}_hover"] = button_kit.render_crisp(hover, idle, True, pixels=m, owned_cell=own_cells(idle, False), clip=clip)
         parts[f"plate.{b.name}_pressed"] = button_kit.render_crisp(pressed, idle, True, pixels=m, owned_cell=own_cells(idle, True), shade=hover, clip=clip, solid_cell=own_cells(idle, False))
     return parts
@@ -215,6 +225,107 @@ def build_parts(frames: Path, plate_dir: Path | None, only: set[str] | None = No
     if not only or BALL.name in only:
         parts.update(ball_parts(frames, plate_dir))
     return parts
+
+
+GLOSS_MIN_LIGHTER = 8.0  # CIE L above the dome: a template cell this much lighter, on the upper-left side, belongs to the gloss arc
+GLOSS_BIN = 6.0          # degrees: the arc is read along the circle in bins of this width
+GLOSS_SIGMA = (0.40, 0.62)  # cells: the radial Gaussian width of the arc is read from the cells, within these limits (the 1-cell staircase of the original is wider than the line it stands for)
+
+
+def gloss_layer(frame: Image, dome: tuple[int, int, int], pixels: int, reach_right: int | None = None) -> Image:
+    """The gloss of the original's dome (the dome is glossy: a bright light arc along the upper-left edge, one or two cells wide) as a layer over the plate, in its SHAPE and BRIGHTNESS: the original draws it as a one-cell
+    staircase, which is how a diagonal line looks on a 39 x 39 grid, so the arc is read as a curve. The cells of `frame` (the plate template, or the ball's idle frame) that are LIGHTER than the dome by `GLOSS_MIN_LIGHTER` on the upper-left side
+    (`reach_right`: not further right than that many cells from the middle: the ball's brass crescent is no gloss) give, per bin of angle, the radius of the line, its width, the colour of its bright cells and the lightness of
+    its brightest cell; the layer is that line drawn at the master size: alpha = how much of the colour the original's peak needs over the dome, falling off as a Gaussian of the distance from the line (no stair, no plateau, no rim)."""
+    units = frame.w
+    centre = units / 2.0
+    dome_l = button_kit.lab(*dome)[0]
+    bins = int(360 / GLOSS_BIN)
+    cells: list[list[tuple[float, float, float, tuple[int, int, int]]]] = [[] for _ in range(bins)]  # per bin: (weight, radius, lightness, colour)
+    for y in range(units):
+        for x in range(units):
+            o = (y * units + x) * 4
+            if not frame.data[o + 3] or (x - (units - 1) // 2) + (y - (units - 1) // 2) > 0:
+                continue
+            if reach_right is not None and x - (units - 1) // 2 > reach_right:
+                continue
+            colour = tuple(frame.data[o:o + 3])
+            light = button_kit.lab(*colour)[0]
+            if light < dome_l + GLOSS_MIN_LIGHTER:
+                continue
+            dx, dy = x + 0.5 - centre, y + 0.5 - centre
+            angle = math.degrees(math.atan2(dy, dx)) % 360.0
+            cells[int(angle / GLOSS_BIN) % bins].append((light - dome_l, math.hypot(dx, dy), light, colour))
+    profile: list[tuple[float, float, float, tuple[float, float, float]] | None] = []  # per bin: radius, sigma, peak lightness, colour
+    radius_all = [(w, r) for b in cells for w, r, _, _ in b]
+    for b in cells:
+        if not b:
+            profile.append(None)
+            continue
+        total = sum(w for w, _, _, _ in b)
+        r0 = sum(w * r for w, r, _, _ in b) / total
+        sigma = max(GLOSS_SIGMA[0], min(GLOSS_SIGMA[1], math.sqrt(sum(w * (r - r0) ** 2 for w, r, _, _ in b) / total + 1.0 / 12.0)))
+        peak = max(light for _, _, light, _ in b)
+        bright = [(w * w, c) for w, _, light, c in b if light >= dome_l + 0.8 * (peak - dome_l)]
+        weight = sum(w for w, _ in bright)
+        profile.append((r0, sigma, peak, tuple(sum(w * c[k] for w, c in bright) / weight for k in range(3))))
+    if not radius_all:
+        return Image(pixels, pixels, bytearray(pixels * pixels * 4))
+    smooth: list[tuple[float, float, float, tuple[float, float, float]] | None] = []  # the radius and width [1 2 1] along the angle; the brightness is the UPPER ENVELOPE of the bin and its two neighbours (a diagonal line on a grid is bright in one cell of a step and dull in the next: the line itself is as bright as its brightest cells)
+    for k, here in enumerate(profile):
+        if here is None:
+            smooth.append(None)
+            continue
+        group = [(2.0, here)] + [(1.0, profile[(k + d) % bins]) for d in (-1, 1) if profile[(k + d) % bins] is not None]
+        total = sum(w for w, _ in group)
+        r0 = sum(w * g[0] for w, g in group) / total
+        sigma = sum(w * g[1] for w, g in group) / total
+        best = max((g for _, g in group), key=lambda g: g[2])
+        smooth.append((r0, sigma, best[2], best[3]))
+    out = Image(pixels, pixels, bytearray(pixels * pixels * 4))
+    scale = units / pixels
+    for py in range(pixels):
+        for px in range(pixels):
+            dx, dy = (px + 0.5) * scale - centre, (py + 0.5) * scale - centre
+            r = math.hypot(dx, dy)
+            position = (math.degrees(math.atan2(dy, dx)) % 360.0) / GLOSS_BIN - 0.5  # bin centres at whole numbers
+            k0 = int(math.floor(position))
+            t = position - k0
+            a, b = smooth[k0 % bins], smooth[(k0 + 1) % bins]
+            if a is None and b is None:
+                continue
+            if a is None or b is None:  # the end of the arc: half a bin of the one bin it has, fading out
+                here, weight = (a, 1.0 - t) if a is not None else (b, t)
+                weight = max(0.0, 2.0 * weight - 1.0) if weight < 1.0 else 1.0
+                r0, sigma, peak, colour = here
+            else:
+                weight = 1.0
+                r0, sigma, peak, colour = (a[n] * (1 - t) + b[n] * t for n in range(3)) if False else (a[0] * (1 - t) + b[0] * t, a[1] * (1 - t) + b[1] * t, a[2] * (1 - t) + b[2] * t,
+                                                                                                    tuple(a[3][c] * (1 - t) + b[3][c] * t for c in range(3)))
+            light_colour = button_kit.lab(*(int(round(v)) for v in colour))[0]
+            need = max(0.0, min(1.0, (peak - dome_l) / max(1.0, light_colour - dome_l)))
+            alpha = need * weight * math.exp(-0.5 * ((r - r0) / sigma) ** 2)
+            if alpha <= 0.004:
+                continue
+            o = (py * pixels + px) * 4
+            out.data[o:o + 4] = bytes((*(max(0, min(255, int(round(v)))) for v in colour), int(round(min(1.0, alpha) * 255))))
+    return out
+
+
+def dome_colour(frame: Image, reach: float) -> tuple[int, int, int]:
+    """The flat dome colour of a frame: the mean of the opaque cells within `reach` of its middle that are no lighter than the median lightness (the dome, not a symbol's cells)."""
+    units = frame.w
+    cells = [tuple(frame.data[(y * units + x) * 4:(y * units + x) * 4 + 3]) for y in range(units) for x in range(units) if frame.data[(y * units + x) * 4 + 3] and radius(x, y, units) < reach]
+    cells.sort(key=lambda c: button_kit.lab(*c)[0])
+    cells = cells[:max(1, len(cells) // 2)]
+    return tuple(int(round(sum(c[k] for c in cells) / len(cells))) for k in range(3))
+
+
+def gloss_layers(frames: Path) -> dict[str, Image]:
+    """The gloss layer of the round plate (from the voted template) and of the ball, by plate family."""
+    template = round_template([read_frame(frames, b.folder, 0, ROUND_UNITS) for b in ROUND_BUTTONS])
+    ball = read_frame(frames, BALL.folder, 0, BALL_UNITS)
+    return {"round": gloss_layer(template, dome_colour(template, DOME_RADIUS - 2), ROUND_MASTER), "ball": gloss_layer(ball, dome_colour(ball, 6.0), BALL_MASTER, reach_right=1)}
 
 
 def button_names() -> list[str]:
@@ -279,6 +390,42 @@ def cmd_refs(args: argparse.Namespace) -> int:
     for path in sorted(list(refs.glob(f"{ROUND_PROMPT}-*.png")) + list(refs.glob(f"{BALL_PROMPT}-*.png"))):
         print(f"{path.name}  {prompt_library.png_size(path)}  {button_kit.sha256_file(path)[:12]}")
     print("ROUND KIT refs PASS: build the inbox with prompt_library.py inbox B-BUTTONS")
+    return 0
+
+
+def cmd_gloss(args: argparse.Namespace) -> int:
+    """The five plates, fitted from the generator's output, get the original's gloss arc laid over them: reads the fitted masters (`fit.py ... --masters DIR`, default `work/B-BUTTONS/fitted`), writes the final plate masters
+    and records the step in each plate's fit record (`gloss`, the fitted master's hash, the halo gate's relaxed limits)."""
+    local = args.local_root
+    frames = args.frames or local / "census" / "frames"
+    fitted = args.fitted_dir or local / "work" / "B-BUTTONS" / "fitted"
+    out = args.out or local / "masters"
+    layers = gloss_layers(frames)
+    for name, family, pixels in [(b.name, "round", ROUND_MASTER) for b in ROUND_BUTTONS] + [(BALL.name, "ball", BALL_MASTER)]:
+        source = fitted / f"plate.{name}.png"
+        if not source.is_file():
+            raise RoundError(f"no fitted master {source} (run fit.py fit plate.{name} --masters {fitted} first)")
+        plate = pngio.read(source)
+        if (plate.w, plate.h) != (pixels, pixels):
+            raise RoundError(f"{source}: {plate.w} x {plate.h}, the plate master is {pixels} x {pixels}")
+        final = button_kit.composite(plate, layers[family])
+        covered = sum(1 for i in range(3, len(layers[family].data), 4) if layers[family].data[i] > 0) / (pixels * pixels)
+        print(f"plate.{name:20s} gloss covers {covered * 100:4.1f} % of the canvas")
+        if args.dry_run:
+            continue
+        out.mkdir(parents=True, exist_ok=True)
+        target = out / f"plate.{name}.png"
+        pngio.write(target, final)
+        record_path = local / "provenance" / "fit" / f"plate.{name}.json"
+        if args.out is None and record_path.is_file():  # an alternative output leaves the kit's records alone
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record.setdefault("fit_master", record.get("master"))
+            record["master"] = {"file": str(target), "size": [pixels, pixels], "sha256": button_kit.sha256_file(target)}
+            record["gloss"] = {"rule": "round_kit gloss", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "fitted_master_sha256": button_kit.sha256_file(source),
+                               "min_lighter_de": GLOSS_MIN_LIGHTER, "bin_degrees": GLOSS_BIN, "sigma_cells": list(GLOSS_SIGMA), "sources": [f"{b.folder}/f0" for b in ROUND_BUTTONS] if family == "round" else [f"{BALL.folder}/f0"]}
+            record["halo_gate"] = {"relaxed": True, "issue": "#3073", "limits": record.get("limits"), "note": "the gate fails the plate's real rim shading by design; fitted through a wrapper, the repository's limits are unchanged"}
+            record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    print("ROUND KIT gloss " + ("DRY-RUN " if args.dry_run else "") + "PASS")
     return 0
 
 
@@ -391,12 +538,16 @@ def self_test() -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("refs", "build", "sheet"):
+    for name in ("refs", "gloss", "build", "sheet"):
         s = sub.add_parser(name)
         s.add_argument("--frames", type=Path)
         s.add_argument("--local-root", type=Path, default=None)
-        if name != "refs":
+        if name not in ("refs", "gloss"):
             s.add_argument("--plate-dir", type=Path)
+        if name == "gloss":
+            s.add_argument("--fitted-dir", type=Path)
+            s.add_argument("--out", type=Path)
+            s.add_argument("--dry-run", action="store_true")
         if name == "build":
             s.add_argument("--out", type=Path)
             s.add_argument("--only")
@@ -410,7 +561,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "self-test":
             return self_test()
         args.local_root = args.local_root or prompt_library.default_local_root()
-        return {"refs": cmd_refs, "build": cmd_build, "sheet": cmd_sheet}[args.command](args)
+        return {"refs": cmd_refs, "gloss": cmd_gloss, "build": cmd_build, "sheet": cmd_sheet}[args.command](args)
     except (RoundError, button_kit.ButtonError, pngio.PngError, OSError, subprocess.CalledProcessError) as error:
         print(f"ROUND KIT FAIL: {error}")
         return 2
