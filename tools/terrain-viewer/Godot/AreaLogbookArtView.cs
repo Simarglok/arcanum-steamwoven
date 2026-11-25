@@ -229,7 +229,7 @@ public partial class AreaLogbookArtView : Control
             if (Texture(art, TabFrame(i)) is { } texture) DrawTextureRect(texture, new Rect2(x, y, texture.GetWidth(), texture.GetHeight()), false);
         }
         // ARC-UI-098: the lens's art over the copy of the game view (0x51DA80 after the mode's copy, LB23), drawn when it reads.
-        if (Texture(AreaLogbookArtLayout.LensArt) is { } lens)
+        if (!AreaLensPlace.SurfaceRing && Texture(AreaLogbookArtLayout.LensArt) is { } lens) // ARC-UI-3101: the kit surface carries the ring
             DrawTextureRect(lens, new Rect2(AreaLogbookArtLayout.Lens.X, AreaLogbookArtLayout.Lens.Y, lens.GetWidth(), lens.GetHeight()), false);
         if (HasPrevious && Texture(AreaLogbookArtLayout.PreviousArt, PageFrame(-1, AreaLogbookArtLayout.PreviousArt)) is { } previous)
             DrawTextureRect(previous, new Rect2(AreaLogbookArtLayout.PreviousCorner.X, AreaLogbookArtLayout.PreviousCorner.Y, previous.GetWidth(), previous.GetHeight()), false);

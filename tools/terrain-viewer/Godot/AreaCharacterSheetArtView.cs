@@ -28,7 +28,7 @@ public partial class AreaCharacterSheetArtView : Control
     private readonly record struct Hit(Kind Kind, int Index);
 
     /// <summary>The close rectangle in the modes 1 and 2 (struct 0x5C8930: art 198 PCWinCvr; a mouse-up inside it closes the sheet).</summary>
-    public static (int X, int Y, int Width, int Height) CloseRectangle => (AreaLensPlace.Corner((12, 10)).X, AreaLensPlace.Corner((12, 10)).Y, 89, 89); // ARC-UI-2714: the common place with the generated interface
+    public static (int X, int Y, int Width, int Height) CloseRectangle => (AreaLensPlace.Corner((12, 10)).X, AreaLensPlace.Corner((12, 10)).Y, AreaLensPlace.Side, AreaLensPlace.Side); // ARC-UI-2714: the common place with the generated interface
 
     private static readonly Hit[] Hits =
     [
@@ -319,7 +319,7 @@ public partial class AreaCharacterSheetArtView : Control
         }
         KitLabelsDrawnForSelfTest = kitLabels;
         // ARC-UI-2694: the lens's cover art over the round view (0x51DA80 after the mode's copy, as in the logbook), when it reads.
-        if (!MenuScreen && Art(AreaCharacterSheetArtLayout.LensArt) is { } lens)
+        if (!MenuScreen && !AreaLensPlace.SurfaceRing && Art(AreaCharacterSheetArtLayout.LensArt) is { } lens) // ARC-UI-3101: the kit surface carries the ring
             DrawTextureRect(lens, new Rect2(AreaCharacterSheetArtLayout.Lens.X, AreaCharacterSheetArtLayout.Lens.Y, lens.GetWidth(), lens.GetHeight()), false);
         // The portrait in its slot (141, 21), at its own size (0x4CE470).
         if (_portrait is not null) DrawTextureRect(_portrait, new Rect2(141, 21, _portrait.GetWidth(), _portrait.GetHeight()), false);

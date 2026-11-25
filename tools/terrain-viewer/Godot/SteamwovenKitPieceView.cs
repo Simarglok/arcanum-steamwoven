@@ -4,20 +4,26 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>
 /// ARC-UI-2461, ARC-UI-3143: one baked piece of an open window's kit background (SWI-BDR-3): the texture over its exact device rectangle, drawn 1:1 (Nearest when the baked pixels are the device pixels, else Linear).
-/// A background leaves the squares of the round views (up to two) out, so the lens shows the game view under it. ARC-UI-3143: this is what remains of the board view of the retired generated chrome.
+/// A background leaves the circles inscribed in the squares of the round views (up to two) out, so the lens shows the game view under it (ARC-UI-3101: circles, not squares). ARC-UI-3143: this is what remains of the board view of the retired generated chrome.
 /// </summary>
 internal sealed partial class SteamwovenKitPieceView : TextureRect
 {
-    // ARC-UI-2576: the squares of the round views (up to two) are left out, so the lens shows the game view under the piece.
+    // ARC-UI-2576, ARC-UI-3101: the circles inscribed in the squares of the round views (up to two) are left out, so the lens shows the game view under the piece.
     private const string HoleShader = """
         shader_type canvas_item;
         uniform vec2 view_size = vec2(1.0);
         uniform vec4 hole_a = vec4(0.0);
         uniform vec4 hole_b = vec4(0.0);
-        bool inside(vec4 h, vec2 p) { return h.z > 0.0 && p.x >= h.x && p.x < h.x + h.z && p.y >= h.y && p.y < h.y + h.w; }
+        // ARC-UI-3101 (#3276): the hole is the circle inscribed in the lens's square (the ring's inner circle), not the square: the square's corners are the background's own wood.
+        // The edge is one device pixel wide and smooth (the copy of the game view lies a little under it, so no pixel of the old surface shows in a gap).
+        float edge(vec4 h, vec2 p) {
+            if (h.z <= 0.0) return 1.0;
+            float d = distance(p, h.xy + h.zw * 0.5) - min(h.z, h.w) * 0.5;
+            return clamp(d / max(fwidth(d), 1e-4) + 0.5, 0.0, 1.0);
+        }
         void fragment() {
             vec2 p = UV * view_size;
-            if (inside(hole_a, p) || inside(hole_b, p)) discard;
+            COLOR.a *= min(edge(hole_a, p), edge(hole_b, p));
         }
         """;
     private ShaderMaterial? _holes;
