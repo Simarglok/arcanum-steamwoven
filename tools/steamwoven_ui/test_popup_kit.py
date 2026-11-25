@@ -29,7 +29,7 @@ def synthetic(w: int = 40, h: int = 24) -> pngio.Image:
 class PopupKitTests(unittest.TestCase):
     def test_every_spec_has_a_manifest_row_of_a_grid_size(self):
         rows = {r["id"]: r for r in json.loads(popup_kit.MANIFEST.read_text(encoding="utf-8"))["parts"]}
-        self.assertEqual(len(popup_kit.SPECS), 17)
+        self.assertEqual(len(popup_kit.SPECS), 16)         # 128 is unused: no part (#3307)
         for spec in popup_kit.SPECS:
             row = rows[spec.ident]
             self.assertEqual(row["source_arts"], [spec.art])
@@ -39,12 +39,14 @@ class PopupKitTests(unittest.TestCase):
 
     def test_pack_first_where_a_frame_exists(self):
         by = popup_kit.BY_ID
-        self.assertEqual(sorted(s.art for s in popup_kit.SPECS if not s.pack), ["128", "291", "354", "642", "826"])
+        self.assertEqual(sorted(s.art for s in popup_kit.SPECS if not s.pack), ["291", "354", "642", "826"])
+        self.assertTrue(all(s.compose for s in popup_kit.SPECS if not s.pack), "an art without a frame of its own is composed from pack frames")
         self.assertEqual(popup_kit.provenance_of("hardware.mess_rot"), "pack:popup_kit:hardware.mess_rot")
-        self.assertEqual(popup_kit.provenance_of("hardware.skill_ro"), "rule:popup_kit:hardware.skill_ro")
+        self.assertEqual(popup_kit.provenance_of("hardware.broadcast_rot"), "pack:popup_kit:hardware.broadcast_rot")
         self.assertIn("pack-first", popup_kit.note_of("hardware.trap_rot"))
-        self.assertIn("sample icon", popup_kit.note_of("hardware.magickweapon_rot"))
-        self.assertEqual(len(by["hardware.magickweapon_rot"].pack_clear), 1)
+        self.assertIn("composed", popup_kit.note_of("hardware.dialoguewindow"))
+        self.assertNotIn("hardware.skill_ro", by)
+        self.assertTrue(by["hardware.skill_rot"].stone_wells and by["hardware.magickweapon_rot"].stone_wells)
 
     def test_pack_master_takes_the_frame_and_the_originals_alpha(self):
         original = synthetic()
@@ -90,13 +92,6 @@ class PopupKitTests(unittest.TestCase):
                 p = image.pixel(x, y)
                 self.assertFalse(p[3] == 255 and sum(p[:3]) < 30, (x, y, p))
 
-    def test_the_stand_in_probe_must_be_dark_window_fill(self):
-        original = pngio.Image.blank(40, 24, (60, 60, 60, 255))
-        frame = pngio.Image.blank(160, 96, (200, 200, 200, 255))        # light above the box: not a window
-        spec = popup_kit.Spec("hardware.test", "0", "test", "rot", pack="x/test", pack_clear=((5, 15, 15, 22),))
-        with self.assertRaises(popup_kit.KitError):
-            popup_kit.pack_master(spec, frame, original, (144, 84))
-
     def test_build_dry_run_writes_nothing_and_a_missing_pack_frame_is_an_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             local = Path(tmp)
@@ -114,19 +109,83 @@ class PopupKitTests(unittest.TestCase):
                 popup_kit.cmd_build(same)
             self.assertFalse((local / "masters").exists())
 
-    def test_pack_master_paints_out_a_stand_in(self):
-        original = pngio.Image.blank(40, 24, (60, 60, 60, 255))
-        frame = pngio.Image.blank(160, 96, (4, 4, 6, 255))
-        for y in range(60, 90):
-            for x in range(20, 60):
-                frame.data[(y * 160 + x) * 4:(y * 160 + x) * 4 + 4] = bytes((20, 20, 220, 255))      # a blue sample icon
-        spec = popup_kit.Spec("hardware.test", "0", "test", "rot", pack="x/test", pack_clear=((5, 15, 15, 22),))
-        image, _ = popup_kit.pack_master(spec, frame, original, (144, 84))
-        self.assertLess(image.pixel(30, 60)[2], 20, "the stand-in is gone")
+    def test_pack_master_gives_the_originals_tone_and_stone_back(self):
+        original = synthetic()
+        for y in range(10, 14):                                  # the original's slot: dark stone, not black
+            for x in range(10, 14):
+                original.data[(y * 40 + x) * 4:(y * 40 + x) * 4 + 4] = bytes((44, 40, 48, 255))
+        frame = pngio.Image.blank(160, 96, (70, 60, 50, 255))
+        for y in range(4 * 4, 20 * 4):
+            for x in range(4 * 4, 36 * 4):
+                frame.data[(y * 160 + x) * 4:(y * 160 + x) * 4 + 4] = bytes((180, 140, 50, 255))
+        for y in range(8 * 4, 16 * 4):                           # the pack paints the window and the slot black
+            for x in range(8 * 4, 32 * 4):
+                frame.data[(y * 160 + x) * 4:(y * 160 + x) * 4 + 4] = bytes((0, 0, 0, 255))
+        spec = popup_kit.Spec("hardware.test", "0", "test", "rot", pack="x/test", wells=((10, 10, 14, 14),), stone_wells=True, fills=((9, 9, 12, 10, (30, 30, 32)),))
+        image, extra = popup_kit.pack_master(spec, frame, original, (144, 84))
+        self.assertEqual(image.pixel(72, 42)[:3], (0, 0, 6), "the window takes the original's own tone (0, 0, 6) back from the pack's black")
+        r, g, b, a = image.pixel(43, 43)
+        self.assertTrue(40 <= r <= 48 and a == 255, f"the slot has the original's stone: {(r, g, b)}")
+        self.assertEqual(image.pixel(36, 33)[:3], (30, 30, 32), "a fill box takes its flat colour")
+        self.assertIn("window_tone", extra)
 
-    def test_the_seventeen_arts_of_the_issue(self):
+    def test_sample_and_compose_a_frame_from_pieces(self):
+        img = pngio.Image.blank(8, 8, (0, 0, 0, 255))
+        for y in range(8):
+            for x in range(8):
+                img.data[(y * 8 + x) * 4:(y * 8 + x) * 4 + 3] = bytes((x * 30, y * 30, 7))
+        r, g, b = popup_kit.sample_rgb(img, 4.0, 4.0)             # the corner shared by four pixels
+        self.assertAlmostEqual(r, 105.0)
+        self.assertAlmostEqual(g, 105.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "interface" / "a").mkdir(parents=True)
+            big = pngio.Image.blank(160, 96, (0, 0, 0, 255))
+            for y in range(96):
+                for x in range(160):
+                    big.data[(y * 160 + x) * 4:(y * 160 + x) * 4 + 3] = bytes((min(255, x), min(255, y * 2), 9))
+            pngio.write(root / "interface" / "a" / "p-f000.png", big)
+            original = pngio.Image.blank(40, 24, (60, 60, 60, 255))
+            piece = popup_kit.Piece("a/p", (0, 0, 20, 24), (0, 0, 20, 24))
+            flipped = popup_kit.Piece("a/p", (0, 0, 20, 24), (20, 0, 40, 24), flip_x=True)
+            turned = popup_kit.Piece("a/p", (0, 0, 24, 20), (0, 0, 20, 24), transpose=True)
+            spec = popup_kit.Spec("hardware.test", "0", "test", "rot", compose=(piece, flipped))
+            frame = popup_kit.compose_frame(spec, root, original)
+            self.assertEqual((frame.w, frame.h), (160, 96))
+            self.assertEqual(frame.pixel(10, 10)[:3], big.pixel(10, 10)[:3], "a plain piece is the pack frame itself")
+            self.assertEqual(frame.pixel(159, 10)[:3], big.pixel(0, 10)[:3], "a flipped piece is mirrored")
+            turned_frame = popup_kit.compose_frame(popup_kit.Spec("hardware.test", "0", "test", "rot", compose=(turned,)), root, original)
+            r, g, _ = turned_frame.pixel(5, 90)[:3]                   # a turned piece: the target's y runs along the source's x, the target's x along the source's y
+            self.assertAlmostEqual(r, 90, delta=2)
+            self.assertAlmostEqual(g, 10, delta=3)
+            with self.assertRaises(popup_kit.KitError):
+                popup_kit.compose_frame(popup_kit.Spec("hardware.test", "0", "test", "rot", compose=(popup_kit.Piece("a/none", (0, 0, 1, 1), (0, 0, 1, 1)),)), root, original)
+            with self.assertRaises(popup_kit.KitError):
+                popup_kit.compose_frame(popup_kit.Spec("hardware.test", "0", "test", "rot", compose=(popup_kit.Piece("a/p", (0, 0, 0, 5), (0, 0, 5, 5)),)), root, original)
+
+    def test_the_brass_is_lifted_only_when_it_is_duller_than_the_approved_tone(self):
+        approved = [145.0, 113.0, 65.0]
+        dull = pngio.Image.blank(60, 60, (128, 90, 46, 255))
+        gain = popup_kit.lift_brass(dull, approved)
+        self.assertTrue(all(1.0 < g <= 1.3 for g in gain), gain)
+        self.assertGreater(dull.pixel(5, 5)[0], 128)
+        fine = pngio.Image.blank(60, 60, (146, 112, 64, 255))
+        self.assertEqual(popup_kit.lift_brass(fine, approved), [1.0, 1.0, 1.0])
+        self.assertEqual(fine.pixel(5, 5)[:3], (146, 112, 64))
+        iron = pngio.Image.blank(60, 60, (60, 60, 62, 255))
+        self.assertEqual(popup_kit.lift_brass(iron, approved), [1.0, 1.0, 1.0], "no brass: nothing to lift")
+
+    def test_dark_pixels_take_the_tone_inside_the_mask_only(self):
+        img = pngio.Image.blank(4, 1, (0, 0, 0, 255))
+        img.data[12:15] = bytes((200, 180, 90))                  # a brass pixel
+        popup_kit.tone_of_dark(img, [1.0, 0.0, 1.0, 1.0], (30, 30, 32))
+        self.assertEqual(img.pixel(0, 0)[:3], (30, 30, 32))
+        self.assertEqual(img.pixel(1, 0)[:3], (0, 0, 0), "outside the mask")
+        self.assertEqual(img.pixel(3, 0)[:3], (200, 180, 90), "a bright pixel stays")
+
+    def test_the_arts_of_the_issue_less_the_unused_128(self):
         self.assertEqual(sorted(int(s.art) for s in popup_kit.SPECS),
-                         sorted([7, 128, 200, 274, 288, 290, 291, 354, 564, 642, 842, 822, 298, 826, 292, 565, 328]))
+                         sorted([7, 200, 274, 288, 290, 291, 354, 564, 642, 842, 822, 298, 826, 292, 565, 328]))
 
     def test_classes(self):
         c = popup_kit.classify
