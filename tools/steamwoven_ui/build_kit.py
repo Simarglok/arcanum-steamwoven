@@ -230,22 +230,22 @@ def dome_hud_parts(plates: dict[str, dict]) -> list[dict]:
 
 
 def small_parts(plates: dict[str, dict]) -> list[dict]:
-    """ARC-UI-3206, slice 6 of B-BUTTONS: the glyph and the hover and pressed overlay of every small stone and dark button (the round skill and slider buttons, the spell and technology
-    Add / Remove, the olive plus and minus, the scroll arrows, the follower strips), BY RULE from the original's frames (`small_kit.py`, rule F: no Codex)."""
+    """ARC-UI-3206, slice 6 of B-BUTTONS: the glyph and the hover and pressed plate of every small stone and dark button (the round skill and slider buttons, the spell and technology Add / Remove, the olive
+    plus and minus, the scroll arrows, the follower strips), BY THE PACK-FIRST RULE (`small_kit.py`): the old HD pack's frame of each state, no Codex. The glyph is an empty layer (the symbol is in the frames)."""
     parts = []
     for b in small_kit.SMALL:
         plate = plates.get(f"plate.{b.name}")
         if plate is None:  # a census without the button (a test's synthetic one)
             continue
         canvas = f"a {b.master[0]} x {b.master[1]} canvas"
-        states = [("glyph", "", "glyph", ["idle"], f"the symbol of art {b.art}: smooth, solid, in the original's colour, with an engraving (rule F)")]
-        for state in small_kit.STATES:
-            if b.frames.get(state) is not None:
-                states.append(("plate", f"_{state}", "plate", [state], f"overlay of art {b.art}'s {state} frame over its idle frame (the symbol lights up, the glow and the darkening of the original)"))
-        for prefix, suffix, kind, st, what in states:
+        rows = [("glyph", "", "glyph", ["idle"], f"EMPTY: the symbol of art {b.art} is in the pack's frames")]
+        for state in ("hover", "pressed"):
+            if state in b.frames:
+                rows.append(("plate", f"_{state}", "plate", [state], f"the pack's {state} frame of art {b.art}, a full frame laid over the idle plate"))
+        for prefix, suffix, kind, st, what in rows:
             ident = f"{prefix}.{b.name}{suffix}"
             parts.append(new_part(ident, kind, plate["anchor"], list(plate["used_by"]), None, "B-BUTTONS",
-                                  f"{what}; small_kit.py draws it from the original frames (no Codex), {canvas}, so the size is open", states=st, master=True, provenance=f"rule:small_kit:{ident}"))
+                                  f"{what}; small_kit.py, pack-first, {canvas}, so the size is open", states=st, master=True, provenance=f"rule:small_kit:{ident}"))
     return parts
 
 
@@ -309,17 +309,8 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["note"] = (f"the dark dome with its brass crescent: the dome is one Codex item ({DISC_PLATES[ident][0].prompt}), fitted to this part; the crescent, the gloss arc, the symbol and the states are made by rule (disc_kit.py, ARC-UI-3203)"
                             + (f"; art {DISC_PLATES[ident][1].twin.split('-')[0]} is the same picture" if DISC_PLATES[ident][1].twin else ""))
         if ident in SMALL_PLATES:
-            b = SMALL_PLATES[ident]
-            if b.plate == "dome":
-                how = "the strip's olive dome (plate-round-hud) with the hardware rings' brass ring at the original's width, by rule (small_kit.py plates)"
-            elif b.plate == "rule":
-                how = "an exact triangle, dark outline, brass band in the hardware rings' brass, by rule (small_kit.py plates)"
-            elif b.plate == "derived":
-                how = f"the plate of {b.base} darkened by rule where the original's OFF frame is darker (small_kit.py plates)"
-            else:
-                how = f"the empty plate: one Codex item ({next(i.prompt for i in small_kit.ITEMS if b.name in i.parts)}), fitted to this part"
-            part["status"], part["provenance"] = "master", (f"rule:small_kit:{ident}" if b.plate != "codex" else f"fit:{ident}")
-            part["note"] = f"{how}; the symbol and its states are made by rule (small_kit.py, ARC-UI-3206)"
+            part["status"], part["provenance"] = "master", f"rule:small_kit:{ident}"
+            part["note"] = "the old HD pack's idle frame at the master size, with the analytic ellipse alpha on a round button (pack-first rule, small_kit.py, ARC-UI-3206); the symbol is in the frame"
         if ident in SQUARE_HUD_STATES:
             part["status"], part["provenance"] = "master", f"rule:button_kit:{ident}"
             part["note"] = f"the lit face of art {part['source_arts'][-1]}: the plate again; its symbol is glyph.{SQUARE_HUD_STATES[ident].name}_lit (button_kit.py, ARC-UI-2482)"

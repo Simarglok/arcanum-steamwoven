@@ -1401,21 +1401,16 @@ it gives the original's frame back (the symbol's cells exactly; the tests check 
 
 ## Steamwoven small stone and dark buttons, batch B-BUTTONS slice 6 (ARC-UI-3206)
 
-The kit parts of the small stone and dark buttons (the round skill and slider buttons, the spell and technology Add / Remove, the olive plus and minus, the scroll arrows, the follower strips; 18 arts), same rules as [slice 1](#steamwoven-square-hud-buttons-batch-b-buttons-slice-1-arc-ui-2482) except the glyph rule: rule F (smooth solid symbol with an engraving, owner 2026-11-25; [TRD](../ui/steamwoven-interface-trd.md#asset-kit)). Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick, no Godot and no `dotnet`, so no launch queue:
+The kit parts of the small stone and dark buttons (the round skill and slider buttons, the spell and technology Add / Remove, the olive plus and minus, the scroll arrows, the follower strips; 16 arts, 54 parts), made by the PACK-FIRST rule P ([TRD](../ui/steamwoven-interface-trd.md#asset-kit)): each part is the old HD pack's frame of that state with an analytic alpha, no Codex. Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for the sheet, no Godot and no `dotnet`, so no launch queue:
 
 ```sh
-python3 -B tools/steamwoven_ui/small_kit.py plan                           # the 18 buttons, how each plate is made, and the manifest size check
-python3 -B tools/steamwoven_ui/small_kit.py refs                           # the five references: the idle frame without its symbol, stretched (a magenta ground round a cut-out)
-python3 -B tools/steamwoven_ui/prompt_library.py inbox B-BUTTONS-SMALL     # the inbox (five items)
-python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS-SMALL --crop-band   # the owner's Codex subscription (gpt-6.1-sol); the 5 : 1 strip needs the band crop
-python3 -B tools/steamwoven_ui/small_kit.py cut [--only PROMPT,...] [--dry-run]   # results -> keyed, cut, fitted plate masters (fit.py; the halo gate's recorded overrides as in the gauge batch)
-python3 -B tools/steamwoven_ui/small_kit.py plates                          # the plates by rule: the four round ones (the strip's dome + the brass ring), the two scroll triangles, the two OFF strips (darkened)
-python3 -B tools/steamwoven_ui/small_kit.py build [--shape mask|pack] [--only NAME,...] [--dry-run]   # glyphs and overlays -> masters/ and provenance/rule/
-python3 -B tools/steamwoven_ui/small_kit.py sheet --out FILE [--zoom N] [--only NAME,...]          # the before / after composite (English labels)
-python3 -B tools/steamwoven_ui/small_kit.py variants --out FILE [--zoom N]                          # original | the HD pack's frames as they are (analytic round alpha) | the rule-F parts, for the owner's pick
+python3 -B tools/steamwoven_ui/small_kit.py plan                           # the 16 pack-first buttons and the 2 generated ones: the pack frames found per state, the manifest size check
+python3 -B tools/steamwoven_ui/small_kit.py build [--only NAME,...] [--dry-run] [--pack DIR]   # plate / _hover / _pressed / empty glyph -> masters/ and provenance/rule/ (pack file and hash in each record)
+python3 -B tools/steamwoven_ui/small_kit.py sheet --out FILE [--zoom N] [--only NAME,...]      # the composite original | idle | hover | pressed (English labels)
+python3 -B tools/steamwoven_ui/small_kit.py self-test
 ```
 
-A symbol's shape is read from the original's mask by default (`--shape pack` reads the installed HD pack's old generative frame instead, the owner's first source for a symbol shape; for these plain plus, minus and arrow symbols the pack frames have blunt tips and bumps). Rule F constants (`SYMBOL_SIGMA`, `SYMBOL_LEVEL`, `ENGRAVE_*`, `GLOW_*`, `DARK_*`) and the ring (`RING_UNITS`, `RING_SOURCE`) are at the top of `small_kit.py`. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_small_kit` (about 1 s; also in `tools/local_dev/run_tests.py`).
+The pack is `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x` (`--pack` names another); it is read, never written, and `build` fails with the list of missing states when the pack lacks a frame the table expects. A round button's alpha is the ellipse inscribed in the opaque box of its idle frame, applied to every state so all states share one edge; its old transparent pixels are first bled four pixels outward so no dark fringe shows. The two skill-point Plus / Minus buttons (257, 258) have no pack frame (`GENERATED` in the table): they wait for their own Codex step. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_small_kit` (about 1 s; also in `tools/local_dev/run_tests.py`).
 
 ## Steamwoven gauges and readouts, batch B-GAUGES (ARC-UI-2483)
 

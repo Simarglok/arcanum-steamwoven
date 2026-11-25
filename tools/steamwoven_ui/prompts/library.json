@@ -90,16 +90,6 @@
         "hardware-menu-bottom"
       ],
       "after": null
-    },
-    "B-BUTTONS-SMALL": {
-      "prompts": [
-        "plate-stone-square-hud",
-        "plate-olive-pill-hud",
-        "plate-olive-pill-small-hud",
-        "plate-stone-strip-hud",
-        "plate-stone-strip-short-hud"
-      ],
-      "after": null
     }
   },
   "prompts": [
@@ -910,91 +900,6 @@
       "screen": null,
       "batch": "B-HARDWARE-MENU",
       "notes": "slice 2 of #2481 (ARC-UI-3260): one Codex item, two details cut from the original on a transparent ground; hardware_build.py refs / cut"
-    },
-    {
-      "id": "plate-stone-square-hud",
-      "group": "part",
-      "kind": "plate",
-      "title": "Stone square button plate, empty (arts 647, 648)",
-      "file": "plate-stone-square-hud.txt",
-      "size": [
-        1020,
-        1020
-      ],
-      "references": [
-        "original"
-      ],
-      "screen": null,
-      "batch": "B-BUTTONS-SMALL",
-      "notes": "slice B-BUTTONS-6 (ARC-UI-3206): one Codex item for the Add and Remove buttons of the spell and technology lists (32 x 32 units, master 114 x 114); fitted to plate.spelltech_add and plate.spelltech_minus; symbol and states by rule (small_kit.py)"
-    },
-    {
-      "id": "plate-olive-pill-hud",
-      "group": "part",
-      "kind": "plate",
-      "title": "Olive Plus / Minus button plate, empty (arts 257, 258)",
-      "file": "plate-olive-pill-hud.txt",
-      "size": [
-        1014,
-        600
-      ],
-      "references": [
-        "original"
-      ],
-      "screen": null,
-      "batch": "B-BUTTONS-SMALL",
-      "notes": "slice B-BUTTONS-6 (ARC-UI-3206): one Codex item on a magenta ground (22 x 13 units, master 78 x 48), cut by small_kit.py cut and fitted to plate.sp_minus and plate.sp_plus"
-    },
-    {
-      "id": "plate-olive-pill-small-hud",
-      "group": "part",
-      "kind": "plate",
-      "title": "Olive Plus / Minus button plate of the old character editor, empty (arts 804, 805)",
-      "file": "plate-olive-pill-small-hud.txt",
-      "size": [
-        1014,
-        780
-      ],
-      "references": [
-        "original"
-      ],
-      "screen": null,
-      "batch": "B-BUTTONS-SMALL",
-      "notes": "slice B-BUTTONS-6 (ARC-UI-3206): one Codex item on a magenta ground (13 x 10 units, master 48 x 36), cut by small_kit.py cut and fitted to plate.oldchar_minus and plate.oldchar_plus"
-    },
-    {
-      "id": "plate-stone-strip-hud",
-      "group": "part",
-      "kind": "plate",
-      "title": "Follower arrow strip plate with two studs, empty (arts 501, 502)",
-      "file": "plate-stone-strip-hud.txt",
-      "size": [
-        2880,
-        558
-      ],
-      "references": [
-        "original"
-      ],
-      "screen": null,
-      "batch": "B-BUTTONS-SMALL",
-      "notes": "slice B-BUTTONS-6 (ARC-UI-3206): one Codex item at the generator's size, band crop (codex_batch.py run --crop-band; 67 x 13 units, master 240 x 48); fitted to plate.followerarrow_dwn and plate.followerarrow_up"
-    },
-    {
-      "id": "plate-stone-strip-short-hud",
-      "group": "part",
-      "kind": "plate",
-      "title": "Follower scroll button plate (short stone strip), empty (arts 506 to 509)",
-      "file": "plate-stone-strip-short-hud.txt",
-      "size": [
-        1260,
-        504
-      ],
-      "references": [
-        "original"
-      ],
-      "screen": null,
-      "batch": "B-BUTTONS-SMALL",
-      "notes": "slice B-BUTTONS-6 (ARC-UI-3206): one Codex item (33 x 13 and 34 x 13 units, master 120 x 48); fitted to plate.follow_scroll_up and plate.follow_scroll_dwn; the two OFF plates are that plate darkened by rule (small_kit.py plates)"
     }
   ]
 }

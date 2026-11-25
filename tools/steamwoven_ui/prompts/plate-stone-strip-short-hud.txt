@@ -1,4 +1,0 @@
-KIND: PLATE (button body), variant: short stone strip button, idle look, no symbol
-Part: {part_id} - {part_note}. Size: {width} x {height} px. References: ORIGINAL (the original follower scroll button, its green triangle removed, one frame enlarged about 38 times: the layout truth and the image to edit).
-
-Draw one empty short horizontal strip button, about 2.5 to 1, as in the ORIGINAL: a slab of mottled cool grey stone with a faint violet cast and darker speckles, a thin light line along its upper edge and left end, a thin black line along its lower edge and right end. The middle is plain empty stone: no triangle, no arrow, no symbol, no engraving, no glow, no light spot, no studs. The strip fills the picture edge to edge: nothing around it, no background, no margin, no shadow outside it. Keep every proportion of the ORIGINAL (the width of the edge lines) and its muted, dusty palette; add no ornament, no rivets, no screws, no stains, no new shine. One strip only.
