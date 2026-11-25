@@ -320,7 +320,7 @@ public partial class TerrainViewerApp
             var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
             Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
             Color AtUnit(double x, double y) { var (dx, dy) = plan.ToDevice(x, y); return Pixel((int)Math.Round(dx), (int)Math.Round(dy)); }
-            var (top, bottom) = (AtUnit(400, 20), AtUnit(400, 500));
+            var (top, bottom) = (AtUnit(400, 20), AtUnit(400, 465));
             require(Near(top, KitSaveTop), $"[{tag}] the top strip row is the kit's top strip (got {top})");
             require(Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
             var colours = art.BodyColors();

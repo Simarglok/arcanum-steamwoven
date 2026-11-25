@@ -587,7 +587,7 @@ def cmd_cut(args) -> int:
 
 # Leftovers of the original's metal that no part stands for. Bottom: the lone square before the rail's first unit. Top: two scraps (1900, 0 and 2026, 96) found in the strip preview after the first erase.
 ERASE_BOXES = {"board.intbotom": [(752, 146, 778, 178)], "board.inttop": [(1900, 0, 1944, 26), (2026, 96, 2048, 150)],
-               "board.charcreatetopbar": [(1900, 0, 1944, 26), (2026, 96, 2048, 150)]}   # ARC-UI-3260: the menu top strip has the HUD one's end sections, so the same scraps   # leftovers of the original's metal that no part stands for: the lone square before the rail's first unit
+               "board.charcreatetopbar": [(1900, 0, 1944, 26), (2026, 96, 2048, 150)]}   # ARC-UI-3260: the menu top strip has the HUD one's end sections, so the same scraps
 ERASE_GROW = 8            # px: the original's metal is erased this far beyond a part's alpha (its fringe of old shadow and wood), the wood beside it fills the gap
 
 
@@ -667,6 +667,9 @@ def cmd_strips(args) -> int:
             raise HardwareError(f"no {base} (run board_build.py strips first)")
         here = {part: {**info, "layers": [layer for layer in info["layers"] if layer[0] == strip]} for part, info in placements.items()}
         here = {part: info for part, info in here.items() if info["layers"]}
+        absent = [part for part in layers_of(strip) if part not in here]
+        if absent:   # a part standing on a second strip is placed by the cut of ITS sheet (the rivet: hud-top-parts): cut that sheet again
+            raise HardwareError(f"{strip}: no places for {', '.join(absent)} in placements.json (cut the sheets of these parts, or all of them with `cut`)")
         if not here:
             continue
         erase = out_dir / f"{pid(strip)}-erase.png"

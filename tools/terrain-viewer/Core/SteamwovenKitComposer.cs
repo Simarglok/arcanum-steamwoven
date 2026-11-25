@@ -450,12 +450,12 @@ public static class SteamwovenKitComposer
         void Lay(IReadOnlyList<SteamwovenKitLayer>? layers, SteamwovenKitPart?[] parts, SteamwovenKitPart strip, PixelRect rect)
         {
             // The strip is drawn stretched to its rectangle, so its hardware is: a layer's master position and size scale by the strip's own ratio on each axis, the edges rounded one by one (halves up).
-            double sx = (double)rect.Width / SteamwovenKitTable.CompositionMasterWidth, sy = (double)rect.Height / Master(set, strip.Height);
+            long masterWidth = SteamwovenKitTable.CompositionMasterWidth, masterHeight = Master(set, strip.Height);
             for (var i = 0; i < (layers?.Count ?? 0); i++)
             {
                 var (layer, part) = (layers![i], parts[i]!.Value);
-                int X(int master) => rect.X + (int)Math.Round(master * sx, MidpointRounding.AwayFromZero);
-                int Y(int master) => rect.Y + (int)Math.Round(master * sy, MidpointRounding.AwayFromZero);
+                int X(int master) => rect.X + (int)((2 * master * rect.Width + masterWidth) / (2 * masterWidth));   // exact integer arithmetic, halves up
+                int Y(int master) => rect.Y + (int)((2 * master * rect.Height + masterHeight) / (2 * masterHeight));
                 var edges = PixelRect.FromEdges(X(layer.MasterX), Y(layer.MasterY), X(layer.MasterX + Master(set, part.Width)), Y(layer.MasterY + Master(set, part.Height)));
                 layerDraws.Add(Draw(part, edges, rect));
             }

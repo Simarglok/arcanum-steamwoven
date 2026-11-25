@@ -875,7 +875,7 @@ public sealed class SteamwovenKitTests
             var (draw, laid, strip, masterHeight) = (composed.Layers[i], onTop ? spec.TopLayers[i] : spec.BottomLayers[i - spec.TopLayers.Count], onTop ? composed.Top : composed.Bottom, onTop ? 150 : 570);
             var (sx, sy) = ((double)strip.Rect.Width / SteamwovenKitTable.CompositionMasterWidth, (double)strip.Rect.Height / masterHeight);
             Assert.IsTrue(draw.Clip.Width > 0 && draw.Clip.Height > 0, draw.PartId + " shows");
-            Assert.IsTrue(draw.Clip.X >= strip.Rect.X && draw.Clip.Right <= strip.Rect.Right && draw.Clip.Y >= strip.Rect.Y && draw.Clip.Bottom <= strip.Rect.Bottom, draw.PartId + " stays in its strip");
+            Assert.IsTrue(draw.Rect.X >= strip.Rect.X && draw.Rect.Right <= strip.Rect.Right && draw.Rect.Y >= strip.Rect.Y && draw.Rect.Bottom <= strip.Rect.Bottom, draw.PartId + " lies inside its strip");
             // The strip is stretched to its rectangle, so its hardware is: the position scales by the strip's ratio on each axis.
             Assert.IsTrue(Math.Abs(draw.Rect.X - (strip.Rect.X + laid.MasterX * sx)) <= 1 && Math.Abs(draw.Rect.Y - (strip.Rect.Y + laid.MasterY * sy)) <= 1, $"{draw.PartId} at ({laid.MasterX}, {laid.MasterY}) is at {draw.Rect}");
         }
