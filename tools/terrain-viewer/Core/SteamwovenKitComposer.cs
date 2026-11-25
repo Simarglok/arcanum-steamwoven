@@ -7,7 +7,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// are the device pixels: sampled nearest, SWI-LAY-5) or scaled (sampled linear).</summary>
 public readonly record struct SteamwovenKitDraw(string PartId, PixelRect Rect, PixelRect Clip, bool Exact);
 
-/// <summary>What a composer returns: the plan, or null with the ids of the parts that were missing or the wrong size, so the caller falls back to the generated chrome (SWI-RUN-3).</summary>
+/// <summary>What a composer returns: the plan, or null with the ids of the parts that were missing or the wrong size, so the caller falls back to the HD pack's frame (the Legacy art where the pack lacks it, SWI-RUN-3).</summary>
 public sealed record SteamwovenKitResult<T>(T? Value, IReadOnlyList<string> Missing) where T : class
 {
     public bool Complete => Value is not null;
@@ -28,7 +28,7 @@ public sealed record SteamwovenKitCover(string Part, int MasterWidth, int Master
 /// <summary>A document the kit lays over a window's background in place of an original panel art: its part and master size (the zone's master pixels, 3.6 per original unit).</summary>
 public sealed record SteamwovenKitSheetSpec(string Part, int MasterWidth, int MasterHeight);
 
-/// <summary>The windows whose kit background the viewer composes (ARC-UI-2461). Every other window keeps its generated backdrop until its own integration issue lands (AC4).</summary>
+/// <summary>The windows whose kit background the viewer composes (ARC-UI-2461). Every other window keeps the HD pack's frame (the Legacy art where the pack lacks it) until its own integration issue lands (AC4).</summary>
 public enum SteamwovenKitWindow
 {
     Inventory,
@@ -290,7 +290,7 @@ public static class SteamwovenKitTable
 /// <summary>
 /// ARC-UI-2461 (SWI-RUN-2, SWI-RUN-3): the Godot-free composer of the kit. From the layout plan and a baked set it says which parts are drawn where, in device pixels, with their edges rounded one by one from the master
 /// position (SWI-LAY-7), and for each draw whether it is exact. A composition that needs a part the set lacks (or holds at a size the table does not allow) returns no plan and names the part, so the viewer draws the
-/// generated chrome for it instead; one missing part never leaves a half-drawn strip or window.
+/// HD pack's frame (the Legacy art where the pack lacks it) for it instead; one missing part never leaves a half-drawn strip or window.
 /// </summary>
 public static class SteamwovenKitComposer
 {
@@ -469,11 +469,11 @@ public static class SteamwovenKitComposer
     /// the buttons, stays as before).</summary>
     public static IReadOnlyList<int> OwnBackdropArts(SteamwovenKitScreen screen, bool kitScreen) => kitScreen ? [] : SteamwovenKitTable.Screens[screen].OwnArts;
 
-    /// <summary>The window of an interface mode stack (bottom first) that has a kit background: the mode nearest the top that is one of the covered windows; a dialog or sleep view on top, or another window (the loot window) on top, has none (the generated backdrop stays until its integration issue; the barter window has its own, ARC-UI-3033).</summary>
+    /// <summary>The window of an interface mode stack (bottom first) that has a kit background: the mode nearest the top that is one of the covered windows; a dialog or sleep view on top, or another window (the loot window) on top, has none (the pack's frame stays until its integration issue; the barter window has its own, ARC-UI-3033).</summary>
     public static SteamwovenKitWindow? WindowOf(IReadOnlyList<InterfaceMode> stack) => WindowOf(stack, null);
 
     /// <summary>ARC-UI-3033: as <see cref="WindowOf(IReadOnlyList{InterfaceMode})"/>, told how the barter window stands: the merchant's background art (825 picks the follower's variant) and whether its frame lies in the window zone (the frame
-    /// docked in the opening shop's screen, or the diagnostic look, is not in it, so it keeps its generated look and has no kit background). Without <paramref name="barter"/> the barter window is the plain one.</summary>
+    /// docked in the opening shop's screen, or the diagnostic look, is not in it, so it keeps the pack's look (the Legacy art where the pack lacks it) and has no kit background). Without <paramref name="barter"/> the barter window is the plain one.</summary>
     public static SteamwovenKitWindow? WindowOf(IReadOnlyList<InterfaceMode> stack, SteamwovenKitBarterState? barter)
     {
         for (var i = stack.Count - 1; i >= 0; i--)
@@ -545,7 +545,7 @@ public static class SteamwovenKitComposer
     /// <summary>
     /// The layers of a bar button the bar shows with <paramref name="art"/>, bottom first: its face (the plate, or the lit face of a light button), its glyph (the symbol on a transparent background at the face's size, ARC-UI-3096)
     /// and, over them, the overlay of the look when the set has one (<c>&lt;face&gt;_hover</c> for a hovered button, <c>&lt;face&gt;_pressed</c> for a pressed one; the original has no disabled frame, SWI-KIT-5). All or nothing: empty
-    /// when the set has no face, or no glyph at the face's size, because a plate alone is a button without its symbol; the button then keeps its generated or legacy art. The ring round a button is the strip's hardware layer
+    /// when the set has no face, or no glyph at the face's size, because a plate alone is a button without its symbol; the button then keeps the pack's or the Legacy art. The ring round a button is the strip's hardware layer
     /// (SWI-LAY-12), not a layer of the button. The glyph and overlay names are the convention of this runtime until the buttons' batch ([#2482](https://github.com/Simarglok/arcanum-steamwoven/issues/2482)) fixes the sheets.
     /// <paramref name="button"/> tells the two buttons that share art 137 apart.
     /// </summary>

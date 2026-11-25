@@ -100,7 +100,7 @@ public partial class AreaSchematicWindowView : Control
         _art = art ?? throw new ArgumentNullException(nameof(art));
         _fonts = fonts ?? throw new ArgumentNullException(nameof(fonts));
         Unwatch();
-        // ARC-UI-1199: the generated interface paints the window's frames at this window's own device scale (the control's scale, the canvas transform's and the viewport's stretch),
+        // ARC-UI-1199: the pack's frames are area-resampled at this window's own device scale (InterfaceResample) (the control's scale, the canvas transform's and the viewport's stretch),
         // and the view redraws when a worker's finished frame replaces the one it drew (it draws the textures in its own _Draw).
         _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) QueueRedraw(); };
         foreach (var texture in art.Values.SelectMany(frames => frames))
@@ -116,7 +116,7 @@ public partial class AreaSchematicWindowView : Control
     private Action? _onTextureChanged;
     private float _drawnScale;
 
-    /// <summary>ARC-UI-1199: device pixels per Legacy pixel of this window (what the generated frames are painted at).</summary>
+    /// <summary>ARC-UI-1199: device pixels per Legacy pixel of this window (what the pack's frames are resampled at).</summary>
     internal float DeviceScale() =>
         GodotObject.IsInstanceValid(this) && IsInsideTree() ? GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : Scale.X;
 

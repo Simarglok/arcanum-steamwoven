@@ -83,7 +83,7 @@ public partial class AreaLogbookArtView : Control
         _art = art ?? throw new ArgumentNullException(nameof(art));
         _fonts = fonts ?? throw new ArgumentNullException(nameof(fonts));
         Unwatch();
-        // ARC-UI-1196: the generated interface paints the window's frames at this window's own device scale (the control's scale, the canvas transform's and the viewport's
+        // ARC-UI-1196: the pack's frames are area-resampled at this window's own device scale (InterfaceResample) (the control's scale, the canvas transform's and the viewport's
         // stretch: the bars' whole factor times the stretch), and the view redraws when a worker's finished frame replaces the one it drew (it draws the textures in its own _Draw).
         _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) QueueRedraw(); };
         foreach (var texture in art.Values.SelectMany(frames => frames))
@@ -98,7 +98,7 @@ public partial class AreaLogbookArtView : Control
     private readonly HashSet<HdInterfaceTexture> _watched = [];
     private Action? _onTextureChanged;
 
-    /// <summary>ARC-UI-1196: device pixels per Legacy pixel of this window (what the generated frames are painted at).</summary>
+    /// <summary>ARC-UI-1196: device pixels per Legacy pixel of this window (what the pack's frames are resampled at).</summary>
     internal float DeviceScale() =>
         GodotObject.IsInstanceValid(this) && IsInsideTree() ? GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : Scale.X;
 
@@ -187,7 +187,7 @@ public partial class AreaLogbookArtView : Control
         RedrawOnScaleChange();
     }
 
-    // The generated frames are painted at the window's device scale: a new scale draws them again.
+    // The pack's frames are area-resampled at the window's device scale: a new scale draws them again.
     private float _drawnScale;
 
     private void RedrawOnScaleChange()

@@ -95,7 +95,7 @@ public partial class TerrainViewerApp
                 using var quitShot = GetViewport().GetTexture().GetImage();
                 Require(quitShot.SavePng(quitCapture) == Error.Ok, "the quit box capture saved to " + quitCapture);
             }
-            // ARC-UI-1819: with ARC_AREA_WINDOW_ART the box's background and the frames of its two buttons are checked in the generated interface at the box's own device scale.
+            // ARC-UI-1819: with ARC_AREA_WINDOW_ART the box's background and the frames of its two buttons are checked in the window-art mode under test (the pack's frames or the Legacy art) at the box's own device scale.
             if (WindowArtSmokeRequested)
             {
                 var found = _mainMenuPanel!.DialogForSelfTest.TexturesForSelfTest();

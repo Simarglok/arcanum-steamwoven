@@ -17,7 +17,7 @@ public partial class AreaFateView : Control
     private AreaArtFontFace? _font;
     private AreaFateTexts _texts = AreaFateTexts.Project("not set");
     private readonly AreaFateButtons _buttons = new();
-    // ARC-UI-1200: the generated interface paints the window's frames and buttons at the window's own device scale (claimed at every draw).
+    // ARC-UI-1200: the pack's frames and buttons are area-resampled at the window's own device scale (claimed at every draw).
     private AreaDeviceScale? _claim;
     private AreaDeviceScale Claim => _claim ??= new(this);
 
@@ -41,7 +41,7 @@ public partial class AreaFateView : Control
     internal Rect2 WindowRectForSelfTest => new(GlobalPosition, Size * Scale);
     internal string LineForSelfTest(int kind) => _texts.Line(kind);
     internal int FrameForSelfTest(int kind) => AreaGameBarLayout.Frame(_buttons.Look(kind), ButtonFrames());
-    /// <summary>ARC-UI-1200: the window's device scale (what its generated frames are painted at) and its textures by art number, every frame (the native smoke).</summary>
+    /// <summary>ARC-UI-1200: the window's device scale (what its pack frames are resampled at) and its textures by art number, every frame (the native smoke).</summary>
     internal float DeviceScale() => Claim.Current();
     internal IReadOnlyList<(int Art, HdInterfaceTexture Texture)> TexturesForSelfTest(IEnumerable<int> arts) =>
         [.. arts.Where(_art.ContainsKey).SelectMany(number => _art[number].OfType<HdInterfaceTexture>().Select(texture => (number, texture)))];

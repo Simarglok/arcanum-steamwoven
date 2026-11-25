@@ -75,7 +75,7 @@ public partial class TerrainViewerApp
         await Click(px + 2, py + 2);
         Require(panel.View is { Page: 0 } && _schematicSounds.Count == soundsBefore, "a click on the hidden previous button does nothing");
         await Capture(verifyHd ? "-hd" : "-original");
-        // ARC-UI-1199: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the window's frames are checked in the generated interface (see SchematicWindowArtSmokeAsync).
+        // ARC-UI-1199: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the window's frames are checked in the window-art mode under test (the pack's frames or the Legacy art) (see SchematicWindowArtSmokeAsync).
         if (WindowArtSmokeRequested && !verifyHd) await SchematicWindowArtSmokeAsync(panel);
         // A discipline tab: Chemistry (1) then back to Herbology (0): the tab keeps the page 0 and the window follows.
         var (dx, dy) = AreaSchematicWindowLayout.DisciplineTab(1);
@@ -140,10 +140,9 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-142 native-smoke schematic-look PASS art={content!.Detail} pages={pages}");
     }
 
-    // ARC-UI-1199: the open schematic window's drawn frames in the generated interface (ARC_AREA_WINDOW_ART=legacy|hd, with ARC_HD_PACK for hd; the `generated` mode is retired, ARC-UI-3143): the base (365), the
+    // ARC-UI-1199: the open schematic window's drawn frames (ARC_AREA_WINDOW_ART=legacy|hd, with ARC_HD_PACK for hd; the `generated` mode is retired, ARC-UI-3143): the base (365), the
     // lens (231, drawn over the round view), the two list buttons (6), the assemble button (357, idle), the eight discipline tabs (the shown one's pressed frame, the others' idle one) and the page
-    // buttons that are shown (372, 373). In `generated` every one is generated chrome at round(size x paint scale) pixels of the window's own device scale, again after a bigger window (1600 × 1200); in `hd` and
-    // `legacy` none is. The assemble face (358 to 360), the found and missing tints (830, 831) and the record's art stay pictures. ARC_AREA_WINDOW_CAPTURE=PREFIX saves the viewport as PREFIX-schematics-MODE[-big|-back].png.
+    // buttons that are shown (372, 373). None is generated chrome (ARC-UI-3143): each is the pack's frame (`hd`) or the Legacy art (`legacy`), again after a bigger window (1600 × 1200). The assemble face (358 to 360), the found and missing tints (830, 831) and the record's art stay pictures. ARC_AREA_WINDOW_CAPTURE=PREFIX saves the viewport as PREFIX-schematics-MODE[-big|-back].png.
     private Task SchematicWindowArtSmokeAsync(AreaSchematicsPanel panel)
     {
         if (_schematicArtLook is not { } look) throw new InvalidOperationException("ARC-UI-1199 schematic window art smoke: the window's look is not built");

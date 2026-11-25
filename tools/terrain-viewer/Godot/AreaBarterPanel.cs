@@ -84,7 +84,7 @@ public partial class AreaBarterPanel : CanvasLayer
     internal string HeaderForSelfTest => _header.Text;
     internal AreaInventoryGridArea GridAreaForSelfTest => _area;
 
-    /// <summary>ARC-UI-3033: how the window stands for the kit: the merchant's background art, and whether the frame lies in the window zone (the original look undocked; the diagnostic look and the opening shop's docked frame keep their generated look).</summary>
+    /// <summary>ARC-UI-3033: how the window stands for the kit: the merchant's background art, and whether the frame lies in the window zone (the original look undocked; the diagnostic look and the opening shop's docked frame keep the pack's look (the Legacy art where the pack lacks it)).</summary>
     internal SteamwovenKitBarterState KitState => new(_art?.Frame.Background ?? AreaBarterArtLayout.BarterArt, IsOpen && ArtMode && !_docked);
 
     /// <summary>ARC-UI-3033: the kit background under the frame, or null (the frame draws its own art).</summary>

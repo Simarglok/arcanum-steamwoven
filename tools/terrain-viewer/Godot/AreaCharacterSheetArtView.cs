@@ -28,7 +28,7 @@ public partial class AreaCharacterSheetArtView : Control
     private readonly record struct Hit(Kind Kind, int Index);
 
     /// <summary>The close rectangle in the modes 1 and 2 (struct 0x5C8930: art 198 PCWinCvr; a mouse-up inside it closes the sheet).</summary>
-    public static (int X, int Y, int Width, int Height) CloseRectangle => (AreaLensPlace.Corner((12, 10)).X, AreaLensPlace.Corner((12, 10)).Y, 89, 89); // ARC-UI-2714: the common place with the generated interface
+    public static (int X, int Y, int Width, int Height) CloseRectangle => (AreaLensPlace.Corner((12, 10)).X, AreaLensPlace.Corner((12, 10)).Y, 89, 89); // ARC-UI-2714: the common place of the kit background
 
     private static readonly Hit[] Hits =
     [
@@ -235,7 +235,7 @@ public partial class AreaCharacterSheetArtView : Control
         return null;
     }
 
-    // ARC-UI-1195: the generated interface paints the sheet's frames at the window's own device scale (the frame scale times the canvas transform's and the viewport's
+    // ARC-UI-1195: the pack's frames of the sheet are area-resampled at the window's own device scale (InterfaceResample) (the frame scale times the canvas transform's and the viewport's
     // stretch, the bars' own rule). The sheet's textures are shared (the in-game sheet, the NPC sheet, the creation editor), so the view on screen claims them at its draw.
     // The pages (the children, ARC-UI-1784: the schemes page too) draw the same textures at the same scale; a texture swapped in by a worker redraws all of them, since each draws in its own _Draw.
     private readonly HashSet<HdInterfaceTexture> _watched = [];

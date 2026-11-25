@@ -41,7 +41,7 @@ public static class AreaCharacterSheetArtLayout
     public const int LensArt = 198;
 
     /// <summary>The lens's square: left, top and side in window units (the close rectangle).</summary>
-    public static (int X, int Y, int Side) Lens => (AreaLensPlace.Corner((12, 10)).X, AreaLensPlace.Corner((12, 10)).Y, 89); // ARC-UI-2714: the common place with the generated interface
+    public static (int X, int Y, int Side) Lens => (AreaLensPlace.Corner((12, 10)).X, AreaLensPlace.Corner((12, 10)).Y, 89); // ARC-UI-2714: the common place of the kit background
 
     /// <summary>The right-hand panel's place and size (the four panel windows at the screen's (503, 104), 0x55BAF5; art 29..31, 567: 235 × 325).</summary>
     public static (int X, int Y, int Width, int Height) Panel { get; } = (503, 63, 235, 325);
@@ -50,8 +50,8 @@ public static class AreaCharacterSheetArtLayout
     public static IReadOnlyList<int> ArtNumbers { get; } =
         [BackgroundArt, MinusArt, PlusArt, SkillsTabArt, TechTabArt, SpellsTabArt, AlignmentArt, AptitudeArt, LabelFontArt, FlareFontArt, CloisterFontArt];
 
-    /// <summary>ARC-UI-1195: the arts the generated interface draws for the window itself (the background, the + and − buttons, the four tabs) and for each page
-    /// (the page's background and its buttons); the native smoke checks that every frame of them draws generated chrome.</summary>
+    /// <summary>ARC-UI-1195: the arts the window draws for itself (the background, the + and − buttons, the four tabs) and for each page
+    /// (the page's background and its buttons); the native smoke checks that every frame of them draws as the mode under test says (the pack's frame or the Legacy art).</summary>
     public static IReadOnlyList<int> WindowArtNumbers { get; } = [BackgroundArt, MinusArt, PlusArt, SkillsTabArt, TechTabArt, SpellsTabArt, SchemesTabArt];
 
     public static IReadOnlyList<int> SkillsPageArtNumbers { get; } =
@@ -65,7 +65,7 @@ public static class AreaCharacterSheetArtLayout
     public static IReadOnlyList<int> SpellsPageArtNumbers { get; } =
         [AreaCharacterSheetSpellsLayout.BackgroundArt, AreaCharacterSheetSpellsLayout.PlusArt, AreaCharacterSheetSpellsLayout.MinusArt, .. AreaCharacterSheetSpellsLayout.CollegeArtNumbers];
 
-    /// <summary>ARC-UI-1784: the arts of the schemes page the generated interface draws (its background; the scroll bar's arrows and thumb stay pictures).</summary>
+    /// <summary>ARC-UI-1784: the arts of the schemes page that draw frames (its background; the scroll bar's arrows and thumb stay pictures).</summary>
     public static IReadOnlyList<int> SchemesPageArtNumbers { get; } = [AreaCharacterSheetSchemesLayout.BackgroundArt];
 
     public static IReadOnlyList<int> AllArtNumbers { get; } =
