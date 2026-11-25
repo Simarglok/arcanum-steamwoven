@@ -434,12 +434,11 @@ public sealed partial class GameSessionOwner
             {
                 if ((long)into.Units + units > int.MaxValue || !_inventory.Ammo.ContainsKey(into.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords)
                     return RestockCreation.Skipped;
-                var (revision, seeds) = (_revision, _inventory.SeedGeneration);
-                var verdict = insert(new(into.Entity, InventoryDomain.MadeFacts(item.Kind) with { AmmoType = type, Quantity = units }));
-                ThrowIfDisposed();
-                if (_revision != revision || _inventory.SeedGeneration != seeds) return RestockCreation.Skipped;
-                if (verdict != SessionInsertVerdict.Accepted) return RestockCreation.Refused;
-                _inventory.Ammo[into.Entity] = into with { Units = into.Units + units };
+                // ARC-SCRIPT-2909 (0x463E20 → 0x4617F0 → 0x466640's merge branch): the line's created ammunition object runs its get (4) and insert-item (21) scripts with the holder as the triggerer before it is destroyed and its units join the stack.
+                var incoming = NewNpcEntry(plan.Holder, item.Kind, InventoryDomain.MadeFacts(item.Kind) with { AmmoType = type, Quantity = units }, insert, out var mergeRefusal, plan.Kind, scripts, report, mergeInto: into);
+                if (incoming is null) return mergeRefusal?.Failure == GameSessionFailure.InsertRefused ? RestockCreation.Refused : RestockCreation.Skipped;
+                var current = _inventory.Ammo.TryGetValue(into.Entity, out var held) ? held : into;
+                _inventory.Ammo[into.Entity] = current with { Units = current.Units + units };
                 entity = into.Entity;
                 return RestockCreation.Created;
             }

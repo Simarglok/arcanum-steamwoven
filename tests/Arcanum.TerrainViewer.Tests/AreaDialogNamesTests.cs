@@ -1,5 +1,7 @@
 using System.Text;
 using Arcanum.Data.Area;
+using Arcanum.Data.Content;
+using Arcanum.Data.Messages;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
 using Arcanum.World;
@@ -37,5 +39,30 @@ public sealed class AreaDialogNamesTests
         Assert.AreEqual("Wren", AreaDialogNames.NpcName(r => r == row ? "Wren" : null, row));
         Assert.AreEqual(string.Empty, AreaDialogNames.NpcName(_ => null, row), "a name without text prints empty");
         Assert.AreEqual(string.Empty, AreaDialogNames.NpcName(_ => "Wren", null), "an unknown speaker prints empty when a source is wired");
+    }
+
+    private static AreaObjectRecord Row(int type, params (int Slot, long Value)[] fields) =>
+        new(new AreaObjectKey(new string('a', 64), 1, AreaSourceKind.Mobile, 1, 0, 0L, new string('b', 64), 100), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, 10, 20,
+            Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [.. fields.Select(f => new AreaFieldValue(f.Slot, AreaPresence.Value, AreaValueOrigin.Instance, f.Value, [], null))], true, true, true);
+
+    [TestMethod]
+    public void The_object_name_source_names_an_npc_by_its_observer_and_an_item_by_the_sessions_identified_mark()
+    {
+        // ARC-SCRIPT-2811 (0x441B60 over 0x45F970): an NPC its own observer is recognized (its description), with no observer not (its unknown description); an unidentified item shows its unknown description, identified or marked identified its own.
+        var catalog = ObjectDescriptionCatalog.Create(MesFile.Parse(Encoding.ASCII.GetBytes("{100}{Coat}{101}{Odd Coat}{200}{Stranger}{201}{Bandit}")).File!);
+        var source = AreaDialogNames.ObjectNameSource(() => catalog);
+        var npc = Row(16, (ObjectDisplayName.DescriptionSlot, 201), (ObjectDisplayName.CritterUnknownDescriptionSlot, 200));
+        Assert.AreEqual("Bandit", source(npc, CritterRecognition.Recognized, false));
+        Assert.AreEqual("Stranger", source(npc, CritterRecognition.NotRecognized, false));
+        var coat = Row(7, (ObjectDisplayName.DescriptionSlot, 100), (ObjectDisplayName.ItemUnknownDescriptionSlot, 101), (ObjectDisplayName.ItemComplexitySlot, 3), (ObjectDisplayName.ItemFlagsSlot, 0));
+        Assert.AreEqual("Odd Coat", source(coat, CritterRecognition.Recognized, false));
+        Assert.AreEqual("Coat", source(coat, CritterRecognition.Recognized, true), "the session marked it identified");
+        Assert.AreEqual("Coat", source(Row(7, (ObjectDisplayName.DescriptionSlot, 100), (ObjectDisplayName.ItemUnknownDescriptionSlot, 101), (ObjectDisplayName.ItemComplexitySlot, 3), (ObjectDisplayName.ItemFlagsSlot, 1)), CritterRecognition.Recognized, false));
+        Assert.IsNull(source(Row(7, (ObjectDisplayName.DescriptionSlot, 999), (ObjectDisplayName.ItemComplexitySlot, 0)), CritterRecognition.Recognized, false), "a name without text");
+        Assert.IsNull(AreaDialogNames.ObjectNameSource(() => null)(npc, CritterRecognition.Recognized, false), "tables not loaded");
+        Assert.AreEqual("Bandit", AreaDialogNames.NpcNameSource(() => catalog)(npc), "the speaker's source is the recognized reading");
+        using var session = ConversationSessionFixture.Create();
+        Assert.AreEqual(new DialogSpeakerNames("[PC]", "Wren"), AreaDialogNames.Of(session, Fallback, null, "Wren"));
+        Assert.AreEqual(new DialogSpeakerNames("Odd", "[NPC]"), AreaDialogNames.Of(session, Fallback, "Odd", null), "an NPC triggerer's name is not the hero's");
     }
 }

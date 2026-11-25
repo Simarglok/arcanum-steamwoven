@@ -190,7 +190,10 @@ def reference_files(local_root: Path, prompt_id: str, slot: str, batches: dict) 
     if slot == "original":
         # a context screen is refined from its upscaled original as the one IMAGE TO EDIT (ARC-RES-2455); other parts get what their prefix holds
         guide = sorted((local_root / "refs").glob(f"{prompt_id}-guide-*.png"))
-        return guide or sorted((local_root / "refs").glob(f"{prompt_id}-*.png"))
+        return guide or [p for p in sorted((local_root / "refs").glob(f"{prompt_id}-*.png")) if not p.name.startswith(f"{prompt_id}-sheet")]
+    if slot == "sheet":
+        # a part prompt that lists the `sheet` slot (ARC-UI-2482): the swatches and context crops its batch tool wrote as refs/<prompt id>-sheet*.png
+        return sorted((local_root / "refs").glob(f"{prompt_id}-sheet*.png"))
     if slot == "context":
         return sorted((local_root / "outbox" / "style-anchors-contexts").glob("ctx-*.png"))
     return []

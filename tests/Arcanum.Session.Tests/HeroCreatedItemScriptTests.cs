@@ -87,7 +87,7 @@ public sealed class HeroCreatedItemScriptTests
         Assert.AreEqual(0, owner.QueryHeroAmmo().Count);
         Assert.AreEqual("made:1", owner.TakeAmmoFromNpc(owner.Version, "archer", "arrows", 10, Bullets, Accept, host).Item);
         var merged = owner.TakeAmmoFromNpc(owner.Version, "archer", "arrows", 10, Bullets, Accept, host);
-        Assert.AreEqual((GameSessionDisposition.Changed, "made:1", 0), (merged.Disposition, merged.Item, merged.Scripts.Count), "the merge into a held stack is #2909");
+        Assert.AreEqual((GameSessionDisposition.Changed, "made:1", 0), (merged.Disposition, merged.Item, merged.Scripts.Count), "the merge into a held stack creates no object (0x4658E0 raises the quantity), so runs none (ARC-SCRIPT-2909)");
     }
 
     [TestMethod]

@@ -9,9 +9,11 @@ ORIGINAL's wood (mean L*, contrast, chroma). Needs ImageMagick (`magick`). Local
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime
 import hashlib
 import json
+import math
 import re
 import subprocess
 import sys
@@ -69,6 +71,21 @@ HALO_BRIGHT = 70          # 0..255 luma of the ORIGINAL: ARC-UI-3101: an object'
 HALO_DILATE = 2           # px: ... the object's pixels are grown by this
 HALO_CLOSE = 10           # px: ... and closed by this (the dark parts inside a gear), the holes inside filled: the object is one solid shape, everything outside it in the box is the Codex wood
 ERASE_RING = 2            # px: the ring just outside an erase box whose per-channel median fills it
+TEXT_DELTA = 35           # ARC-UI-3165: 0..255 luma distance from the ground's (the ring outside the box) that makes a pixel text (strokes, digits, signs on a field or on paper)
+TEXT_SIGMAS = 3.0         # the text band is at least this many robust standard deviations (1.4826 x the median deviation) of the ring's luma wide (mottled paper), TEXT_DELTA at the least
+TEXT_PAPER_WINDOW = 21    # px: the closing of a paper box removes dark strokes narrower than this (letters, a strike-through, a page number)
+TEXT_PAPER_GROW = 3       # px: a paper's text is dense, so its halo is taken narrowly (the box would be all text otherwise)
+TEXT_PAPER_DELTA = 28     # a stroke is this much darker, in red or in green, than the closing of that channel
+TEXT_RING = 3             # px: the ring just outside a text box whose median luma is the ground's
+TEXT_GROWS = (8, 6, 4, 3, 2)   # px: a text pixel's soft halo is taken with it (the mask is grown by this much, in a square; the widest that leaves TEXT_MIN_GROUND of the box)
+TEXT_MIN_GROUND = 0.2     # share of a box that must stay ground after the halo, or the next narrower halo is taken
+TEXT_RADII = (8, 16, 32, 64)   # px: the windows (radius) of the fill from the pixels that are no text; a wider one only for pixels the narrower left without a neighbour
+TEXT_MIN_SHARE = 0.12     # a fill window holds at least this share of ground pixels (and TEXT_MIN_KNOWN of them) or the next, wider one is taken: no fill from a few stray pixels
+TEXT_MIN_KNOWN = 8
+TEXT_SMOOTH = 3           # px: radius of the one smoothing pass over the filled pixels
+TEXT_GRAIN = 3            # px: radius of the neighbourhood the grain of a ground pixel is measured against
+TEXT_GRAIN_STEPS = ((23, 0), (-23, 0), (0, 29), (0, -29), (47, 31), (-47, 31), (47, -31), (-47, -31), (95, 0), (-95, 0), (0, 95), (0, -95))
+TEXT_MAX_SHARE = 0.8      # a box whose text (before the halo) covers more than this share is not a box of text on a ground: an error, nothing is guessed
 SCHEMA = "steamwoven-surface/1"
 SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")   # a zone id is a file name: no path parts, no leading dot
 
@@ -82,7 +99,11 @@ class ZoneSpec:
     `fill_boxes` (boxes whose wood between the items the tone mask excludes is the Codex wood as well, so the original's lighter wood is no patch) and `dot_bands`
     (the rows where the original's rows of dots are kept: the strips; in the window the faint grain specks chain into false rows of dots).
     ARC-UI-3101 added `halo_boxes` (boxes round parts whose old shadow and wood fringe stand around them as a dark halo: inside a box the Codex wood is everywhere outside the
-    part's own light shape)."""
+    part's own light shape).
+    ARC-UI-3165 (owner condition 1) added `text_boxes` (x0, y0, x1, y1: text, digits and counters the game draws over a ground that is no flat colour, a paper, a pit with a
+    gradient, a disc: only the pixels that differ from the box's median luma by TEXT_DELTA, grown by up to TEXT_GROWS[0] px, are replaced, by the mean of the box's other pixels near them,
+    so the ground's own shading stays), `paper_boxes` (the same for dark text on a paper whose light changes across the box: the text is what a closing of the channels
+    removes, TEXT_PAPER_WINDOW px wide) and `wood_boxes` (boxes whose wood weight is 1 throughout: letters baked into the wood, the Codex wood shows there)."""
     id: str
     screen: str = method_c.SCREEN
     joins: tuple[int, ...] = JOINS
@@ -94,6 +115,9 @@ class ZoneSpec:
     fill_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3164: master-pixel boxes whose wood between the items (letters, plates, fields) is the Codex wood too, not the ORIGINAL's patch
     halo_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3101: boxes round a part with a dark halo (the gears): the wood weight is 1 outside the part's own light shape
     dot_bands: tuple[tuple[int, int], ...] | None = None         # ARC-UI-3164: rows (top, bottom) where the ORIGINAL's rows of dots are kept; None = everywhere
+    wood_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3165: master-pixel boxes where the Codex wood shows whole: the letters baked into the wood go
+    text_boxes: tuple[tuple[int, int, int, int], ...] = ()       # ARC-UI-3165: master-pixel boxes whose text pixels are replaced by their ground (black fields, discs, gradient pits, flat parchment)
+    paper_boxes: tuple[tuple[int, int, int, int], ...] = ()      # ARC-UI-3165: master-pixel boxes of dark text on a shaded paper (the book pages): the text is found against the paper's own local light
 
 
 INVENTORY = ZoneSpec(id="ctx-inventory", chip_boxes=CHIP_BOXES)
@@ -112,7 +136,7 @@ def load_spec(path: Path) -> ZoneSpec:
         raise ComposeError(f"cannot read the spec {path}: {error}") from error
     if not isinstance(raw, dict):
         raise ComposeError(f"spec {path}: the top level is an object")
-    unknown = set(raw) - {"id", "screen", "joins", "bevel_band", "chip_boxes", "erase_boxes", "kit_parts", "island_min", "fill_boxes", "halo_boxes", "dot_bands"}
+    unknown = set(raw) - {"id", "screen", "joins", "bevel_band", "chip_boxes", "erase_boxes", "kit_parts", "island_min", "fill_boxes", "dot_bands", "halo_boxes", "wood_boxes", "text_boxes", "paper_boxes"}
     if unknown or "id" not in raw or "screen" not in raw:
         raise ComposeError(f"spec {path}: needs id and screen; unknown keys {sorted(unknown)}")
     if not (isinstance(raw["id"], str) and SAFE_ID.fullmatch(raw["id"]) and isinstance(raw["screen"], str)):
@@ -154,7 +178,8 @@ def load_spec(path: Path) -> ZoneSpec:
             raise ComposeError(f"spec {path}: dot_bands is null or a list of [top, bottom] rows")
         bands = tuple(tuple(b) for b in bands_raw)
     return ZoneSpec(id=raw["id"], screen=raw["screen"], joins=tuple(joins), bevel_band=tuple(band) if band else None, chip_boxes=boxes("chip_boxes"),
-                    erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts), island_min=island_min, fill_boxes=boxes("fill_boxes"), halo_boxes=boxes("halo_boxes"), dot_bands=bands)
+                    erase_boxes=boxes("erase_boxes"), kit_parts=tuple(parts), island_min=island_min, fill_boxes=boxes("fill_boxes"), halo_boxes=boxes("halo_boxes"), dot_bands=bands,
+                    wood_boxes=boxes("wood_boxes"), text_boxes=boxes("text_boxes"), paper_boxes=boxes("paper_boxes"))
 
 
 class ComposeError(Exception):
@@ -491,6 +516,160 @@ def erase_boxes(image: "pngio.Image", boxes: tuple) -> int:
     return filled
 
 
+def _grow(mask: bytearray, width: int, height: int, radius: int) -> bytearray:
+    """The mask grown by `radius` px in a square (a separable window count over prefix sums)."""
+    rows = bytearray(width * height)
+    for j in range(height):
+        row = mask[j * width:(j + 1) * width]
+        prefix = [0]
+        for v in row:
+            prefix.append(prefix[-1] + v)
+        base = j * width
+        for i in range(width):
+            if prefix[min(width, i + radius + 1)] - prefix[max(0, i - radius)]:
+                rows[base + i] = 1
+    out = bytearray(width * height)
+    for i in range(width):
+        column = rows[i::width]
+        prefix = [0]
+        for v in column:
+            prefix.append(prefix[-1] + v)
+        for j in range(height):
+            if prefix[min(height, j + radius + 1)] - prefix[max(0, j - radius)]:
+                out[j * width + i] = 1
+    return out
+
+
+def _closing(channels: list[list[int]], width: int, height: int, window: int) -> list[list[int]]:
+    """The grey-scale closing of each channel by a square of `window` px (ImageMagick's morphology on the raw RGB bytes)."""
+    raw = bytearray(width * height * 3)
+    for c in range(3):
+        raw[c::3] = bytes(channels[c])
+    try:
+        body = subprocess.run(["magick", "-size", f"{width}x{height}", "-depth", "8", "rgb:-", "-morphology", "Close", f"Square:{window}", "-depth", "8", "rgb:-"],
+                              input=bytes(raw), capture_output=True)
+    except OSError as error:
+        raise ComposeError(f"the closing of the paper box needs ImageMagick (magick): {error}") from error
+    if body.returncode != 0 or len(body.stdout) != width * height * 3:
+        raise ComposeError(f"the closing of the paper box failed: {body.stderr.decode('utf-8', 'replace').strip()[:200]}")
+    return [list(body.stdout[c::3]) for c in range(3)]
+
+def _grain(i: int, width: int, height: int, known: list[int], counts: list[int], sums: list[list[int]], channels: list[list[int]], stride: int) -> tuple[int, int, int]:
+    """The ground's own fine texture for a filled pixel: the deviation of a ground pixel from its TEXT_GRAIN-radius neighbourhood, taken from the first of TEXT_GRAIN_STEPS (fixed
+    offsets, nearest first) that lands on a ground pixel; (0, 0, 0) when none does, so a flat ground stays flat and no texture is made up."""
+    j, k = divmod(i, width)
+    for dx, dy in TEXT_GRAIN_STEPS:
+        jj, kk = j + dy, k + dx
+        if not (0 <= jj < height and 0 <= kk < width) or not known[jj * width + kk]:
+            continue
+        ya, yb, xa, xb = max(0, jj - TEXT_GRAIN), min(height, jj + TEXT_GRAIN + 1), max(0, kk - TEXT_GRAIN), min(width, kk + TEXT_GRAIN + 1)
+        n = counts[yb * stride + xb] - counts[ya * stride + xb] - counts[yb * stride + xa] + counts[ya * stride + xa]
+        at = jj * width + kk
+        return tuple(channels[c][at] - (sums[c][yb * stride + xb] - sums[c][ya * stride + xb] - sums[c][yb * stride + xa] + sums[c][ya * stride + xa]) // n for c in range(3))
+    return (0, 0, 0)
+
+
+def _integral(values, width: int, height: int) -> list[int]:
+    """A summed-area table of `values` (a flat list of width * height), (width + 1) * (height + 1) entries."""
+    stride = width + 1
+    table = [0] * (stride * (height + 1))
+    for j in range(height):
+        running = 0
+        row, above = (j + 1) * stride, j * stride
+        base = j * width
+        for i in range(width):
+            running += values[base + i]
+            table[row + i + 1] = table[above + i + 1] + running
+    return table
+
+
+def erase_text(image: "pngio.Image", boxes: tuple, paper: bool = False) -> int:
+    """ARC-UI-3165 (owner condition 1): in each box (x0, y0, x1, y1; x1, y1 exclusive) the text, digits and counters the game draws over the surface are replaced by their ground.
+    The ground's luma is the median of the TEXT_RING px ring outside the box (digits can fill half a box, so the box's own median would be text); a pixel is text when its luma
+    differs from it by more than TEXT_DELTA (light text on a black field or a disc, dark text on paper), the mask is grown by the widest of TEXT_GROWS that leaves TEXT_MIN_GROUND of the box (the soft halo), and each text pixel
+    of the box takes the mean colour of the ground pixels (the box's and the ring's that are no text) in a window of TEXT_RADII (the narrowest that holds one), so a paper's or
+    a pit's shading stays and nothing is painted that was not there. With `paper` the text is dark on a paper whose light changes across the box (the page's shading toward the spine
+    is no text): a pixel is text when its luma is TEXT_PAPER_DELTA under the closing (TEXT_PAPER_WINDOW px) of the channel in the red or the green channel (every ink is dark there, blue ink is not in blue). Returns the pixels replaced.
+    A box outside the image, or one that is mostly text, is an error."""
+    w, h, d = image.w, image.h, image.data
+    replaced = 0
+    for x0, y0, x1, y1 in boxes:
+        if x1 > w or y1 > h:
+            raise ComposeError(f"text box {(x0, y0, x1, y1)} is outside the {w} x {h} px image")
+        ex0, ey0, ex1, ey1 = max(0, x0 - TEXT_RING), max(0, y0 - TEXT_RING), min(w, x1 + TEXT_RING), min(h, y1 + TEXT_RING)
+        ew, eh = ex1 - ex0, ey1 - ey0
+        channels = [[], [], []]
+        for j in range(eh):
+            base = ((ey0 + j) * w + ex0) * 4
+            row = d[base:base + ew * 4]
+            for c in range(3):
+                channels[c].extend(row[c::4])
+        luma = [(r * 299 + g * 587 + b * 114) // 1000 for r, g, b in zip(*channels)]
+        inside = [(j, k) for j in range(y0 - ey0, y1 - ey0) for k in range(x0 - ex0, x1 - ex0)]
+        ring = [luma[j * ew + k] for j in range(eh) for k in range(ew) if not (x0 - ex0 <= k < x1 - ex0 and y0 - ey0 <= j < y1 - ey0)]
+        sample = ring or [luma[j * ew + k] for j, k in inside]       # the ground is read from the ring outside the box: digits can fill half the box
+        ground = sorted(sample)[len(sample) // 2]
+        if paper:
+            closed = _closing(channels, ew, eh, TEXT_PAPER_WINDOW)
+            core = bytearray(1 if max(cr - r, cg - g) > TEXT_PAPER_DELTA else 0
+                             for cr, cg, r, g in zip(closed[0], closed[1], channels[0], channels[1]))      # red and green: every ink of a page is dark there (blue ink is bright in blue)
+        else:
+            spread = 1.4826 * sorted(abs(v - ground) for v in sample)[len(sample) // 2]    # a mottled ground needs a wider band than a black field (the median deviation: a needle or a tick in the ring does not widen it)
+            delta = max(TEXT_DELTA, TEXT_SIGMAS * spread)
+            core = bytearray(1 if abs(v - ground) > delta else 0 for v in luma)
+        share = sum(core[j * ew + k] for j, k in inside) / len(inside)
+        if share > TEXT_MAX_SHARE:
+            raise ComposeError(f"text box {(x0, y0, x1, y1)}: {share * 100:.0f} % of the box differs from the ground, it is no text on a ground")
+        for grow in ((TEXT_PAPER_GROW,) if paper else TEXT_GROWS):           # the widest halo that leaves enough ground in the box to fill from
+            mask = _grow(core, ew, eh, grow)
+            if sum(mask[j * ew + k] for j, k in inside) <= (1 - TEXT_MIN_GROUND) * len(inside):
+                break
+        todo = [j * ew + k for j, k in inside if mask[j * ew + k]]
+        if not todo:
+            continue
+        known = [1 - m for m in mask]
+        counts = _integral(known, ew, eh)
+        sums = [_integral([v * k for v, k in zip(channels[c], known)], ew, eh) for c in range(3)]
+        stride = ew + 1
+        fill: dict[int, tuple[int, int, int]] = {}
+        pending = todo
+        for radius in TEXT_RADII:
+            left = []
+            need = max(TEXT_MIN_KNOWN, int(TEXT_MIN_SHARE * (2 * radius + 1) ** 2))
+            for i in pending:
+                j, k = divmod(i, ew)
+                ya, yb, xa, xb = max(0, j - radius), min(eh, j + radius + 1), max(0, k - radius), min(ew, k + radius + 1)
+                n = counts[yb * stride + xb] - counts[ya * stride + xb] - counts[yb * stride + xa] + counts[ya * stride + xa]
+                if n < need and radius != TEXT_RADII[-1]:
+                    left.append(i)
+                    continue
+                if not n:
+                    raise ComposeError(f"text box {(x0, y0, x1, y1)}: no ground pixel within {TEXT_RADII[-1]} px of a text pixel")
+                fill[i] = tuple((sums[c][yb * stride + xb] - sums[c][ya * stride + xb] - sums[c][yb * stride + xa] + sums[c][ya * stride + xa] + n // 2) // n for c in range(3))
+            pending = left
+            if not pending:
+                break
+        # the windows differ in size from pixel to pixel: one smoothing pass over the filled pixels (the ground's pixels stay as they were) takes the steps out
+        for i, rgb in fill.items():
+            j, k = divmod(i, ew)
+            for c in range(3):
+                channels[c][i] = rgb[c]
+        total = [_integral(channels[c], ew, eh) for c in range(3)]
+        for i in fill:
+            j, k = divmod(i, ew)
+            ya, yb, xa, xb = max(0, j - TEXT_SMOOTH), min(eh, j + TEXT_SMOOTH + 1), max(0, k - TEXT_SMOOTH), min(ew, k + TEXT_SMOOTH + 1)
+            n = (yb - ya) * (xb - xa)
+            at = ((ey0 + j) * w + ex0 + k) * 4
+            grain = _grain(i, ew, eh, known, counts, sums, channels, stride)
+            for c in range(3):
+                t = total[c]
+                value = (t[yb * stride + xb] - t[ya * stride + xb] - t[yb * stride + xa] + t[ya * stride + xa] + n // 2) // n + grain[c]
+                d[at + c] = 0 if value < 0 else 255 if value > 255 else value
+            d[at + 3] = 255
+        replaced += sum(1 for j, k in inside if mask[j * ew + k])
+    return replaced
+
+
 def lay_kit_parts(image: "pngio.Image", parts: tuple, base: Path | None = None) -> list[dict]:
     """The kit masters of `parts` (dicts id, file, x, y) laid over the image, straight alpha 'over', at master pixels; condition 3: the metal parts come from the kit
     and replace the original's stand-ins. A part that leaves the image, or is not RGBA-readable, is an error. Returns one record per part (id, file hash, size, place)."""
@@ -576,12 +755,30 @@ def apply_box_fills(original: Path, solid: Path, spec: ZoneSpec, width: int, hei
         fill_between_items(original, solid, spec.halo_boxes, solid, width, height, HALO_BRIGHT, None, HALO_DILATE, HALO_CLOSE)
 
 
+def force_wood(solid: Path, boxes: tuple, out: Path, width: int, height: int) -> None:
+    """ARC-UI-3165: in each wood box the wood weight is 1 (feathered at the box's edge as the rest of the weight): letters baked into the wood (the stat names of the character
+    sheet) are not kept as items, so the Codex wood shows in their place and no patch of the original's wood or flat fill stands there. A box outside the image is an error."""
+    if not boxes:
+        return
+    draw = []
+    for x0, y0, x1, y1 in boxes:
+        if x1 > width or y1 > height:
+            raise ComposeError(f"wood box {(x0, y0, x1, y1)} is outside the {width} x {height} px image")
+        draw += ["-draw", f"rectangle {x0},{y0} {x1 - 1},{y1 - 1}"]
+    run(["magick", str(solid), "(", "-size", f"{width}x{height}", "xc:black", "-fill", "white", *draw, "-colorspace", "Gray", "-blur", f"0x{MASK_FEATHER}", ")",
+         "-colorspace", "Gray", "-compose", "Lighten", "-composite", str(out)])
+
+
 def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BEVEL_MODE, spec: ZoneSpec = INVENTORY, kit_base: Path | None = None) -> dict:
     if bevel_mode not in ("lighten", "original"):
         raise ComposeError(f"unknown bevel mode {bevel_mode!r}")
     work.mkdir(parents=True, exist_ok=True)
     img_o = pngio.read(original)
     w, h = img_o.w, img_o.h
+    for kind in ("erase_boxes", "text_boxes", "paper_boxes", "wood_boxes"):       # a box outside the image is found before the minutes of work, not after
+        for x0, y0, x1, y1 in getattr(spec, kind):
+            if x1 > w or y1 > h:
+                raise ComposeError(f"{kind[:-1].replace('_', ' ')} {(x0, y0, x1, y1)} is outside the {w} x {h} px image")
     if pngio.read(a).w != w:
         raise ComposeError("the original and the Codex result must have the same size")
     masks = tone_check.load_masks()
@@ -591,6 +788,7 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
     fill_notches(solid, solid)
     remove_islands(solid, solid, spec.island_min)
     apply_box_fills(original, solid, spec, w, h)
+    force_wood(solid, spec.wood_boxes, solid, w, h)
     keep_joins(solid, solid, w, h, spec.joins)
     clean = work / "a-clean.png"
     specks = despeckle(a, clean, work, w, h)
@@ -620,10 +818,11 @@ def compose(original: Path, a: Path, out: Path, work: Path, bevel_mode: str = BE
     result = pngio.read(out)
     chip_pixels = remove_chips(result, spec.chip_boxes)
     erased = erase_boxes(result, spec.erase_boxes)
+    text = erase_text(result, spec.text_boxes) + erase_text(result, spec.paper_boxes, paper=True)
     kit = lay_kit_parts(result, spec.kit_parts, kit_base)
     pngio.write(out, result)
     after = wood_stats(pngio.read(out), mask, coverage, cells)
-    return {"out": str(out), "speck_components": specks, "dots_kept": dot_count, "bevel_lines": bevel_lines, "chip_pixels": chip_pixels, "erased_pixels": erased, "kit_parts": kit,
+    return {"out": str(out), "speck_components": specks, "dots_kept": dot_count, "bevel_lines": bevel_lines, "chip_pixels": chip_pixels, "erased_pixels": erased, "text_pixels": text, "kit_parts": kit,
             "fit": numbers, "wood_target": target, "wood_before": before, "wood_after": after}
 
 
@@ -644,9 +843,26 @@ def provenance_record(spec: ZoneSpec, original: Path, a: Path, out: Path, info: 
             "inputs": {"original": {"file": original.name, "sha256": sha256_file(original)}, "method_a": {"file": a.name, "sha256": sha256_file(a)}},
             "result": {"file": out.name, "sha256": sha256_file(out)},
             "counts": {"speck_components": info["speck_components"], "dots_kept": info["dots_kept"], "bevel_lines": info["bevel_lines"], "chip_pixels": info["chip_pixels"],
-                       "erased_pixels": info["erased_pixels"]},
+                       "erased_pixels": info["erased_pixels"], "text_pixels": info["text_pixels"]},
             "kit_parts": info["kit_parts"], "wood": {"target": info["wood_target"], "before": info["wood_before"], "after": info["wood_after"], "fit": info["fit"]},
             "seams": seams, "tone": {"screen": spec.screen, "pass": tone["pass"], "failed": tone["failed"], "regions": regions}, "gates": evaluate_gates(seams, tone)}
+
+
+def tone_masks_for(spec: ZoneSpec, width: int = 2880, height: int = 2160) -> dict | None:
+    """The tone masks of the check with the spec's text and paper boxes added to the screen's excluded content (ARC-UI-3165): the text the game draws is taken out of the
+    surface on purpose, so the tone of the paper and of the black fields is measured where the surface keeps the original's own (a page with its text erased would read as a
+    brighter paper otherwise). Boxes are master pixels of a `width` x `height` image (the contexts' 2880 x 2160); the masks are the 800 x 600 layout, so a box is divided by the layout scale (3.6 px a unit for the contexts) and rounded outward.
+    None (the file's masks as they are) when the spec has no such box."""
+    boxes = spec.text_boxes + spec.paper_boxes
+    if not boxes:
+        return None
+    masks = copy.deepcopy(tone_check.load_masks())
+    if spec.screen not in masks["screens"]:
+        return None                                       # the check names the missing screen itself
+    sx, sy = width / tone_check.TARGET_W, height / tone_check.TARGET_H
+    masks["screens"][spec.screen].setdefault("exclude", []).extend(
+        [math.floor(x0 / sx), math.floor(y0 / sy), math.ceil(x1 / sx), math.ceil(y1 / sy)] for x0, y0, x1, y1 in boxes)
+    return masks
 
 
 def build(original: Path, a: Path, out: Path, work: Path, provenance: Path, spec: ZoneSpec = INVENTORY, bevel_mode: str = BEVEL_MODE, kit_base: Path | None = None) -> dict:
@@ -654,7 +870,7 @@ def build(original: Path, a: Path, out: Path, work: Path, provenance: Path, spec
     info = compose(original, a, out, work, bevel_mode, spec, kit_base)
     image = pngio.read(out)
     seams = [{"join": f"y={j}", "ratio": surface_metrics.join_seam(image, "y", j)} for j in spec.joins]
-    tone = tone_check.compare_screen_files(spec.screen, original, out)
+    tone = tone_check.compare_screen_files(spec.screen, original, out, tone_masks_for(spec, image.w, image.h))
     record = provenance_record(spec, original, a, out, info, seams, tone, bevel_mode, datetime.datetime.now(datetime.timezone.utc))
     provenance.parent.mkdir(parents=True, exist_ok=True)
     provenance.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -667,7 +883,7 @@ def describe_build(record: dict, path: Path) -> str:
     w = record["wood"]
     return (f"SURFACE {'PASS' if g['passed'] else 'FAIL'} {record['zone']}: seams {seams} (target {g['seam_target']}, SWI-VER-5 1.5 {'met' if g['seams_within_swi_ver_5'] else 'not met'}); "
             f"tone {'PASS' if g['tone_pass'] else 'FAIL ' + ','.join(g['tone_failed'])}; wood L* {w['after']['mean_l']:.2f} (original {w['target']['mean_l']:.2f}), "
-            f"contrast {w['after']['std_l']:.2f} ({w['target']['std_l']:.2f}); {record['counts']['erased_pixels']} px erased, {len(record['kit_parts'])} kit parts; record {path}")
+            f"contrast {w['after']['std_l']:.2f} ({w['target']['std_l']:.2f}); {record['counts']['erased_pixels']} px erased, {record['counts']['text_pixels']} text px replaced, {len(record['kit_parts'])} kit parts; record {path}")
 
 
 def describe(info: dict) -> str:

@@ -133,6 +133,18 @@ public sealed class ScrObjectVariableTests
     }
 
     [TestMethod]
+    public void A_print_line_carries_the_triggerer_and_attachee_as_the_action_meets_them()
+    {
+        // ARC-SCRIPT-2811 (NM4): a line printed after assign object triggerer := extra names the extra object as its first object, the attachee unchanged; one printed before keeps the event's triggerer.
+        var host = With(Program(Do(C(24, N(1), N(0))), Do(C(ScrCatalogue.Action.AssignObject, (Triggerer, 0), (Extra, 0))), Do(C(24, N(2), N(0))), Do(C(1))));
+        var run = Use(host, extra: Npc);
+        var lines = run.Effects.Lines.ToArray();
+        Assert.AreEqual(2, lines.Length);
+        Assert.AreEqual((Pc, Chest), (lines[0].Triggerer, lines[0].Attachee));
+        Assert.AreEqual((Npc, Chest), (lines[1].Triggerer, lines[1].Attachee));
+    }
+
+    [TestMethod]
     public void A_called_script_runs_with_its_own_header_and_roles_and_the_caller_goes_on()
     {
         // The callee (600) from line 1: it sees the caller's flag write, prints a line on its attachee, sets a local flag of its
@@ -145,7 +157,7 @@ public sealed class ScrObjectVariableTests
         Assert.AreEqual(ScrStop.ReturnSkipDefault, run.Stop);
         CollectionAssert.AreEqual(new[] { 9, 20, 21, 22 }, run.Effects.GlobalFlags.Select(f => f.Index).ToArray(),
             "line 0 of the callee is skipped, the caller's flag 20 is seen, the header's local flag 1 holds, the caller goes on");
-        Assert.AreEqual(new ScrPrintLine(600, 3, 0), run.Effects.Lines.Single(), "the callee's own DLG, on its attachee (the PC)");
+        Assert.AreEqual((600, 3, 0), (run.Effects.Lines.Single().Script, run.Effects.Lines.Single().Line, run.Effects.Lines.Single().Kind), "the callee's own DLG, on its attachee (the PC)");
         Assert.IsNull(run.Effects.Writeback, "the caller's slot is unchanged; the callee's local flag is not kept");
     }
 
