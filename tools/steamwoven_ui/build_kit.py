@@ -30,6 +30,7 @@ from tools.steamwoven_ui import census as census_mod  # noqa: E402
 from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
+from tools.steamwoven_ui import oval_kit  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
@@ -140,7 +141,17 @@ def new_parts() -> list[dict]:
     parts.extend(square_hud_parts())
     parts.extend(round_hud_parts())
     parts.extend(hud_hardware_parts())
+    parts.append(oval_part())
     return parts
+
+
+def oval_part() -> dict:
+    """ARC-UI-3271, B-BUTTONS: the hand and arrow ovals of the inventory family's loot and barter windows as ONE part, the brass rim of the oval together with the dark iron plate behind it whose four corners show,
+    made BY RULE by `oval_kit.py` (no Codex): a layer over the surface at the original's place (the inside of the rim is open: the parchment and the glyph are the surface's), laid twice (hand, arrow)."""
+    return new_part(oval_kit.PART, "plate", "window", ["G02", "G03"], "BD-A", "B-BUTTONS",
+                    "the oval button's brass rim and the recessed plate's four dark iron corners as one part; oval_kit.py draws it (no Codex), 300 x 168, "
+                    "the rim's inside open (the surface's parchment and glyph), laid at the hand and the arrow oval; size open",
+                    master=True, provenance=f"rule:oval_kit:{oval_kit.PART}")
 
 
 def hud_hardware_parts() -> list[dict]:
