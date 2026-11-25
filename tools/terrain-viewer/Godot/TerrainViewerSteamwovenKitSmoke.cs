@@ -22,7 +22,7 @@ public partial class TerrainViewerApp
         KitCharacter = new(0.3f, 0.3f, 0.3f), KitSkillsSheet = new(0.8f, 0.2f, 0.2f), KitTechSheet = new(0.2f, 0.8f, 0.2f), KitSpellsSheet = new(0.2f, 0.2f, 0.8f), KitSchemesSheet = new(0.8f, 0.8f, 0.2f),
         KitLogSide = new(0.1f, 0.3f, 0.7f), KitLogBook = new(0.7f, 0.4f, 0.1f), KitSchematic = new(0.1f, 0.5f, 0.3f),
         KitSaveTop = new(0.85f, 0.45f, 0.65f), KitSaveBody = new(0.35f, 0.65f, 0.25f), KitSaveBottom = new(0.25f, 0.35f, 0.75f), KitPremadeBody = new(0.6f, 0.25f, 0.55f), KitNewCharBody = new(0.25f, 0.6f, 0.6f),
-        KitFixture = new(0.95f, 0.95f, 0.2f);
+        KitFixture = new(0.95f, 0.95f, 0.2f), KitHardware = new(0.5f, 0.45f, 0.3f);
 
     /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's provisional 150 and 570 px; the caps are 120 px wide.</summary>
     private static IReadOnlyList<(string Id, int Width, int Height, Color Colour)> SyntheticKitParts { get; } =
@@ -30,6 +30,13 @@ public partial class TerrainViewerApp
         ("board.inttop", 2880, 150, KitTop), ("board.intbotom", 2880, 570, KitBottom),
         ("cap.top_strip_left", 120, 150, KitCapLeft), ("cap.top_strip_right", 120, 150, KitCapRight),
         ("cap.bottom_strip_left", 120, 570, KitCapLeft), ("cap.bottom_strip_right", 120, 570, KitCapRight),
+        // ARC-UI-2481: the hardware layers of the two HUD strips (master sizes of tools/steamwoven_ui/hardware_build.py; the smoke lays them at the table's places and checks they stay inside the strip).
+        ("hardware.hud_plate_left", 948, 150, KitHardware), ("hardware.hud_plate_right", 948, 150, KitHardware), ("hardware.hud_top_slot", 150, 144, KitHardware),
+        ("hardware.hud_top_ring", 108, 108, KitHardware), ("hardware.hud_top_clock", 486, 132, KitHardware), ("hardware.hud_top_infinity", 108, 108, KitHardware),
+        ("hardware.hud_top_hourglass", 78, 132, KitHardware), ("hardware.hud_top_rivet", 30, 30, KitHardware), ("hardware.hud_vial", 204, 558, KitHardware),
+        ("hardware.hud_vial_r", 204, 558, KitHardware), ("hardware.hud_cylinder", 108, 324, KitHardware), ("hardware.hud_cylinder_r", 108, 324, KitHardware),
+        ("hardware.hud_wires", 114, 144, KitHardware), ("hardware.hud_ring", 198, 192, KitHardware), ("hardware.hud_dial", 144, 144, KitHardware), ("hardware.hud_gem", 138, 144, KitHardware),
+        ("hardware.hud_slot", 138, 144, KitHardware), ("hardware.hud_rail", 144, 48, KitHardware),
         ("backdrop.pdoll", 1290, 1440, KitDoll), ("backdrop.inventor", 1590, 1440, KitInventory),
         // ARC-UI-3033: the barter window's merchant side (plain and with the follower's cycle buttons) and its two overlays, the merchant's doll view and the hero's doll cover.
         ("backdrop.barter", 1290, 1440, KitBarter), ("backdrop.barter_follower", 1290, 1440, KitBarterFollower), ("backdrop.barter_pd", 1290, 876, KitDoll),
@@ -691,8 +698,16 @@ public partial class TerrainViewerApp
                 {
                     Color Pixel(int x, int y) => image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1));
                     var (t, b) = (column.TopStrip, column.BottomStrip);
-                    require(Near(Pixel(t.X + 1, t.Y + t.Height / 2), KitTop), $"[{tag}] the top strip's pixels are the kit art's colour (got {Pixel(t.X + 1, t.Y + t.Height / 2)})");
-                    require(Near(Pixel(b.X + 1, b.Y + b.Height / 2), KitBottom), $"[{tag}] the bottom strip's pixels are the kit art's colour (got {Pixel(b.X + 1, b.Y + b.Height / 2)})");
+                    // ARC-UI-2481: the hardware layers lie over the strip art, so the art's colour is read where no layer is (the top strip between its plates, 1000 master px from its left; the bottom strip below the right ring, where the bar draws nothing of its own)
+                    // and the hardware's colour where a layer is (the top plate's body, the bottom strip's wires: the bar's own bars and slots draw over the vial and the rest). A look capture puts real masters in place of the flat colours and asks no colour.
+                    Color AtMaster(Godot.Rect2 strip, int masterX, int masterY, int stripMasterHeight) => Pixel((int)(strip.Position.X + strip.Size.X * masterX / 2880.0), (int)(strip.Position.Y + strip.Size.Y * masterY / stripMasterHeight));
+                    var (tRect, bRect) = (new Godot.Rect2(t.X, t.Y, t.Width, t.Height), new Godot.Rect2(b.X, b.Y, b.Width, b.Height));
+                    var lookStrips = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_LOOK") is { Length: > 0 };
+                    require(lookStrips || Near(AtMaster(tRect, 1000, 75, 150), KitTop), $"[{tag}] the top strip's pixels between the plates are the kit art's colour (got {AtMaster(tRect, 1000, 75, 150)})");
+                    require(lookStrips || Near(AtMaster(bRect, 2600, 560, 570), KitBottom), $"[{tag}] the bottom strip's pixels below the right ring are the kit art's colour (got {AtMaster(bRect, 2600, 560, 570)})");
+                    require(lookStrips || Near(AtMaster(tRect, 850, 75, 150), KitHardware), $"[{tag}] the top strip's plate is the hardware layer's colour (got {AtMaster(tRect, 850, 75, 150)})");
+                    require(lookStrips || Near(AtMaster(bRect, 1440, 3, 570), KitHardware), $"[{tag}] the bottom strip's wires are the hardware layer's colour (got {AtMaster(bRect, 1440, 3, 570)})");
+                    require(top!.Layers.Count == SteamwovenKitTable.Strips[AreaBarStrip.Top].Layers.Count && bottom!.Layers.Count == SteamwovenKitTable.Strips[AreaBarStrip.Bottom].Layers.Count, $"[{tag}] every hardware layer of the table is composed ({top!.Layers.Count} on the top strip, {bottom!.Layers.Count} on the bottom)");
                     // The caps stand beside the strips on the world; at 4:3 there is no side and they are clipped away (SWI-LAY-3).
                     foreach (var draw in caps.DrawsForSelfTest)
                     {
@@ -700,7 +715,7 @@ public partial class TerrainViewerApp
                         var left = draw.PartId.EndsWith("_left", StringComparison.Ordinal);
                         if (clipped) { require(column.Column.X <= 0 && column.Column.Right >= size.X, $"[{tag}] {draw.PartId} is clipped away only where the composition has no side"); continue; }
                         var probe = Pixel(left ? draw.Clip.Right - 1 : draw.Clip.X, draw.Clip.Y + draw.Clip.Height / 2);
-                        require(Near(probe, left ? KitCapLeft : KitCapRight), $"[{tag}] {draw.PartId}'s pixels are the kit cap's colour (got {probe})");
+                        require(lookStrips || Near(probe, left ? KitCapLeft : KitCapRight), $"[{tag}] {draw.PartId}'s pixels are the kit cap's colour (got {probe})");
                     }
                 }
                 // The bar button: the Character button is the kit's plate with its glyph over it (the buttons' look overlays need a look the smoke does not press).
