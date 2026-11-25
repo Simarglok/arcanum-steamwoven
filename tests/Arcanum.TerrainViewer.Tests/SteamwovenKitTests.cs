@@ -21,7 +21,7 @@ public sealed class SteamwovenKitTests
             new("cap.top_strip_left", B(120), B(150)), new("cap.top_strip_right", B(120), B(150)),
             new("cap.bottom_strip_left", B(120), B(570)), new("cap.bottom_strip_right", B(120), B(570)),
             new("plate.char_but", B(120), B(120)), new("plate.char_but_hover", B(120), B(120)), new("plate.char_but_pressed", B(120), B(120)), new("state.char_on", B(120), B(120)),
-            new("glyph.char_but", B(120), B(120)), new("plate.lilgrnbut", B(84), B(84)), new("glyph.fate_but", B(84), B(84)), new("glyph.sleep_but", B(84), B(84)),
+            new("glyph.char_but", B(120), B(120)), new("glyph.char_but_lit", B(120), B(120)), new("plate.lilgrnbut", B(84), B(84)), new("glyph.fate_but", B(84), B(84)), new("glyph.sleep_but", B(84), B(84)),
             new("backdrop.mainmenuback", B(2880), B(2160)),
         };
         // The inventory's right piece is shared by several windows (ARC-UI-3033): a part is added once.
@@ -400,8 +400,8 @@ public sealed class SteamwovenKitTests
         // The overlay of the look lies over the glyph (ARC-UI-3096).
         CollectionAssert.AreEqual(new[] { "plate.char_but", "glyph.char_but", "plate.char_but_hover" }, Ids(SteamwovenKitComposer.ButtonLayers(set, 169, AreaBarButtonLook.Hovered)));
         CollectionAssert.AreEqual(new[] { "plate.char_but", "glyph.char_but", "plate.char_but_pressed" }, Ids(SteamwovenKitComposer.ButtonLayers(set, 169, AreaBarButtonLook.Down)));
-        // The lit face of a light button is its own part and takes its button's glyph.
-        CollectionAssert.AreEqual(new[] { "state.char_on", "glyph.char_but" }, Ids(SteamwovenKitComposer.ButtonLayers(set, 561, AreaBarButtonLook.Idle)));
+        // The lit face of a light button is its own part and takes its button's lit glyph (the lit art's own symbol, ARC-UI-2482).
+        CollectionAssert.AreEqual(new[] { "state.char_on", "glyph.char_but_lit" }, Ids(SteamwovenKitComposer.ButtonLayers(set, 561, AreaBarButtonLook.Idle)));
         // Art 137 stands under two buttons with their own symbols: the glyph is told by the button, and none is drawn without it.
         CollectionAssert.AreEqual(new[] { "plate.lilgrnbut", "glyph.fate_but" }, Ids(SteamwovenKitComposer.ButtonLayers(set, 137, AreaBarButtonLook.Idle, AreaBarButton.FatePoints)));
         CollectionAssert.AreEqual(new[] { "plate.lilgrnbut", "glyph.sleep_but" }, Ids(SteamwovenKitComposer.ButtonLayers(set, 137, AreaBarButtonLook.Idle, AreaBarButton.Sleep)));
@@ -422,7 +422,13 @@ public sealed class SteamwovenKitTests
         foreach (var look in new[] { AreaBarButtonLook.Idle, AreaBarButtonLook.Hovered, AreaBarButtonLook.Down })
         {
             Assert.AreEqual(0, SteamwovenKitComposer.ButtonLayers(without, 169, look).Count, look.ToString());
-            Assert.AreEqual(0, SteamwovenKitComposer.ButtonLayers(without, 561, look).Count, look.ToString());
+        }
+        // The lit face needs the lit glyph (ARC-UI-2482), not the idle one.
+        var withoutLit = Full(SteamwovenStep.Half, "glyph.char_but_lit");
+        foreach (var look in new[] { AreaBarButtonLook.Idle, AreaBarButtonLook.Hovered, AreaBarButtonLook.Down })
+        {
+            Assert.AreEqual(0, SteamwovenKitComposer.ButtonLayers(withoutLit, 561, look).Count, look.ToString());
+            Assert.AreEqual(2, SteamwovenKitComposer.ButtonLayers(withoutLit, 169, AreaBarButtonLook.Idle).Count);
         }
         var odd = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.char_but", 60, 60), new("glyph.char_but", 30, 30)]);
         Assert.AreEqual(0, SteamwovenKitComposer.ButtonLayers(odd, 169, AreaBarButtonLook.Idle).Count);
@@ -436,8 +442,8 @@ public sealed class SteamwovenKitTests
         var shared = AreaGameBarLayout.Buttons.Where(spec => spec.Art == 137).ToList();
         CollectionAssert.AreEquivalent(new[] { AreaBarButton.FatePoints, AreaBarButton.Sleep }, shared.Select(spec => spec.Button).ToArray());
         foreach (var spec in shared) Assert.IsNotNull(SteamwovenKitTable.GlyphOf(spec.Button, 137), spec.Button.ToString());
-        // A lit face and its idle face show one symbol; the glyph names are safe file names.
-        Assert.AreEqual(SteamwovenKitTable.GlyphOf(null, 169), SteamwovenKitTable.GlyphOf(null, 561));
+        // A lit face shows the lit glyph of its idle face's symbol (ARC-UI-2482); the glyph names are safe file names.
+        Assert.AreEqual(SteamwovenKitTable.GlyphOf(null, 169) + "_lit", SteamwovenKitTable.GlyphOf(null, 561));
         Assert.IsTrue(SteamwovenKitTable.ButtonGlyphs.Values.Concat(SteamwovenKitTable.SharedArtGlyphs.Values).All(SteamwovenKitSet.ValidId));
     }
 

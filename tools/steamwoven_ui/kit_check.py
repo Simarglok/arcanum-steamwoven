@@ -49,7 +49,7 @@ TOP_KEYS = ("schema", "windows", "parts", "excluded")
 WINDOW_KEYS = ("name", "anchor")
 ID_PATTERN = re.compile(r"^[a-z]+\.[a-z0-9_]+(-[a-z0-9_]+)?$")
 SOURCE_PATTERN = re.compile(r"^(\d+|file:[A-Za-z0-9_.-]+)$")
-NEW_PART_KINDS = ("cap", "material", "grid", "decor", "hardware", "plate", "glyph", "fixture")  # parts no original art feeds (TRD asset kit, SWI-LAY-12, SWI-LAY-16; the shared button plate and the button glyphs, ARC-UI-3058; the fixtures, ARC-UI-3098)
+NEW_PART_KINDS = ("cap", "material", "grid", "decor", "hardware", "plate", "glyph", "state", "fixture")  # parts no original art feeds (TRD asset kit, SWI-LAY-12, SWI-LAY-16; the shared button plate and the button glyphs, ARC-UI-3058; the lit faces' pressed overlays, ARC-UI-2482; the fixtures, ARC-UI-3098)
 CAP_ID = re.compile(r"^cap\.(top|bottom)_strip_(left|right)$")
 WINDOW_ID = re.compile(r"^[HGM]\d\d$")
 BASE64_RUN = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")  # 40 characters with no space: an encoded blob, not a note

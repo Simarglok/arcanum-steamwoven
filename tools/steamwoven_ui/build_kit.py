@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools.steamwoven_ui import button_kit  # noqa: E402
 from tools.steamwoven_ui import census as census_mod  # noqa: E402
 from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import kit_check  # noqa: E402
@@ -132,7 +133,31 @@ def new_parts() -> list[dict]:
                                   f"the {glyph} symbol of round button art {art}, {what}: glyph_cells.py draws it from the original frame (no Codex), "
                                   "a 156 x 156 canvas of the whole frame, so the size is open",
                                   states=states, master=True, provenance=f"rule:glyph_cells:{ident}"))
+    parts.extend(square_hud_parts())
     return parts
+
+
+def square_hud_parts() -> list[dict]:
+    """ARC-UI-2482, slice 1 of B-BUTTONS: the five square buttons of the top strip. Besides the plates and the lit faces (rows from the census, set to master below) each button has a glyph in two looks
+    and the hover and pressed overlays (and, for the four lit arts with a second frame, the lit face's pressed overlay), made BY RULE from the original's frames by `button_kit.py` (no Codex)."""
+    parts = []
+    for b in button_kit.BUTTONS:
+        for ident, states, what in ((f"glyph.{b.name}", ["idle"], f"the symbol of art {b.art} as the idle frame shows it over the plate"),
+                                    (f"glyph.{b.name}_lit", ["hover", "pressed"], f"the symbol of art {b.art} lit (the lit art {b.on_art}'s frame 0: red, with its glow)"),
+                                    (f"plate.{b.name}_hover", ["hover"], f"overlay of art {b.art}'s hover frame over its idle frame (the symbol turns red and glows)"),
+                                    (f"plate.{b.name}_pressed", ["pressed"], f"overlay of art {b.art}'s pressed frame over its idle frame (the symbol turns red, the inset darkens)")):
+            parts.append(new_part(ident, "plate" if ident.startswith("plate.") else "glyph", "top-strip", ["H01"], None, "B-BUTTONS",
+                                  f"{what}; button_kit.py draws it from the original frames (no Codex), a 120 x 120 canvas of the whole 34-unit frame, so the size is open",
+                                  states=states, master=True, provenance=f"rule:button_kit:{ident}"))
+        if b.on_art != 561:  # Character's lit art has one frame
+            parts.append(new_part(f"state.{b.on_name}_pressed", "state", "top-strip", ["H01"], None, "B-BUTTONS",
+                                  f"overlay of the lit art {b.on_art}'s pressed frame over its frame 0; button_kit.py draws it from the original frames (no Codex), a 120 x 120 canvas, so the size is open",
+                                  states=["pressed"], master=True, provenance=f"rule:button_kit:state.{b.on_name}_pressed"))
+    return parts
+
+
+SQUARE_HUD_PLATES = {f"plate.{b.name}": b for b in button_kit.BUTTONS}
+SQUARE_HUD_STATES = {f"state.{b.on_name}": b for b in button_kit.BUTTONS}
 
 
 def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindow]) -> dict:
@@ -168,6 +193,12 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["provenance"], part["status"] = f"rule:icon_rule:{ident}", "master"
             part["note"] = ("by rule from the original's own frames (icon_rule.py upscale, no Codex), square or smooth colour, exact alpha; "
                             "HD frames at x4 of each original frame (ARC-UI-2485)")
+        if ident in SQUARE_HUD_PLATES:
+            part["status"], part["provenance"] = "master", f"fit:{ident}"
+            part["note"] = "the empty square plate: one Codex item (plate-square-hud), fitted to this part; the symbol, its states and the lit faces are made by rule (button_kit.py, ARC-UI-2482)"
+        if ident in SQUARE_HUD_STATES:
+            part["status"], part["provenance"] = "master", f"rule:button_kit:{ident}"
+            part["note"] = f"the lit face of art {part['source_arts'][-1]}: the plate again; its symbol is glyph.{SQUARE_HUD_STATES[ident].name}_lit (button_kit.py, ARC-UI-2482)"
         if lead.kind == "board":
             part["status"], part["provenance"] = "master", f"fit:{part['id']}"
             part["note"] = "strip height is the grid choice 150 / 570 (units 147.6 / 572.4), fixed by #2927: the only heights that bake to the four steps exactly"

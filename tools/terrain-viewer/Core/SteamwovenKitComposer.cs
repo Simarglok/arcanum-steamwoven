@@ -226,15 +226,16 @@ public static class SteamwovenKitTable
     };
 
     /// <summary>
-    /// ARC-UI-3096 (SWI-KIT-5): the glyph of a bar button by the art it shows, one part per button, drawn over the face at the face's size (a symbol on a transparent background); the lit face of a light button takes the glyph of
-    /// its idle face. The names are this runtime's convention until the buttons' batch ([#2482](https://github.com/Simarglok/arcanum-steamwoven/issues/2482)) makes the rows: <c>glyph.&lt;plate name&gt;</c>. Art 137 is shared by two
+    /// ARC-UI-3096 (SWI-KIT-5): the glyph of a bar button by the art it shows, one part per button, drawn over the face at the face's size (a symbol on a transparent background); the lit face of a light button takes the lit glyph
+    /// of its idle face, <c>glyph.&lt;plate name&gt;_lit</c> (the lit art's own symbol, red with its glow; the lit face itself is the plate again; ARC-UI-2482). The names are the manifest's rows of the buttons' batch
+    /// ([#2482](https://github.com/Simarglok/arcanum-steamwoven/issues/2482)): <c>glyph.&lt;plate name&gt;</c>. Art 137 is shared by two
     /// buttons with two symbols, so it has none here: <see cref="SharedArtGlyphs"/> names theirs by button.
     /// </summary>
     public static IReadOnlyDictionary<int, string> ButtonGlyphs { get; } = new Dictionary<int, string>
     {
         [472] = "glyph.skills_button", [473] = "glyph.spells_button", [470] = "glyph.combat_button", [471] = "glyph.schematics_button",
         [187] = "glyph.log_but", [169] = "glyph.char_but", [186] = "glyph.invn_but", [193] = "glyph.tmap_but", [194] = "glyph.wmap_but",
-        [561] = "glyph.char_but", [560] = "glyph.log_but", [558] = "glyph.tmap_but", [195] = "glyph.wmap_but", [559] = "glyph.invn_but",
+        [561] = "glyph.char_but_lit", [560] = "glyph.log_but_lit", [558] = "glyph.tmap_but_lit", [195] = "glyph.wmap_but_lit", [559] = "glyph.invn_but_lit",
     };
 
     /// <summary>ARC-UI-3096: the glyphs of the two buttons that stand on art 137 (the Fate Points and Sleep balls), by button.</summary>
