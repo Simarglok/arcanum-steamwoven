@@ -1055,7 +1055,7 @@ public sealed class SteamwovenKitTests
     {
         var step = SteamwovenStep.Half;
         int B(int units) => SteamwovenGrid.BakedLength(SteamwovenKitTable.MasterOf(units), step);
-        var set = SteamwovenKitSet.FromParts(step, "/kit/x1-2", [new("fixture.count_pit", B(61), B(17)), new("fixture.mt_ruler", B(46), B(330) + 1)]);
+        var set = SteamwovenKitSet.FromParts(step, "/kit/x1-2", [new("fixture.count_pit", B(61), B(17)), new("fixture.mt_ruler", B(60), B(332) + 1)]);
         Assert.AreEqual("fixture.count_pit", SteamwovenKitComposer.Fixture(set, "fixture.count_pit")?.Id);
         Assert.IsNull(SteamwovenKitComposer.Fixture(set, "fixture.mt_ruler"), "a wrong sized part is left out");
         Assert.IsNull(SteamwovenKitComposer.Fixture(set, "fixture.align_dial"), "a missing part is left out");

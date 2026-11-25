@@ -84,10 +84,12 @@ internal static class AreaKitStandIns
         }
     }
 
-    /// <summary>One element: the kit's fixture <paramref name="id"/> at (<paramref name="x"/>, <paramref name="y"/>) units, else <paramref name="standIn"/>.</summary>
-    private static void Part(CanvasItem canvas, float scale, string id, float x, float y, Action standIn)
+    /// <summary>One element: the kit's fixture <paramref name="id"/> at (<paramref name="x"/>, <paramref name="y"/>) units, else <paramref name="standIn"/>; true when the kit's part was drawn.</summary>
+    private static bool Part(CanvasItem canvas, float scale, string id, float x, float y, Action standIn)
     {
-        if (!AreaKitFixtures.Draw(canvas, scale, id, x, y)) standIn();
+        if (AreaKitFixtures.Draw(canvas, scale, id, x, y)) return true;
+        standIn();
+        return false;
     }
 
     /// <summary>A grid of <paramref name="columns"/> x <paramref name="rows"/> cells of 32 units with its corner at (<paramref name="x"/>, <paramref name="y"/>): copies of the kit's cell well, else the stand-in's lines over the black pit.</summary>
@@ -171,28 +173,36 @@ internal static class AreaKitStandIns
             if (!leftPart) yield return (left[r], 131, 115 + 40 * r, gold);
             if (!rightPart) yield return (right[r], 263, 115 + 40 * r, gold);
         }
-        // The alignment dial's two ends (evil, good) and the magic-technology ruler's divisions: 75, 50, 25, 0, 25, 50, 75 at 32 units a step round the centre line (221).
+        // The alignment dial's two ends (evil, good) and the magic-technology ruler's divisions: 75, 50, 25, 0, 25, 50, 75 at 32 units a step round the centre line (221). ARC-UI-3321: the kit's ruler part carries the divisions (cut from the old HD frame with the ticks; digits carry no language), so the text is written only where the part is missing.
         if (!dialPart) { yield return ("E", 38, 146, ink); yield return ("G", 66, 146, ink); }
+        if (drawnParts?.Contains(RulerPart) == true) yield break;
         string[] steps = ["75", "50", "25", "0", "25", "50", "75"];
         for (var i = 0; i < steps.Length; i++) yield return (steps[i], 766, 120 + 32 * i, ink);
     }
 
+    /// <summary>ARC-UI-3321: the kit part that carries the ruler's divisions.</summary>
+    internal const string RulerPart = "fixture.mt_ruler";
+
     /// <summary>The character sheet's main page (art 22): the name and info box, the eight stat ovals, the alignment dial, the health disc with its heart and the fatigue disc with its cross, the magic-technology ruler with its ticks and its two end signs, and the derived-stats box (the letters and the ruler's numbers are written by the sheet, <see cref="SheetLabels"/>).</summary>
-    internal static void CharacterSheet(CanvasItem canvas)
+    internal static IReadOnlySet<string> CharacterSheet(CanvasItem canvas)
     {
         Drawn.Add(SteamwovenKitWindow.Character);
-        Part(canvas, 1, "fixture.sheet_name_box", 119, 9, () => Field(canvas, 1, 119, 9, 360, 87));
-        Part(canvas, 1, "fixture.sheet_derived_box", 24, 278, () => Field(canvas, 1, 24, 278, 452, 113));
+        var drawn = new HashSet<string>();
+        void Draw(string id, float x, float y, Action standIn) { if (Part(canvas, 1, id, x, y, standIn)) drawn.Add(id); }
+        Draw("fixture.sheet_name_box", 119, 9, () => Field(canvas, 1, 119, 9, 360, 87));
+        Draw("fixture.sheet_derived_box", 24, 278, () => Field(canvas, 1, 24, 278, 452, 113));
+        // ARC-UI-3321: the ovals, the dial, the discs and the ruler are cut from the old HD frame and carry their cast shadow, so a part's box is a little larger than the object: the oval's box starts at 167, 105 (its sockets reach 170.6 and 243.1), the rows 40 apart (the boxes overlap by 4 units, the shadow only fades inside them).
         for (var r = 0; r < 4; r++)
         {
-            var y = 111 + 40 * r;
-            Part(canvas, 1, "fixture.stat_oval", 172, y, () => Field(canvas, 1, 172, y, 70, 31));
-            Part(canvas, 1, "fixture.stat_oval", 315, y, () => Field(canvas, 1, 315, y, 70, 31));
+            var y = 105 + 40 * r;
+            Draw("fixture.stat_oval", 167, y, () => Field(canvas, 1, 172, y + 6, 70, 31));
+            Draw("fixture.stat_oval", 310, y, () => Field(canvas, 1, 315, y + 6, 70, 31));
         }
-        Part(canvas, 1, "fixture.align_dial", 6, 131, () => DialStandIn(canvas));
-        Part(canvas, 1, "fixture.health_disc", 411, 127, () => HeartStandIn(canvas));
-        Part(canvas, 1, "fixture.fatigue_disc", 411, 197, () => CrossStandIn(canvas));
-        Part(canvas, 1, "fixture.mt_ruler", 747, 60, () => RulerStandIn(canvas));
+        Draw("fixture.align_dial", 3, 128, () => DialStandIn(canvas));
+        Draw("fixture.health_disc", 405, 122, () => HeartStandIn(canvas));
+        Draw("fixture.fatigue_disc", 405, 192, () => CrossStandIn(canvas));
+        Draw(RulerPart, 740, 60, () => RulerStandIn(canvas));
+        return drawn;
     }
 
     // The alignment dial: a brass ring, a parchment half face with its tick marks, the number pit under the hub.

@@ -27,7 +27,7 @@ if str(ROOT) not in sys.path:
 
 from tools.steamwoven_ui import button_kit  # noqa: E402
 from tools.steamwoven_ui import census as census_mod  # noqa: E402
-from tools.steamwoven_ui import fixtures  # noqa: E402
+from tools.steamwoven_ui import fixtures, sheet_parts  # noqa: E402
 from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import hardware_kit  # noqa: E402
@@ -109,7 +109,12 @@ def fixture_part(fixture: fixtures.Fixture) -> dict:
     """ARC-UI-3098: a required detail the old window arts painted into themselves, a part of its own at the size of its place in the original (`fixtures.py` draws it by rule)."""
     batch = FIXTURE_BATCH.get(fixture.windows[0], "BD-A")
     kind = "grid" if fixture.ident.startswith("grid.") else "fixture"
-    how = "cut from the player's own HD frame by label_parts.py (ARC-UI-3299)" if fixture.cut else "no original art, drawn by fixtures.py (ARC-UI-3098)"
+    if not fixture.cut:
+        how = "no original art, drawn by fixtures.py (ARC-UI-3098)"
+    elif fixture.ident in sheet_parts.BY_ID:
+        how = "cut from the player's own HD frame by sheet_parts.py (ARC-UI-3321)"
+    else:
+        how = "cut from the player's own HD frame by label_parts.py (ARC-UI-3299)"
     part = new_part(fixture.ident, kind, "zone" if kind == "grid" else "window", list(fixture.windows), batch, batch, f"{fixture.note}; {how}")
     part["size"], part["size_basis"] = list(fixture.master), "placed"
     return part

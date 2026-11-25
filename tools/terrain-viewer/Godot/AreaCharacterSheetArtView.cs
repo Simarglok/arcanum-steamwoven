@@ -279,7 +279,7 @@ public partial class AreaCharacterSheetArtView : Control
     internal bool KitBackgroundShownForSelfTest => KitBackgroundShown;
     /// <summary>ARC-UI-3041: the last draw painted the original's art 22 (false over the kit's background).</summary>
     internal bool OwnBackgroundDrawnForSelfTest { get; private set; }
-    /// <summary>ARC-UI-3165: the words and numbers the last draw wrote itself over the kit's background in place of the ones art 22 had baked in (<see cref="AreaKitStandIns.SheetLabels"/>: the eight stat names, the dial's E and G, the ruler's seven divisions); empty when the art's own background was drawn.</summary>
+    /// <summary>ARC-UI-3165: the words and numbers the last draw wrote itself over the kit's background in place of the ones art 22 had baked in (<see cref="AreaKitStandIns.SheetLabels"/>: the eight stat names, the dial's E and G, the ruler's seven divisions unless the kit's ruler part carries them, ARC-UI-3321); empty when the art's own background was drawn.</summary>
     internal IReadOnlyList<string> KitLabelsDrawnForSelfTest { get; private set; } = [];
     /// <summary>ARC-UI-3299: the label parts of the kit (<see cref="AreaKitStandIns.SheetLabelParts"/>) the last draw laid over the kit's background; their text is not written.</summary>
     internal IReadOnlyList<string> KitLabelPartsDrawnForSelfTest { get; private set; } = [];
@@ -315,12 +315,15 @@ public partial class AreaCharacterSheetArtView : Control
         }
         if (KitBackgroundShown)
         {
-            AreaKitStandIns.CharacterSheet(this);
+            var fixturesDrawn = AreaKitStandIns.CharacterSheet(this);
             // The stat names and the dial's E&G are baked into art 22 (the exe draws only the numbers): with the art skipped the sheet draws the kit's label parts (the old HD version's lettering, ARC-UI-3299) and, only where the kit has none, writes the text itself in its own font.
             var labelFace = fonts.For(AreaSheetFont.Cloister);
             var partsDrawn = AreaKitStandIns.SheetLabelParts(this);
             KitLabelPartsDrawnForSelfTest = [.. partsDrawn.Order()];
-            foreach (var (label, x, y, rgb) in AreaKitStandIns.SheetLabels(partsDrawn)) { AreaArtTextDraw.Text(this, labelFace, label, x, y, rgb); kitLabels.Add(label); }
+            // ARC-UI-3321: the ruler part carries its divisions (cut from the old HD frame), so their text is written only where the part is missing.
+            var carried = new HashSet<string>(partsDrawn);
+            if (fixturesDrawn.Contains(AreaKitStandIns.RulerPart)) carried.Add(AreaKitStandIns.RulerPart);
+            foreach (var (label, x, y, rgb) in AreaKitStandIns.SheetLabels(carried)) { AreaArtTextDraw.Text(this, labelFace, label, x, y, rgb); kitLabels.Add(label); }
         }
         KitLabelsDrawnForSelfTest = kitLabels;
         // ARC-UI-2694: the lens's cover art over the round view (0x51DA80 after the mode's copy, as in the logbook), when it reads.

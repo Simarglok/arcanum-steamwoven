@@ -169,8 +169,8 @@ public static class SteamwovenKitTable
     {
         ["grid.inventory_cells"] = (32, 32), ["fixture.pack_pit"] = (324, 388), ["fixture.doll_pit"] = (330, 300), ["fixture.holder_pit_loot"] = (324, 260), ["fixture.holder_pit_barter"] = (324, 228),
         ["fixture.name_pit"] = (223, 55), ["fixture.quote_field"] = (267, 36), ["fixture.count_pit"] = (61, 17), ["fixture.count_icons"] = (38, 115), ["fixture.weapon_frame"] = (112, 97),
-        ["fixture.shield_frame"] = (114, 97), ["fixture.arrange_legend"] = (78, 32), ["fixture.sheet_name_box"] = (360, 87), ["fixture.sheet_derived_box"] = (452, 113), ["fixture.stat_oval"] = (70, 31),
-        ["fixture.align_dial"] = (100, 100), ["fixture.health_disc"] = (76, 56), ["fixture.fatigue_disc"] = (76, 56), ["fixture.mt_ruler"] = (46, 330), ["fixture.sheet_stat_names_l"] = (50, 160), ["fixture.sheet_stat_names_r"] = (55, 160), ["fixture.sheet_dial_letters"] = (65, 25), ["fixture.schem_page"] = (506, 367),
+        ["fixture.shield_frame"] = (114, 97), ["fixture.arrange_legend"] = (78, 32), ["fixture.sheet_name_box"] = (360, 87), ["fixture.sheet_derived_box"] = (452, 113), ["fixture.stat_oval"] = (80, 44),
+        ["fixture.align_dial"] = (109, 111), ["fixture.health_disc"] = (87, 68), ["fixture.fatigue_disc"] = (87, 67), ["fixture.mt_ruler"] = (60, 332), ["fixture.sheet_stat_names_l"] = (50, 160), ["fixture.sheet_stat_names_r"] = (55, 160), ["fixture.sheet_dial_letters"] = (65, 25), ["fixture.schem_page"] = (506, 367),
         ["grid.schematic"] = (506, 367), ["fixture.schem_slot"] = (103, 71), ["fixture.schem_channel"] = (126, 30), ["fixture.gear_hat"] = (90, 70), ["fixture.gear_scroll"] = (96, 72),
     };
 
