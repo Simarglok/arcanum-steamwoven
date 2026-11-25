@@ -32,8 +32,12 @@ public sealed class AreaNewCharacterArtTests
     public void The_window_reads_its_art_and_its_buttons_places()
     {
         CollectionAssert.AreEqual(new[] { 765, 336, 335, 321, 323, 283, 284, 757, 758, 229, 27 }, AreaNewCharacterArtLayout.ArtNumbers.ToArray());
-        CollectionAssert.AreEquivalent(new[] { 766, 765, 336, 335, 321, 323, 283, 284, 757, 758, 229, 27 }, AreaPremadeBrowserArtContent.AllArtNumbers.ToArray(),
-            "one read serves both character windows");
+        var all = AreaPremadeBrowserArtContent.AllArtNumbers.ToArray();
+        CollectionAssert.IsSubsetOf(new[] { 766, 765, 336, 335, 321, 323, 283, 284, 757, 758, 229, 27 }, all, "one read serves both character windows");
+        CollectionAssert.IsSubsetOf(AreaPremadeBrowserArtLayout.ArtNumbers.ToArray(), all, "the premade browser");
+        CollectionAssert.IsSubsetOf(AreaShopArtLayout.ArtNumbers.ToArray(), all, "and the opening shop");
+        CollectionAssert.IsSubsetOf(AreaMessageLayout.MenuArtNumbers.ToArray(), all, "and the bottom message window of the editor and the shop (ARC-UI-3120)");
+        Assert.AreEqual(all.Length, all.Distinct().Count(), "each art is read once");
         Assert.AreEqual((321, 675, 496), AreaNewCharacterArtLayout.Button(AreaNewCharacterArtButton.Accept), "MW27: the bottom strip's (675, 55)");
         Assert.AreEqual((323, 69, 496), AreaNewCharacterArtLayout.Button(AreaNewCharacterArtButton.Cancel));
         Assert.AreEqual((283, 43, 118), AreaNewCharacterArtLayout.Button(AreaNewCharacterArtButton.PortraitPrevious));
