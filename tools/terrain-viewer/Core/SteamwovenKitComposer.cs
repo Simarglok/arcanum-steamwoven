@@ -73,16 +73,24 @@ public enum SteamwovenKitScreen
 /// original arts the screen draws itself for the same places (the two strips and the body): none of them is drawn while the kit has the whole screen (ARC-UI-3038 AC2).</summary>
 /// <remarks>ARC-UI-3041 (census M09, M10): a screen whose body is a game window (the creation editor's sheet, the opening shop's barter window) names <paramref name="BodyWindow"/> and has no <paramref name="Body"/> part of its own: its body is that
 /// window's kit background (<see cref="SteamwovenKitTable.Windows"/>, 2880 × 1440 over its pieces) laid in the plate's 800 × 400 body.</remarks>
-public sealed record SteamwovenKitScreenSpec(string TopStrip, string? Body, string BottomStrip, IReadOnlyList<int> OwnArts, SteamwovenKitWindow? BodyWindow = null);
+/// <remarks>ARC-UI-3260 (slice 2 of the hardware batch): <paramref name="TopLayers"/> and <paramref name="BottomLayers"/> are the hardware parts laid over the two strips (master positions from the strip's top left, in its master height 150 or 570),
+/// scaled with the strip into its rectangle; every one of them must be in the set or the whole screen is missing (a half-drawn strip never happens).</remarks>
+public sealed record SteamwovenKitScreenSpec(string TopStrip, string? Body, string BottomStrip, IReadOnlyList<int> OwnArts, SteamwovenKitWindow? BodyWindow = null,
+    IReadOnlyList<SteamwovenKitLayer>? TopLayers = null, IReadOnlyList<SteamwovenKitLayer>? BottomLayers = null);
 
 /// <summary>The three kit parts of a two-strip screen in device pixels (the window's, from the plate's place): the strips scaled into the family's 41 and 159 units, the body exactly the 800 × 400 body.</summary>
-/// <remarks>ARC-UI-3041: <paramref name="Body"/> is the body's (first) piece; a body that is a two-piece window background (the barter window) has its other pieces in <paramref name="MoreBody"/>, left to right, each the body's height.</remarks>
-public sealed record SteamwovenKitScreenPlan(SteamwovenKitDraw Top, SteamwovenKitDraw Body, SteamwovenKitDraw Bottom, IReadOnlyList<SteamwovenKitDraw>? MoreBody = null)
+/// <remarks>ARC-UI-3041: <paramref name="Body"/> is the body's (first) piece; a body that is a two-piece window background (the barter window) has its other pieces in <paramref name="MoreBody"/>, left to right, each the body's height.
+/// ARC-UI-3260: <paramref name="Layers"/> are the hardware parts over the strips (the top strip's, then the bottom strip's, each in its draw order), drawn after the three parts and clipped to their strip.</remarks>
+public sealed record SteamwovenKitScreenPlan(SteamwovenKitDraw Top, SteamwovenKitDraw Body, SteamwovenKitDraw Bottom, IReadOnlyList<SteamwovenKitDraw>? MoreBody = null, IReadOnlyList<SteamwovenKitDraw>? Layers = null)
 {
     /// <summary>Every piece of the body, left to right.</summary>
     public IReadOnlyList<SteamwovenKitDraw> BodyPieces => [Body, .. MoreBody ?? []];
 
+    /// <summary>The strips and the body (the backdrop), without the hardware layers.</summary>
     public IReadOnlyList<SteamwovenKitDraw> Draws => [Top, .. BodyPieces, Bottom];
+
+    /// <summary>Everything the screen draws from the kit in draw order: <see cref="Draws"/>, then the hardware layers over the strips.</summary>
+    public IReadOnlyList<SteamwovenKitDraw> AllDraws => [.. Draws, .. Layers ?? []];
 }
 
 /// <summary>
@@ -208,6 +216,20 @@ public static class SteamwovenKitTable
         [330] = "backdrop.multiplayerback",
     };
 
+    /// <summary>ARC-UI-3260 (slice 2 of the hardware batch, kit.json: <c>board.charcreatetopbar</c> art 336, <c>board.charcreatebottombar</c> art 335): the hardware parts of the two strips of every two-strip screen, at the master positions of
+    /// <c>tools/steamwoven_ui/hardware_build.py</c>'s placements in its draw order (the top strip's rivets are the HUD top strip's own part). A screen is drawn from the kit only with every one of them in the set.</summary>
+    public static IReadOnlyList<SteamwovenKitLayer> MenuTopLayers { get; } =
+    [
+        new("hardware.menu_plate_left", 0, 0), new("hardware.menu_plate_right", 1914, 0), new("hardware.hud_top_rivet", 846, 0), new("hardware.hud_top_rivet", 786, 108),
+        new("hardware.hud_top_rivet", 1992, 0), new("hardware.hud_top_rivet", 2052, 114)
+    ];
+
+    /// <summary>The bottom strip's hardware parts of the two-strip screens (<see cref="MenuTopLayers"/>): the message window's frame and the two round socket settings.</summary>
+    public static IReadOnlyList<SteamwovenKitLayer> MenuBottomLayers { get; } =
+    [
+        new("hardware.menu_window", 702, 180), new("hardware.menu_ring", 222, 174), new("hardware.menu_ring", 2406, 174)
+    ];
+
     /// <summary>
     /// ARC-UI-3038 (census M05, M06, BD-G): the two-strip screens' kit parts. The screen is the original's 800 × 600 plate (the column menu's fitted plate, <see cref="SteamwovenColumnMenu"/>): the top strip over the first 41 units, the body
     /// over the 400 units of its own 800 × 400 window and the bottom strip over the last 159 (the family's geometry, <see cref="TwoStripBodyTopUnits"/> and <see cref="TwoStripBodyBottomUnits"/>); the master heights 150 + 1440 + 570
@@ -217,17 +239,17 @@ public static class SteamwovenKitTable
     public static IReadOnlyDictionary<SteamwovenKitScreen, SteamwovenKitScreenSpec> Screens { get; } = new Dictionary<SteamwovenKitScreen, SteamwovenKitScreenSpec>
     {
         [SteamwovenKitScreen.SaveLoad] = new("board.charcreatetopbar", "backdrop.saveloadbackground", "board.charcreatebottombar",
-            [AreaSaveListArtLayout.TopStripArt, AreaSaveListArtLayout.BottomStripArt, AreaSaveListArtLayout.BackgroundArt]),
+            [AreaSaveListArtLayout.TopStripArt, AreaSaveListArtLayout.BottomStripArt, AreaSaveListArtLayout.BackgroundArt], null, MenuTopLayers, MenuBottomLayers),
         [SteamwovenKitScreen.PremadeBrowser] = new("board.charcreatetopbar", "backdrop.pregencharacterbase", "board.charcreatebottombar",
-            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaPremadeBrowserArtLayout.BackgroundArt]),
+            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaPremadeBrowserArtLayout.BackgroundArt], null, MenuTopLayers, MenuBottomLayers),
         [SteamwovenKitScreen.NewCharacter] = new("board.charcreatetopbar", "backdrop.createcharacterbase", "board.charcreatebottombar",
-            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaNewCharacterArtLayout.BackgroundArt]),
+            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaNewCharacterArtLayout.BackgroundArt], null, MenuTopLayers, MenuBottomLayers),
         // ARC-UI-3041 (census M09, M10): the creation editor and the opening shop take their strips from the same pair and their body from the kit background of the window they hold: the sheet's, the barter window's. The own arts are the strips
         // the shop view draws and the window's own backdrop (the sheet's art 22; the barter frame's art 235 and the pack art 221).
         [SteamwovenKitScreen.CharacterEditor] = new("board.charcreatetopbar", null, "board.charcreatebottombar",
-            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaCharacterSheetArtLayout.BackgroundArt], SteamwovenKitWindow.Character),
+            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaCharacterSheetArtLayout.BackgroundArt], SteamwovenKitWindow.Character, MenuTopLayers, MenuBottomLayers),
         [SteamwovenKitScreen.OpeningShop] = new("board.charcreatetopbar", null, "board.charcreatebottombar",
-            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaBarterArtLayout.BarterArt, AreaInventoryArtLayout.PackArt], SteamwovenKitWindow.Barter),
+            [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaBarterArtLayout.BarterArt, AreaInventoryArtLayout.PackArt], SteamwovenKitWindow.Barter, MenuTopLayers, MenuBottomLayers),
     };
 
     /// <summary>The top and the bottom of the body of a two-strip screen, in the 800 × 600 plate's units (the strips are 41 and 159 units high).</summary>
@@ -405,6 +427,9 @@ public static class SteamwovenKitComposer
         else if (!set.TryGet(bodyId, out var bodyPart)) missing.Add(bodyId);
         else if (bodyPart.Width != width || bodyPart.Height != bodyHeight) missing.Add(bodyId + " (wrong size)");
         else bodyPieces.Add((bodyPart, SteamwovenKitTable.CompositionMasterWidth));
+        // ARC-UI-3260: the hardware layers of the two strips; each part must be in the set.
+        SteamwovenKitPart?[] NeedLayers(IReadOnlyList<SteamwovenKitLayer>? layers) => (layers ?? []).Select(layer => Need(set, layer.Part, missing)).ToArray();
+        var (topLayerParts, bottomLayerParts) = (NeedLayers(spec.TopLayers), NeedLayers(spec.BottomLayers));
         if (missing.Count > 0 || top is not { } topPart || bottom is not { } bottomPart || bodyPieces.Count == 0) return new(null, missing);
         var zone = plan.Zone;
         int Edge(int units) => zone.Y + (int)Math.Round(units * plan.Factor, MidpointRounding.AwayFromZero);
@@ -421,7 +446,23 @@ public static class SteamwovenKitComposer
             bodyDraws.Add(Draw(bodyPieces[i].Part, rect, rect));
             left = right;
         }
-        return new(new SteamwovenKitScreenPlan(Draw(topPart, topRect, topRect), bodyDraws[0], Draw(bottomPart, bottomRect, bottomRect), bodyDraws.Count > 1 ? bodyDraws.Skip(1).ToList() : null), []);
+        var layerDraws = new List<SteamwovenKitDraw>();
+        void Lay(IReadOnlyList<SteamwovenKitLayer>? layers, SteamwovenKitPart?[] parts, SteamwovenKitPart strip, PixelRect rect)
+        {
+            // The strip is drawn stretched to its rectangle, so its hardware is: a layer's master position and size scale by the strip's own ratio on each axis, the edges rounded one by one (halves up).
+            long masterWidth = SteamwovenKitTable.CompositionMasterWidth, masterHeight = Master(set, strip.Height);
+            for (var i = 0; i < (layers?.Count ?? 0); i++)
+            {
+                var (layer, part) = (layers![i], parts[i]!.Value);
+                int X(int master) => rect.X + (int)((2 * master * rect.Width + masterWidth) / (2 * masterWidth));   // exact integer arithmetic, halves up
+                int Y(int master) => rect.Y + (int)((2 * master * rect.Height + masterHeight) / (2 * masterHeight));
+                var edges = PixelRect.FromEdges(X(layer.MasterX), Y(layer.MasterY), X(layer.MasterX + Master(set, part.Width)), Y(layer.MasterY + Master(set, part.Height)));
+                layerDraws.Add(Draw(part, edges, rect));
+            }
+        }
+        Lay(spec.TopLayers, topLayerParts, topPart, topRect);
+        Lay(spec.BottomLayers, bottomLayerParts, bottomPart, bottomRect);
+        return new(new SteamwovenKitScreenPlan(Draw(topPart, topRect, topRect), bodyDraws[0], Draw(bottomPart, bottomRect, bottomRect), bodyDraws.Count > 1 ? bodyDraws.Skip(1).ToList() : null, layerDraws.Count > 0 ? layerDraws : null), []);
     }
 
     /// <summary>ARC-UI-3038 (AC2): the original arts a two-strip screen draws itself as its backdrop: its two strips and its body background, or none while the kit has the whole screen (the screen's own content, the preview, the list,

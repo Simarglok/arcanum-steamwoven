@@ -51,14 +51,59 @@ class HardwareBuildTests(unittest.TestCase):
         self.assertEqual(image.pixel(5, 0)[0], 30)
         self.assertEqual(image.pixel(6, 0), (100, 90, 80, 255))
 
+    def test_brass_match_brings_the_coloured_pixels_to_the_target_and_leaves_grey_and_clear_pixels(self):
+        import tempfile
+        image = flat(200, 1, (200, 150, 40, 255))   # a saturated brass
+        for x in range(0, 10):
+            image.data[x * 4:x * 4 + 4] = bytes((90, 90, 90, 255))   # grey steel
+        for x in range(10, 20):
+            image.data[x * 4:x * 4 + 4] = bytes((0, 0, 0, 0))   # clear
+        for x in range(20, 100):
+            image.data[x * 4:x * 4 + 4] = bytes((170, 130, 60, 255))   # a second, duller brass
+        image.data[100 * 4:100 * 4 + 4] = bytes((200, 150, 40, 128))   # a fringe pixel: not counted, still shifted
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "brass.png"
+            pngio.write(path, image)
+            report = hb.brass_match(path, (50.0, 30.0, 78.0))
+            out = pngio.read(path)
+            again = hb.brass_match(path, (50.0, 30.0, 78.0))
+        self.assertAlmostEqual(report["after"][0], 50.0, delta=2.5)
+        self.assertAlmostEqual(report["after"][1], 30.0, delta=2.5)
+        self.assertAlmostEqual(report["after"][2], 78.0, delta=2.0)
+        self.assertEqual(out.pixel(0, 0)[:3], (90, 90, 90))   # steel unchanged
+        self.assertEqual(out.pixel(15, 0)[3], 0)               # clear stays clear
+        self.assertNotEqual(out.pixel(100, 0)[:3], (200, 150, 40))   # the fringe follows the body
+        self.assertEqual(out.pixel(100, 0)[3], 128)
+        self.assertAlmostEqual(again["after"][1], report["after"][1], delta=0.6)   # a second pass changes nothing noticeable
+
+    def test_brass_match_takes_the_short_way_round_the_hue_circle_and_refuses_a_part_without_brass(self):
+        import tempfile
+        image = flat(100, 1, (60, 150, 90, 255))   # a green: its hue is far from the target's
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "green.png"
+            pngio.write(path, image)
+            report = hb.brass_match(path, (50.0, 30.0, -170.0))
+            grey = flat(100, 1, (90, 90, 90, 255))
+            pngio.write(path, grey)
+            self.assertEqual(hb.brass_match(path, (50.0, 30.0, 78.0)), {})   # no coloured pixels: nothing to match, nothing divided by zero
+        self.assertAlmostEqual(report["after"][2], -170.0, delta=3.0)
+
     def test_every_part_stands_on_the_grid_in_its_strip_and_the_draw_order_is_the_table_s(self):
         self.assertEqual(sorted(hb.HARDWARE_ORDER), sorted(hb.PARTS))
         for part_id, part in hb.PARTS.items():
             self.assertIn(part["strip"], hb.STRIPS, part_id)
             self.assertTrue(part["instances"], part_id)
+            for strip, *_ in part["instances"]:
+                self.assertIn(strip, hb.STRIPS, part_id)
         self.assertEqual(hb.layers_of("board.inttop")[0], "hardware.hud_plate_left")
-        self.assertEqual(set(hb.layers_of("board.inttop")) | set(hb.layers_of("board.intbotom")), set(hb.PARTS))
+        self.assertEqual(set().union(*(hb.layers_of(strip) for strip in hb.STRIPS)), set(hb.PARTS))
+        # ARC-UI-3260: the two HUD strips and the two menu strips are made of their own parts, except the rivet the top strips share
+        shared = set(hb.layers_of("board.inttop")) & set(hb.layers_of("board.charcreatetopbar"))
+        self.assertEqual(shared, {"hardware.hud_top_rivet"})
         self.assertFalse(set(hb.layers_of("board.inttop")) & set(hb.layers_of("board.intbotom")))
+        self.assertFalse(set(hb.layers_of("board.charcreatetopbar")) & set(hb.layers_of("board.charcreatebottombar")))
+        self.assertEqual(hb.layers_of("board.charcreatetopbar"), ["hardware.menu_plate_left", "hardware.menu_plate_right", "hardware.hud_top_rivet"])   # the rivets stand over the plates
+        self.assertEqual(hb.layers_of("board.charcreatebottombar"), ["hardware.menu_window", "hardware.menu_ring"])
 
     def test_the_manifest_holds_the_hardware_parts_and_the_strips_list_them_as_layers(self):
         kit = json.loads((ROOT / "tools" / "steamwoven_ui" / "kit.json").read_text(encoding="utf-8"))
@@ -68,16 +113,18 @@ class HardwareBuildTests(unittest.TestCase):
             self.assertEqual(parts[part_id]["status"], "master", part_id)
         for strip in hb.STRIPS:
             layers = parts[strip].get("layers", [])
+            self.assertEqual([layer for layer in layers if layer.startswith("hardware.")], hb.layers_of(strip), strip)
             for part_id in hb.layers_of(strip):
                 self.assertIn(part_id, layers, strip)
 
     def test_the_runtime_table_lays_each_part_as_often_as_the_batch_stands_it_and_in_the_same_order(self):
         text = COMPOSER.read_text(encoding="utf-8")
-        for marker, strip in (("[AreaBarStrip.Top]", "board.inttop"), ("[AreaBarStrip.Bottom]", "board.intbotom")):
+        for marker, strip in (("[AreaBarStrip.Top]", "board.inttop"), ("[AreaBarStrip.Bottom]", "board.intbotom"), ("MenuTopLayers { get; } =", "board.charcreatetopbar"), ("MenuBottomLayers { get; } =", "board.charcreatebottombar")):
             start = text.index(marker)
-            block = text[start:text.index("]),", start)]
-            laid = re.findall(r'new\("(hardware\.hud_[a-z_]+)", (\d+), (\d+)\)', block)
-            self.assertEqual([part for part, _, _ in laid], [part for part in hb.layers_of(strip) for _ in hb.PARTS[part]["instances"]], strip)
+            block = text[start:text.index("];" if "Layers {" in marker else "]),", start)]
+            laid = re.findall(r'new\("(hardware\.[a-z_]+)", (\d+), (\d+)\)', block)
+            expected = [part for part in hb.layers_of(strip) for instance in hb.PARTS[part]["instances"] if instance[0] == strip]
+            self.assertEqual([part for part, _, _ in laid], expected, strip)
             for _, x, y in laid:
                 self.assertEqual((int(x) % hb.GRID, int(y) % hb.GRID), (0, 0), strip)
 

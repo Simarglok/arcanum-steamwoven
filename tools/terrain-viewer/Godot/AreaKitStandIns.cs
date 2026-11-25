@@ -251,6 +251,9 @@ internal static class AreaKitStandIns
     /// <summary>The logbook (arts 264 and 260): nothing the kit's two pieces do not carry (the pages are the book's own picture); only the mark for the smoke.</summary>
     internal static void Logbook() => Drawn.Add(SteamwovenKitWindow.Logbook);
 
+    /// <summary>ARC-UI-3260: the black inside of the kit's message window frame, in the 800 × 600 screen's units (the part of <see cref="AreaSaveListArtLayout.MessageBox"/> the frame leaves free).</summary>
+    internal static (float X, float Y, float Width, float Height) MessageField { get; } = (205f, 500f, 390f, 90f);
+
     /// <summary>
     /// ARC-UI-3038: the save and load screen (art 745 and the strip 335, census M05, M06): the preview's black field (the window's (281, 55) 468 × 300, on the 800 × 600 screen at y 96), which the original's background leaves as a hole over the
     /// screen's black and the info texts, the portrait and the picture stand on, and the message box in the middle of the bottom strip (the screen's black below the strip art's 47 rows: the save's details and the overwrite and delete
@@ -261,7 +264,7 @@ internal static class AreaKitStandIns
         DrawnScreens.Add(SteamwovenKitScreen.SaveLoad);
         var (x, y, width, height) = AreaSaveListArtLayout.Preview;
         Field(canvas, 1, x, y, width, height);
-        var (bx, by, bw, bh) = AreaSaveListArtLayout.MessageBox;
-        Field(canvas, 1, bx, by, bw, bh);
+        // ARC-UI-3260: the kit's frame of the message window (the bottom strip's `hardware.menu_window`) stands round the box, so the black is the frame's inside (master 736, 212 to 2142, 538 on the 3.6 px unit, from the 441 of the strip's top), not the whole box.
+        Field(canvas, 1, MessageField.X, MessageField.Y, MessageField.Width, MessageField.Height, edge: false);
     }
 }
