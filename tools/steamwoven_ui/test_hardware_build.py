@@ -51,6 +51,26 @@ class HardwareBuildTests(unittest.TestCase):
         self.assertEqual(image.pixel(5, 0)[0], 30)
         self.assertEqual(image.pixel(6, 0), (100, 90, 80, 255))
 
+    def test_brass_match_brings_the_coloured_pixels_to_the_target_and_leaves_grey_and_clear_pixels(self):
+        import tempfile
+        image = flat(60, 1, (200, 150, 40, 255))   # a saturated brass
+        for x in range(0, 10):
+            image.data[x * 4:x * 4 + 4] = bytes((90, 90, 90, 255))   # grey steel
+        for x in range(10, 20):
+            image.data[x * 4:x * 4 + 4] = bytes((0, 0, 0, 0))   # clear
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "brass.png"
+            pngio.write(path, image)
+            report = hb.brass_match(path, (50.0, 30.0, 78.0))
+            out = pngio.read(path)
+            again = hb.brass_match(path, (50.0, 30.0, 78.0))
+        self.assertAlmostEqual(report["after"][0], 50.0, delta=2.5)
+        self.assertAlmostEqual(report["after"][1], 30.0, delta=2.5)
+        self.assertAlmostEqual(report["after"][2], 78.0, delta=2.0)
+        self.assertEqual(out.pixel(0, 0)[:3], (90, 90, 90))   # steel unchanged
+        self.assertEqual(out.pixel(15, 0)[3], 0)               # clear stays clear
+        self.assertAlmostEqual(again["after"][1], report["after"][1], delta=0.6)   # a second pass changes nothing noticeable
+
     def test_every_part_stands_on_the_grid_in_its_strip_and_the_draw_order_is_the_table_s(self):
         self.assertEqual(sorted(hb.HARDWARE_ORDER), sorted(hb.PARTS))
         for part_id, part in hb.PARTS.items():

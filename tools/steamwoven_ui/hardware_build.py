@@ -172,7 +172,8 @@ PARTS.update({
     },
     "hardware.menu_window": {
         "sheet": "menu-bottom", "strip": "board.charcreatebottombar", "note": "the thin iron and brass frame of the message window in the middle of the menu screens' bottom strip (its inside is the strip's dark field)",
-        "keep_hole": True, "erase_grow": 3, "shapes": [("rect", 704, 184, 2176, 564), ("-rect", 736, 212, 2142, 538)],
+        "keep_hole": True, "erase_grow": 3, "brass_match": (50.0, 32.0, 78.0),   # the HUD strips' brass (#3259: rings 30 to 36 chroma, hue 76 to 78, L* 45 to 61)
+         "shapes": [("rect", 704, 184, 2176, 564), ("-rect", 736, 212, 2142, 538)],
         "instances": [("board.charcreatebottombar", None, None, False)],
     },
 })
@@ -439,6 +440,39 @@ def solid_body(image: Path, colour: str) -> None:
          str(mask), "-alpha", "off", "-compose", "CopyOpacity", "-composite", "-depth", "8", str(image)])
 
 
+def brass_match(image: Path, target: tuple[float, float, float]) -> dict:
+    """ARC-UI-3260 (owner check): the brass of a part is brought to ONE brass with the HUD strips' (#3259): the coloured pixels (chroma from 12, in full from 24) are shifted in L* by the difference of the class mean to the
+    target's `l`, their chroma is scaled by target `c` over the class mean chroma and their hue turned by the difference of the mean hue to `h` (degrees); texture stays. Returns the class mean before and after."""
+    import math
+    img = pngio.read(image)
+    d = img.data
+
+    def stats() -> tuple[float, float, float, float]:
+        n = sl = sa = sb = 0.0
+        for i in range(0, len(d), 4):
+            if d[i + 3] < 250:
+                continue
+            l, a, b = tone_check._pixel_lab(d[i], d[i + 1], d[i + 2])
+            if (a * a + b * b) ** 0.5 >= TONE_COLOURED[1]:
+                n, sl, sa, sb = n + 1, sl + l, sa + a, sb + b
+        return n, sl / n, math.hypot(sa, sb) / n, math.degrees(math.atan2(sb, sa))
+
+    n, mean_l, mean_c, mean_h = stats()
+    if n < 40:
+        return {}
+    k, dl, dh = target[1] / mean_c, target[0] - mean_l, math.radians(target[2] - mean_h)
+    for i in range(0, len(d), 4):
+        if d[i + 3] == 0:
+            continue
+        l, a, b = tone_check._pixel_lab(d[i], d[i + 1], d[i + 2])
+        w = min(1.0, max(0.0, (math.hypot(a, b) - TONE_COLOURED[0]) / (TONE_COLOURED[1] - TONE_COLOURED[0])))
+        kk, rot = 1 + (k - 1) * w, dh * w
+        a2, b2 = (a * math.cos(rot) - b * math.sin(rot)) * kk, (a * math.sin(rot) + b * math.cos(rot)) * kk
+        d[i], d[i + 1], d[i + 2] = tone_check._from_lab(max(0.0, min(100.0, l + dl * w)), a2, b2)
+    pngio.write(image, img)
+    return {"before": [round(mean_l, 1), round(mean_c, 1), round(mean_h, 1)], "after": [round(v, 1) for v in stats()[1:]]}
+
+
 def blurred_light(image: "pngio.Image", radius: int) -> list[float]:
     """The slow light of a part: the luminance averaged over a box of `radius` px, weighted by alpha (three passes, near a Gaussian), per pixel; 0 where nothing is near."""
     w, h = image.w, image.h
@@ -542,6 +576,8 @@ def cmd_cut(args) -> int:
             run(["magick", str(fitted), "-channel", "A", "-level", "12%,88%", "+channel", str(fitted)])   # the generator's faint haze at the edge: alpha under 12 % is none, over 88 % is full
             if PARTS[part_id].get("gain"):   # the redraw's tone is brought down to the original's (mean luminance, highlights)
                 run(["magick", str(fitted), "-channel", "RGB", "-evaluate", "Multiply", str(PARTS[part_id]["gain"]), "+channel", str(fitted)])
+            if PARTS[part_id].get("brass_match"):
+                print(f"BRASS {part_id}: {brass_match(fitted, PARTS[part_id]['brass_match'])} (L*, chroma, hue) to the HUD strips' brass")
             if PARTS[part_id].get("squeeze"):
                 squeeze_frame(fitted, *PARTS[part_id]["squeeze"])
             if PARTS[part_id].get("darken_neutral"):
