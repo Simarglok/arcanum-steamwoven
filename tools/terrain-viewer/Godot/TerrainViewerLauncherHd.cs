@@ -5,10 +5,11 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-UI-143, ARC-UI-2174: the HD lines (HD Off/On, HD pack, generated interface) on the launcher screen, before the game starts (ARC-UI-146 removed them from the options
+// ARC-UI-143, ARC-UI-2174, ARC-UI-3142: the HD lines (HD Off/On, HD pack, World zoom) on the launcher screen, before the game starts (ARC-UI-146 removed them from the options
 // window). HD is the one saved value (the hd line of arcanum.cfg, ARC-UI-1130; the game settings group): On means the HD interface art and fonts and the relit lighting
 // together, Off is Legacy; a change is saved at once, and the game that Play starts reads it like any start (the pack source from the next start). HD pack only says where
-// the interface pack is read from; the generated interface is experimental and honoured only while HD is On.
+// the interface pack is read from. HD On is the Steamwoven interface (the column, the world zoom, HD fonts, the kit where it exists), HD Off the Original look; the earlier
+// generated-interface choice is retired (ARC-UI-3142: a saved value is read and ignored).
 public partial class TerrainViewerApp
 {
     // What the next start reads for the pack (and the environment overrides of this run), and why a choice was not saved; the screen shows both.
@@ -31,7 +32,7 @@ public partial class TerrainViewerApp
     private void LauncherHdShow()
     {
         if (_launcherPanel is null) return;
-        _launcherPanel.Hd = new LauncherHdLines(_gameSettings.HdInterface, _gameSettings.GeneratedInterface && _gameSettings.HdInterface, _gameSettings.HdPackSource,
+        _launcherPanel.Hd = new LauncherHdLines(_gameSettings.HdInterface, _gameSettings.HdPackSource,
             _launcherHdProblem.Length == 0 ? _launcherHdPackNote : _launcherHdPackNote + " | " + _launcherHdProblem,
             _gameSettings.WorldZoomStep, SteamwovenWorldZoom.Cap(SteamwovenWorldScale()));
     }
@@ -47,17 +48,8 @@ public partial class TerrainViewerApp
 
     private void LauncherHd(bool on)
     {
-        // The generated interface is honoured only while HD is On, so Off clears it (the settings group never holds it without HD).
-        SaveGameSettings(_gameSettings with { HdInterface = on, GeneratedInterface = _gameSettings.GeneratedInterface && on });
+        SaveGameSettings(_gameSettings with { HdInterface = on });
         GD.Print($"ARC-UI-2174 launcher HD={(on ? "On" : "Off")}");
-        LauncherHdProblem(GameSettingsProblem());
-    }
-
-    private void LauncherHdGenerated(bool on)
-    {
-        if (on && !_gameSettings.HdInterface) return; // the row is off while HD is Off
-        SaveGameSettings(_gameSettings with { GeneratedInterface = on });
-        GD.Print($"ARC-UI-2174 launcher generated interface={(on ? "On" : "Off")}");
         LauncherHdProblem(GameSettingsProblem());
     }
 

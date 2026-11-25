@@ -30,7 +30,7 @@ public static class SteamwovenHud
     /// <summary>The layout options the viewer runs with: the fitted column (ARC-UI-2926: the only layout).</summary>
     public static SteamwovenLayoutOptions Options { get; set; } = SteamwovenLayoutOptions.Default;
 
-    /// <summary>True while the older generated-interface smokes run: they check the whole-factor geometry of the strips, which the Steamwoven layout replaces.</summary>
+    /// <summary>True while the older whole-factor smokes and self-tests run (ARC-UI-3143: HD On is the Steamwoven layout now, so they suspend it): they check the whole-factor geometry of the strips, which the Steamwoven layout replaces.</summary>
     public static bool Suspended { get; set; }
 
     /// <summary>The plan for a window of <paramref name="width"/> × <paramref name="height"/> device pixels, or null where the layout is not supported (below f = 0.25) or <paramref name="options"/> are invalid.</summary>

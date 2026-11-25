@@ -331,7 +331,7 @@ device. Importing the copy on another device is `HdPackImport` (the format page)
 
 ### Which main-menu PNG the game loads (ARC-DEV-343, retired)
 
-None. Until ARC-UI-3003 the viewer read `main-menu-16x9.png` at the root of the active pack and logged an `ARC-DEV-343 main menu backdrop ...` line; the code (`AreaMenuArtView.WidescreenBackground`, `HdPack.ReadMainMenuBackdropReport`) and the log line are gone, and the table-scene menus draw the pack's 4× art (Steamwoven layout) or the original's whole-factor plate (generated interface off). Which *pack* is active is still chosen as described under [HD pack source](#hd-pack-source-arc-dev-350); the startup lines `ARC-RENDER-014 visual profile=... pack=<id> ...` and `ARC-UI-006 ... pack-source=...` say which pack opened.
+None. Until ARC-UI-3003 the viewer read `main-menu-16x9.png` at the root of the active pack and logged an `ARC-DEV-343 main menu backdrop ...` line; the code (`AreaMenuArtView.WidescreenBackground`, `HdPack.ReadMainMenuBackdropReport`) and the log line are gone, and the table-scene menus draw the pack's 4× art (Steamwoven layout) or the original's whole-factor plate (HD off). Which *pack* is active is still chosen as described under [HD pack source](#hd-pack-source-arc-dev-350); the startup lines `ARC-RENDER-014 visual profile=... pack=<id> ...` and `ARC-UI-006 ... pack-source=...` say which pack opened.
 
 ### HD pack source (ARC-DEV-350)
 

@@ -188,10 +188,6 @@ public sealed record AreaGameSettings
     /// redraws and the relit lighting is on, together. The name is the earlier interface switch (ARC-UI-095); the saved line is <c>hd</c>.</summary>
     public bool HdInterface { get; init; }
 
-    /// <summary>ARC-UI-140: the interface draws its generated chrome where a recipe exists (default off; the options line's third value,
-    /// saved with <see cref="HdInterface"/> on so the pictures keep the HD redraws).</summary>
-    public bool GeneratedInterface { get; init; }
-
     /// <summary>ARC-UI-3059: the world's zoom in the Steamwoven look, in whole steps: 0 = automatic (the highest step the window offers), else 1 to 4 (a step above the window's cap reads as the cap, see <see cref="SteamwovenWorldZoom"/>).
     /// Read only while the Steamwoven look is on; the settings line is <c>world zoom</c>.</summary>
     public int WorldZoomStep { get; init; }
@@ -259,13 +255,13 @@ public sealed record AreaGameSettings
     public GameDifficulty SessionDifficulty => Difficulty switch { 0 => GameDifficulty.Easy, 2 => GameDifficulty.Hard, _ => GameDifficulty.Normal };
 }
 
-/// <summary>ARC-UI-013: the preference file's text, <c>{"version":5,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B,"hdPack":"auto|game|custom","hdPackPath":null|"FOLDER","generatedInterface":B}</c>
+/// <summary>ARC-UI-013: the preference file's text, <c>{"version":6,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B,"hdPack":"auto|game|custom","hdPackPath":null|"FOLDER"}</c>
 /// (ARC-UI-021 added the floaters, ARC-UI-095 the HD interface, ARC-DEV-350 the pack source and path, ARC-UI-140 the generated interface);
 /// a version 1 file (the first four) reads with the floaters' defaults, a version 2 file (the first six) with the HD interface off, a
-/// version 3 file (the first seven) with the HD pack source Auto and a version 4 file (the first nine) with the generated interface off. Anything else (another version, a missing, extra or out-of-range value) reads as null; the caller then uses the defaults.</summary>
+/// version 3 file (the first seven) with the HD pack source Auto, a version 4 file (the first nine) as it is, and a version 5 file (those nine and the generated interface of ARC-UI-140) with that value read and ignored (ARC-UI-3142 retired the choice: HD On is the Steamwoven interface). Anything else (another version, a missing, extra or out-of-range value) reads as null; the caller then uses the defaults.</summary>
 public static class AreaGameSettingsCodec
 {
-    public const int Version = 5;
+    public const int Version = 6;
     /// <summary>The longest folder path the file may hold.</summary>
     public const int MaxPath = 1024;
 
@@ -273,7 +269,7 @@ public static class AreaGameSettingsCodec
     {
         ArgumentNullException.ThrowIfNull(settings);
         return string.Create(CultureInfo.InvariantCulture,
-            $"{{\"version\":{Version},\"difficulty\":{settings.Difficulty},\"turnBased\":{(settings.TurnBased ? "true" : "false")},\"autoAttack\":{(settings.AutoAttack ? "true" : "false")},\"floats\":{settings.Floats},\"floatSpeed\":{settings.FloatSpeed},\"hdInterface\":{(settings.HdInterface ? "true" : "false")},\"hdPack\":\"{HdPackSourceResolver.ModeName(settings.HdPackSource)}\",\"hdPackPath\":{(settings.HdPackPath is null ? "null" : JsonSerializer.Serialize(settings.HdPackPath))},\"generatedInterface\":{(settings.GeneratedInterface ? "true" : "false")}}}");
+            $"{{\"version\":{Version},\"difficulty\":{settings.Difficulty},\"turnBased\":{(settings.TurnBased ? "true" : "false")},\"autoAttack\":{(settings.AutoAttack ? "true" : "false")},\"floats\":{settings.Floats},\"floatSpeed\":{settings.FloatSpeed},\"hdInterface\":{(settings.HdInterface ? "true" : "false")},\"hdPack\":\"{HdPackSourceResolver.ModeName(settings.HdPackSource)}\",\"hdPackPath\":{(settings.HdPackPath is null ? "null" : JsonSerializer.Serialize(settings.HdPackPath))}}}");
     }
 
     public static AreaGameSettings? Deserialize(string text)
@@ -284,8 +280,8 @@ public static class AreaGameSettingsCodec
             using var document = JsonDocument.Parse(text);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return null;
-            if (!root.TryGetProperty("version", out var version) || version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var v) || v is not (1 or 2 or 3 or 4 or Version)) return null;
-            var count = v == 1 ? 4 : v == 2 ? 6 : v == 3 ? 7 : v == 4 ? 9 : 10;
+            if (!root.TryGetProperty("version", out var version) || version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var v) || v is not (1 or 2 or 3 or 4 or 5 or Version)) return null;
+            var count = v == 1 ? 4 : v == 2 ? 6 : v == 3 ? 7 : v is 4 or Version ? 9 : 10;
             var names = root.EnumerateObject().Select(p => p.Name).ToArray();
             if (names.Length != count || names.Distinct(StringComparer.Ordinal).Count() != count) return null;
             if (!Int(root, "difficulty", 0, AreaGameSettings.MaxDifficulty, out var d)) return null;
@@ -303,10 +299,9 @@ public static class AreaGameSettingsCodec
             var folder = path.GetString();
             if (folder is not null && (folder.Length == 0 || folder.Length > MaxPath || folder.Contains('\0'))) return null;
             settings = settings with { HdPackSource = source, HdPackPath = folder };
-            if (v == 4) return settings;
-            if (!Bool(root, "generatedInterface", out var generated)) return null;
-            // The generated interface draws through the HD interface, so it is on only with it (the options line writes both).
-            return settings with { GeneratedInterface = generated && settings.HdInterface };
+            if (v is 4 or Version) return settings;
+            // A version 5 file holds the retired generated-interface value: it must still be a boolean, and it is ignored.
+            return Bool(root, "generatedInterface", out _) ? settings : null;
         }
         catch (JsonException) { return null; }
     }
