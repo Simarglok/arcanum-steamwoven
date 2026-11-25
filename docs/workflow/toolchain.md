@@ -1300,6 +1300,29 @@ original (the original's pixels are the stand-in for the non-wood parts), lays t
 Standard-library Python plus ImageMagick (`magick`), no Godot and no `dotnet`, so no launch queue; the tests (`python3 -B -m unittest tools.steamwoven_ui.test_surface_compose tools.steamwoven_ui.test_surface_study`, about 3 s) run in the batched `tools/local_dev/run_tests.py`;
 a real inventory screen takes about 3 minutes. All images stay under `local/steamwoven-ui/`.
 
+
+## Steamwoven strips and end caps, batch B-BOARD (ARC-UI-2927)
+
+Production of the four strip masters (`board.inttop`, `board.intbotom`, `board.charcreatetopbar`, `board.charcreatebottombar`, 2880 x 150 and 2880 x 570 px) and the four end caps (`cap.*`, 72 x 150 and 72 x 570 px) of the Steamwoven kit
+([TRD](../ui/steamwoven-interface-trd.md), SWI-LAY-12). Steps, all local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick, no Godot and no `dotnet`, so no launch queue:
+
+```sh
+python3 -B tools/steamwoven_ui/board_build.py refs                    # the originals at the master size, the references of the prompts (board-*, cap-*)
+python3 -B tools/steamwoven_ui/prompt_library.py inbox B-BOARD        # the inbox: prompts, references, batch.json
+python3 -B tools/steamwoven_ui/codex_batch.py run B-BOARD --crop-band # the owner's Codex subscription (gpt-6.1-sol); a result the runner refuses stays in codex-work/B-BOARD/
+python3 -B tools/steamwoven_ui/board_build.py crop                    # the strip band of a refused padded canvas into the outbox (vertical stretch recorded, at most 12 %)
+python3 -B tools/steamwoven_ui/board_build.py strips [--dry-run]      # compose (surface_compose.py build per pair), gate, original alpha, fit -> masters/ and provenance/fit/
+python3 -B tools/steamwoven_ui/board_build.py caps --variant plain    # the cap bars keyed from the sheet, the soft shadow, mirror, fit (--soft-shadow)
+```
+
+The strip heights are the grid ones, 150 and 570 px (decided by this batch, [TRD](../ui/steamwoven-interface-trd.md#open-questions)). Each strip is one Codex item at the generator's size (method A); the generator draws a 19.2:1 strip at about 20:1 inside a
+padded canvas (the play screen's top strip is therefore asked at 2880 x 144 and resized back to 150 px), so the band is cropped and stretched by a recorded few percent (only the wood is taken from it). `surface_compose.py build` puts the generated wood into the original's wood, every other pixel (metal, rails, sockets, the
+original's rows of dots) stays the original's as the stand-in of the hardware batch ([#2481](https://github.com/Simarglok/arcanum-steamwoven/issues/2481)), and the original's transparent openings (sockets, portrait holes) stay transparent (alpha of the original frame).
+The strips of one pair stand beside the inventory screen's window zone in the compose step, a neighbour that is not their own, so the seam at a join is gated **not worse than the same join of the original composition** (the 1.8 / 1.5 seam of the
+window batches is measured there, with the generated window zone) and the tone check must pass; all numbers are in `provenance/surface/board-<pair>.json` (`board_gate`). A cap is the brass bar of one strip end (24 px, drawn by Codex on a flat
+ground and keyed by trimming) with a soft shadow laid outward by the tool (48 px, dark brown, cosine fade, alpha 0.55 at the bar), the right cap its mirror; `fit.py --soft-shadow` does not count the shadow's semi-transparent pixels away from the art as orphans.
+Tests: `python3 -B -m unittest tools.steamwoven_ui.test_board_build tools.steamwoven_ui.test_fit` (about 3 s; the first also runs in `tools/local_dev/run_tests.py`).
+
 ## Controller test evidence summariser (ARC-GPAD-1376)
 
 [`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the
