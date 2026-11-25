@@ -93,7 +93,20 @@ public partial class TerrainViewerApp
         if (!ran || offered is null) return new { Script = speaker.ScriptId, Result = ran ? "NO-DIALOG" : "REFUSED" };
         AreaSmokeFrame();
         if (!ConversationOpen) { GD.Print("ARC-WORLD-2358 talk-teleport smoke FAIL: the deferred call's conversation did not open: " + _conversationNotice); throw new InvalidOperationException("AREA_TALK_TELEPORT_SMOKE_FAILED"); }
+        // ARC-SCRIPT-2966 (0x567460): a second call that asks for a conversation while one is open is refused silently and nothing asks again (the original refuses at its dialog mode 3), the open one stays.
+        var secondRan = AreaEvents.RunScriptCall(new(speaker.ScriptId, 0, pc, talker)) && host.LastCallDialog is not null;
+        AreaSmokeFrame();
+        if (!secondRan || !ConversationOpen || _callDialogs.Count != 0) { GD.Print($"ARC-SCRIPT-2966 talk-teleport smoke FAIL: a call met an open conversation (ran {secondRan}, open {ConversationOpen}, queued {_callDialogs.Count})"); throw new InvalidOperationException("AREA_TALK_TELEPORT_SMOKE_FAILED"); }
         EndConversation();
-        return new { Script = speaker.ScriptId, Result = "OPENED", Node = offered.Node };
+        // ARC-SCRIPT-2966: a talk a call asked for behind a panel of the viewer (the Esc menu here; the original has none, it opens the dialog over any mode) waits for the panel and opens when it is gone.
+        var heldRan = AreaEvents.RunScriptCall(new(speaker.ScriptId, 0, pc, talker)) && host.LastCallDialog is not null;
+        OpenMainMenu(MainMenuTexts(_arguments ?? _launchArguments!), AreaMenuWindow.InPlay);
+        AreaSmokeFrame();
+        var heldBehind = heldRan && MainMenuOpen && !ConversationOpen && _callDialogs.Count == 1;
+        EndMainMenu("call-dialog smoke");
+        AreaSmokeFrame();
+        if (!heldBehind || !ConversationOpen || _callDialogs.Count != 0) { GD.Print($"ARC-SCRIPT-2966 talk-teleport smoke FAIL: a call's talk behind the Esc menu (held {heldBehind}, open {ConversationOpen}, queued {_callDialogs.Count}): " + _conversationNotice); throw new InvalidOperationException("AREA_TALK_TELEPORT_SMOKE_FAILED"); }
+        EndConversation();
+        return new { Script = speaker.ScriptId, Result = "OPENED", Node = offered.Node, SecondDropped = true, HeldBehindMenu = true };
     }
 }

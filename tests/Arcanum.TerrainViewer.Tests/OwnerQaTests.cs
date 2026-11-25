@@ -21,7 +21,7 @@ public sealed class OwnerQaTests
         if (Directory.Exists(_folder)) Directory.Delete(_folder, recursive: true);
     }
 
-    private void WriteChecks(string commit = "abc1234")
+    private void WriteChecks(string commit = "abc1234", DateTime? written = null)
     {
         var steps = new[]
         {
@@ -30,7 +30,9 @@ public sealed class OwnerQaTests
             new { id = "ARC-UI-200#1", section = "ARC-UI-200 - Second", step = "Open the window.", expected = "It opens.", status = "open" },
             new { id = "not-an-id", section = "x", step = "x", expected = "x", status = "open" },
         };
-        File.WriteAllText(Path.Combine(_folder, OwnerQaFiles.ChecksFile), JsonSerializer.Serialize(new { version = 1, commit, steps }));
+        File.WriteAllText(Path.Combine(_folder, OwnerQaFiles.ChecksFile), written is { } at
+            ? JsonSerializer.Serialize(new { version = 1, commit, ts = at.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture), steps })
+            : JsonSerializer.Serialize(new { version = 1, commit, steps }));
     }
 
     private string[] ResultLines() => File.ReadAllLines(Path.Combine(_folder, OwnerQaFiles.ResultsFile));
@@ -44,6 +46,81 @@ public sealed class OwnerQaTests
         Assert.AreEqual("def5678", commit);
         CollectionAssert.AreEqual(new[] { "ARC-DEV-100#1", "ARC-DEV-100#2", "ARC-UI-200#1" }, steps.Select(step => step.Id).ToArray());
         Assert.AreEqual("It opens.", steps[2].Expected);
+    }
+
+    [TestMethod]
+    public void A_list_older_than_the_limit_is_refused_with_its_age_and_the_command_that_rebuilds_it()
+    {
+        WriteChecks("old1234", Now.AddDays(-10));
+        var (steps, commit, problem) = OwnerQaFiles.ReadChecks(_folder, Now);
+        Assert.AreEqual(0, steps.Count);
+        Assert.AreEqual("old1234", commit);
+        StringAssert.Contains(problem, "10 days old");
+        StringAssert.Contains(problem, "./arcanum qa refresh");
+        Assert.IsNull(OwnerQaFiles.ReadChecks(_folder, Now.AddDays(-10).AddHours(1)).Problem, "a list inside the limit reads");
+        Assert.IsNull(OwnerQaFiles.ReadChecks(_folder).Problem, "without a clock there is no age rule");
+        // a list with no ts is aged by its file time
+        WriteChecks("nots123");
+        File.SetLastWriteTimeUtc(Path.Combine(_folder, OwnerQaFiles.ChecksFile), Now.AddDays(-5));
+        StringAssert.Contains(OwnerQaFiles.ReadChecks(_folder, Now).Problem, "5 days old");
+    }
+
+    [TestMethod]
+    public void A_stale_list_gives_no_current_step_and_clears_the_file_ctrl_b_reads()
+    {
+        WriteChecks("old1234", DateTime.UtcNow.AddDays(-10));
+        var active = Path.Combine(_folder, BugReportCheck.FileName);
+        File.WriteAllText(active, "ARC-DEV-100#1\n");
+        var session = new OwnerQaSession(_folder, "b");
+        StringAssert.Contains(session.Problem, "days old");
+        Assert.AreEqual(0, session.Steps.Count);
+        Assert.IsNull(session.CurrentId);
+        Assert.IsFalse(File.Exists(active), "a step of an old list is not left for Ctrl+B");
+        Assert.IsNotNull(session.SetCurrent("ARC-DEV-100#1"), "an unknown step: the list is empty");
+        Assert.IsFalse(File.Exists(active));
+        // a fresh list brings the steps back
+        WriteChecks("new1234", DateTime.UtcNow);
+        session.Reload();
+        Assert.IsNull(session.Problem);
+        Assert.AreEqual("ARC-DEV-100#1", session.CurrentId);
+    }
+
+    [TestMethod]
+    public void A_report_is_tagged_only_with_a_live_unanswered_step_of_a_fresh_list()
+    {
+        var active = Path.Combine(_folder, BugReportCheck.FileName);
+        var now = DateTime.UtcNow;
+        File.WriteAllText(active, "ARC-DEV-100#1\n");
+        Assert.AreEqual("ARC-DEV-100#1", OwnerQaFiles.CheckForReport(active, now), "a bare file with no list beside it: nothing to judge by");
+        WriteChecks("abc1234", now);
+        Assert.AreEqual("ARC-DEV-100#1", OwnerQaFiles.CheckForReport(active, now), "fresh list, open step");
+        // an answer of the last 12 hours still tags (mark, then describe with Ctrl+B); one of an earlier day does not
+        Assert.IsNull(OwnerQaFiles.RecordReportFor(_folder, "ARC-DEV-100#1", "2026-11-15_10-00-00", "", "b", now));
+        Assert.AreEqual("ARC-DEV-100#1", OwnerQaFiles.CheckForReport(active, now), "answered a moment ago");
+        Assert.IsNull(OwnerQaFiles.CheckForReport(active, now.AddHours(13)), "answered by a report 13 hours ago");
+        Assert.IsNull(OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100#1", "open", "", null, "b", now), "reopened");
+        Assert.AreEqual("ARC-DEV-100#1", OwnerQaFiles.CheckForReport(active, now));
+        Assert.IsNull(OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100#1", "same", "", null, "b", now.AddDays(-2)));
+        Assert.IsNull(OwnerQaFiles.CheckForReport(active, now), "answered by a mark two days ago");
+        // answered in the list itself
+        File.WriteAllText(active, "ARC-DEV-100#2\n");
+        Assert.IsNull(OwnerQaFiles.CheckForReport(active, now), "`same` in the list");
+        // a step the list does not have (an earlier list's step)
+        File.WriteAllText(active, "ARC-DEV-352#2\n");
+        Assert.IsNull(OwnerQaFiles.CheckForReport(active, now), "not in the list");
+        // a stale list
+        File.WriteAllText(active, "ARC-UI-200#1\n");
+        Assert.AreEqual("ARC-UI-200#1", OwnerQaFiles.CheckForReport(active, now));
+        WriteChecks("old1234", now.AddDays(-10));
+        Assert.IsNull(OwnerQaFiles.CheckForReport(active, now), "stale list");
+        // an unreadable list and a file of the day before
+        File.WriteAllText(Path.Combine(_folder, OwnerQaFiles.ChecksFile), "{ not json");
+        Assert.IsNull(OwnerQaFiles.CheckForReport(active, now), "unreadable list");
+        WriteChecks("abc1234", now);
+        File.SetLastWriteTimeUtc(active, now.AddHours(-13));
+        Assert.IsNull(OwnerQaFiles.CheckForReport(active, now), "the active file is older than 12 hours");
+        Assert.IsNull(OwnerQaFiles.CheckForReport(null, now));
+        Assert.IsNull(OwnerQaFiles.CheckForReport(Path.Combine(_folder, "missing.txt"), now));
     }
 
     [TestMethod]

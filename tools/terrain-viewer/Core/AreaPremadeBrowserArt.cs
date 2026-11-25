@@ -227,9 +227,9 @@ public sealed record AreaPremadeBrowserArtContent(IReadOnlyDictionary<int, AreaI
     private bool Ready(IReadOnlyList<int> numbers) => numbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
         && load.Frames.Count > 0) && MainMenu is not null && Stats is not null && Backgrounds is not null;
 
-    /// <summary>Every art either character window draws (ARC-UI-068: one read serves both; ARC-UI-069: and the opening shop).</summary>
+    /// <summary>Every art either character window draws (ARC-UI-068: one read serves both; ARC-UI-069: and the opening shop; ARC-UI-3120: and the message window of the editor and the shop).</summary>
     public static IReadOnlyList<int> AllArtNumbers { get; } =
-        [.. AreaPremadeBrowserArtLayout.ArtNumbers.Union(AreaNewCharacterArtLayout.ArtNumbers).Union(AreaShopArtLayout.ArtNumbers)];
+        [.. AreaPremadeBrowserArtLayout.ArtNumbers.Union(AreaNewCharacterArtLayout.ArtNumbers).Union(AreaShopArtLayout.ArtNumbers).Union(AreaMessageLayout.MenuArtNumbers)];
 
     public AreaArtFont? TextFont => ArtReady || NewCharacterArtReady ? new(Art[AreaPremadeBrowserArtLayout.TextFontArt].Frames) : null;
     public AreaArtFont? NameFont => ArtReady || NewCharacterArtReady ? new(Art[AreaPremadeBrowserArtLayout.NameFontArt].Frames) : null;

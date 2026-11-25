@@ -30,12 +30,15 @@ public partial class TerrainViewerApp
         var art = _premadeArtContent.Art;
         // ARC-UI-068: the new-character window's art comes with the same read.
         var frames = AreaPremadeBrowserArtContent.AllArtNumbers.Where(number => number is not (AreaPremadeBrowserArtLayout.TextFontArt or AreaPremadeBrowserArtLayout.NameFontArt)
-                && art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready)
+                && !AreaMessageLayout.MenuArtNumbers.Contains(number) && art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready)
             .ToDictionary(number => number, number => art[number].Frames.Select(frame => (Texture2D)PremultipliedTexture(frame)).ToArray());
         // ARC-UI-070: the fonts drawn by the shared art-text draw (MW31).
         panel.SetPremadeArt(frames, new(new AreaArtFontFace(art[AreaPremadeBrowserArtLayout.TextFontArt].Frames),
                 new AreaArtFontFace(art[AreaPremadeBrowserArtLayout.NameFontArt].Frames)),
             _premadeArtContent.ArtReady, _premadeArtContent.NewCharacterArtReady, _premadeArtContent.ShopArtReady);
+        // ARC-UI-3120: the message window's arts (its background and the entries' icons) as the game bar's window draws them (not premultiplied: the view blends plainly).
+        panel.SetMessageArt(AreaMessageLayout.MenuArtNumbers.Where(number => art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0)
+            .ToDictionary(number => number, number => art[number].Frames.Select(frame => InterfaceHd.Texture(frame)).ToArray()));
         GD.Print($"ARC-UI-066 browser art ready {_premadeArtContent.Detail}; browser={_premadeArtContent.ArtReady} new-character={_premadeArtContent.NewCharacterArtReady} "
             + $"shop={_premadeArtContent.ShopArtReady}; "
             + $"ms={Time.GetTicksMsec() - started}");
