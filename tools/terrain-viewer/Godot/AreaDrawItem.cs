@@ -14,8 +14,13 @@ public partial class AreaDrawItem : Node2D
         shader_type canvas_item;
         render_mode unshaded, blend_mix;
         uniform sampler2D index_rows : filter_nearest, repeat_disable;
+        // ARC-RENDER-3416: screen_start is the item's first screen pixel counted from the view's whole origin pixel (view_state texel 1),
+        // so a whole-pixel camera move leaves it as it is.
         uniform ivec2 screen_start;
         uniform ivec2 screen_size;
+        // ARC-RENDER-3416: what moves with the camera and the carried lights, one texture for all items of a view (AreaViewState):
+        // texel 0 the raster (canvas origin and zoom), texel 1 the whole pixels of that origin, texel 2 the carried lattice.
+        uniform sampler2D view_state : filter_nearest, repeat_disable;
         uniform float body_alpha = 1.0;
         uniform vec3 ambient = vec3(1.0);
         // ARC-RENDER-011 wall fade: alpha at the left and right drawn edges, linear across the frame width.
@@ -27,10 +32,9 @@ public partial class AreaDrawItem : Node2D
         uniform int fade_scale = 1;
         uniform int fade_start = 0;
         // ARC-RENDER-012 local light: 0 constant ambient, 1 horizontal two-colour gradient (walls),
-        // 2 terrain lattice. raster = canvas origin and zoom, item_rect = world destination.
+        // 2 terrain lattice. view_raster() = canvas origin and zoom, item_rect = world destination.
         uniform int light_mode = 0;
         uniform vec3 ambient_right = vec3(1.0);
-        uniform vec4 raster = vec4(0.0, 0.0, 1.0, 1.0);
         uniform vec4 item_rect = vec4(0.0, 0.0, 1.0, 1.0);
         // ARC-RENDER-018 wading: destination rows at or below item_rect's bottom minus wade_rows take wade_alpha,
         // which replaces body_alpha and the wall fade there; 0 rows = not wading.
@@ -45,8 +49,9 @@ public partial class AreaDrawItem : Node2D
         // separate from the map's lattice; a critter's light may be a dark one (flag 0x2), so it has darker sums as well.
         uniform sampler2D carry_lighter : filter_nearest, repeat_disable;
         uniform sampler2D carry_darker : filter_nearest, repeat_disable;
-        uniform ivec4 carry_lattice = ivec4(0);
-        vec3 lattice_node(ivec2 node) {
+        uniform bool carried = false;
+        vec4 view_raster() { return texelFetch(view_state, ivec2(0, 0), 0); }
+        vec3 lattice_node(ivec2 node, ivec4 carry_lattice) {
             vec3 plus = vec3(0.0);
             vec3 minus = vec3(0.0);
             ivec2 p = node - lattice.xy;
@@ -63,16 +68,18 @@ public partial class AreaDrawItem : Node2D
         }
         vec3 light_tint(vec2 frag) {
             if (light_mode == 0) return ambient;
+            vec4 raster = view_raster();
             vec2 world = (frag - raster.xy) / raster.zw;
             if (light_mode == 1) return mix(ambient, ambient_right, clamp((world.x - item_rect.x) / max(item_rect.z - 1.0, 1.0), 0.0, 1.0));
             vec2 g = world / vec2(40.0, 20.0);
             ivec2 n = ivec2(floor(g));
             vec2 f = g - floor(g);
-            return mix(mix(lattice_node(n), lattice_node(n + ivec2(1, 0)), f.x),
-                mix(lattice_node(n + ivec2(0, 1)), lattice_node(n + ivec2(1, 1)), f.x), f.y);
+            ivec4 carry = carried ? ivec4(texelFetch(view_state, ivec2(2, 0), 0)) : ivec4(0);
+            return mix(mix(lattice_node(n, carry), lattice_node(n + ivec2(1, 0), carry), f.x),
+                mix(lattice_node(n + ivec2(0, 1), carry), lattice_node(n + ivec2(1, 1), carry), f.x), f.y);
         }
         void fragment() {
-            ivec2 p = ivec2(FRAGCOORD.xy) - screen_start;
+            ivec2 p = ivec2(FRAGCOORD.xy) - ivec2(texelFetch(view_state, ivec2(1, 0), 0).xy) - screen_start;
             if (any(lessThan(p, ivec2(0))) || any(greaterThanEqual(p, screen_size))) discard;
             ivec2 x = ivec2(round(texelFetch(index_rows, ivec2(p.x, 0), 0).rg * 255.0));
             ivec2 y = ivec2(round(texelFetch(index_rows, ivec2(p.y, 1), 0).rg * 255.0));
@@ -88,7 +95,7 @@ public partial class AreaDrawItem : Node2D
                 float u = fade_flip ? 1.0 - uv.x : uv.x;
                 alpha *= mix(mix(corners.x, corners.y, u), mix(corners.w, corners.z, u), uv.y);
             }
-            if (wade_rows > 0 && (FRAGCOORD.y - raster.y) / raster.w >= item_rect.y + item_rect.w - float(wade_rows)) alpha = wade_alpha;
+            if (wade_rows > 0 && (FRAGCOORD.y - view_raster().y) / view_raster().w >= item_rect.y + item_rect.w - float(wade_rows)) alpha = wade_alpha;
             vec4 texel = texelFetch(TEXTURE, ivec2(sx, sy), 0);
             COLOR = BODY_COLOR;
         }
@@ -110,28 +117,20 @@ public partial class AreaDrawItem : Node2D
         .Replace("BODY_COLOR", AreaRelight.BlendColor, StringComparison.Ordinal).Replace("blend_mix", blend, StringComparison.Ordinal);
     private static readonly Lazy<Shader> RelitNormalShader = new(() => { AreaRelight.EnsureRegistered(); return new Shader { Code = RelitCode("blend_mix") }; });
     private static readonly Lazy<Shader> RelitAddShader = new(() => { AreaRelight.EnsureRegistered(); return new Shader { Code = RelitCode("blend_add") }; });
-    private ShaderMaterial? _material;
-    private (bool Additive, bool Multiply, int Alpha, int WadeRows)? _materialState;
-    private Color? _ambientState;
-    private Color? _weightState;
-    private (AreaWallFade Fade, int Width, bool Flip, int Scale, int Start)? _fadeState;
-    private (int Mode, Color Right, AreaLatticeBinding? Lattice, AreaCarriedBinding? Carried, TerrainRect Rect, Vector4 Raster)? _lightState;
-    private ImageTexture? _mapping;
-    private AreaMappingKey? _key;
-    private (Transform2D Transform, Rect2I Envelope, TerrainRect Source, TerrainRect Destination, bool X, bool Y)? _keyed;
+    // ARC-RENDER-3416: everything the engine holds for the drawn command; the canvas moves it with the command from node to node.
+    private AreaItemState _s = new();
     private AreaMappingCache? _ownMappings;
-    private (Transform2D Transform, TerrainRect Source, TerrainRect Destination, bool X, bool Y, Vector2I Size)? _state;
-    private Rect2 _primitive;
+    private AreaViewState? _ownView;
     private AreaActorGuide? _guide;
-    // ARC-RENDER-3362: what the last full preparation read, and what the last draw put on the canvas.
-    private Prepared? _prepared;
+    // ARC-RENDER-3362: what the last draw put on the canvas.
     private (ImageTexture Frame, Rect2 Primitive, bool Mapped, ActorDiagnosticDrawCommand? Actor, bool Guide)? _drawn;
 
     // Everything PrepareMapping reads. An item whose inputs are those of its last full preparation sends nothing to the engine again; only its index row is asked
-    // for, so the shared cache keeps it. A frame holds thousands of items, and a walking critter changes only a few of them.
-    private readonly record struct Prepared(ImageTexture Frame, int HdScale, bool Actor, TerrainRect Source, TerrainRect Destination, bool FlipX, bool FlipY,
-        bool Additive, bool Multiply, int Alpha, int WadeRows, Color Ambient, Color AmbientRight, Color? Weight, AreaLatticeBinding? Lattice, AreaCarriedBinding? Carried,
-        int RelightKind, Vector4? Corners, AreaWallFade Fade, bool Relit, Transform2D Transform, Vector2I Viewport);
+    // for, so the shared cache keeps it. A frame holds thousands of items, and a walking critter changes only a few of them. ARC-RENDER-3416: the same holds
+    // when only the transform differs by a whole-pixel camera move; the carried lattice's place is in the view state, so only its textures are read here.
+    internal readonly record struct Prepared(ImageTexture Frame, int HdScale, bool Actor, TerrainRect Source, TerrainRect Destination, bool FlipX, bool FlipY,
+        bool Additive, bool Multiply, int Alpha, int WadeRows, Color Ambient, Color AmbientRight, Color? Weight, AreaLatticeBinding? Lattice,
+        ImageTexture? CarryLighter, ImageTexture? CarryDarker, int RelightKind, Vector4? Corners, AreaWallFade Fade, bool Relit, Transform2D Transform, Vector2I Viewport);
 
     // The uniform names as engine names, made once: a string argument made and freed a StringName at every call. Made on first use, so the class loads without an engine.
     private static class Uniform
@@ -139,8 +138,8 @@ public partial class AreaDrawItem : Node2D
         internal static readonly StringName BodyAlpha = "body_alpha", WadeRows = "wade_rows", WadeAlpha = "wade_alpha", Ambient = "ambient", Fade = "fade",
             FadeWidth = "fade_width", FadeFlip = "fade_flip", FadeScale = "fade_scale", FadeStart = "fade_start", CornerFade = "corner_fade", Corners = "corners",
             RelightKind = "relight_kind", RelightScale = "relight_scale", RelightWeight = "relight_weight", LightMode = "light_mode", AmbientRight = "ambient_right",
-            Raster = "raster", ItemRect = "item_rect", LightLighter = "light_lighter", LightDarker = "light_darker", Lattice = "lattice",
-            CarryLighter = "carry_lighter", CarryDarker = "carry_darker", CarryLattice = "carry_lattice", ScreenStart = "screen_start", ScreenSize = "screen_size",
+            ViewState = "view_state", ItemRect = "item_rect", LightLighter = "light_lighter", LightDarker = "light_darker", Lattice = "lattice",
+            CarryLighter = "carry_lighter", CarryDarker = "carry_darker", Carried = "carried", ScreenStart = "screen_start", ScreenSize = "screen_size",
             IndexRows = "index_rows";
     }
 
@@ -159,7 +158,6 @@ public partial class AreaDrawItem : Node2D
     /// <summary>ARC-RENDER-022: a faded roof's four corner alphas (top left, top right, bottom right, bottom left, 0–1),
     /// interpolated over the frame in drawn orientation; null draws it without (ledger RF2).</summary>
     public Vector4? RoofCorners { get; set; }
-    private (bool On, Vector4 Corners)? _cornerState;
     /// <summary>ARC-RENDER-012: right-end colour of a wall gradient; equal to <see cref="Ambient"/> otherwise.</summary>
     public Color AmbientRight { get; set; } = Colors.White;
     /// <summary>ARC-RENDER-012: the terrain light lattice, or null.</summary>
@@ -170,10 +168,20 @@ public partial class AreaDrawItem : Node2D
     internal int RelightKind { get; set; }
     /// <summary>ARC-RENDER-2298: the ambient the relit night weight reads, the item's colour without the carried lights (null: <see cref="Ambient"/>); read only while the relit look is on.</summary>
     internal Color? WeightAmbient { get; set; }
-    private (bool Relit, int Kind, int Scale)? _relitState;
     /// <summary>Shared index rows owned by the canvas. A standalone item (tests, probes)
     /// keeps a private cache holding only its current row.</summary>
     internal AreaMappingCache? Mappings { get; set; }
+    /// <summary>ARC-RENDER-3416: the view state owned by the canvas, written once before its items are submitted. A standalone item keeps and writes its own.</summary>
+    internal AreaViewState? View { get; set; }
+    /// <summary>ARC-RENDER-3416: what the engine holds for this node's command.</summary>
+    internal AreaItemState State => _s;
+    /// <summary>ARC-RENDER-3416: takes the state another node held (the canvas permutes them, so each is held by one node).</summary>
+    internal void Use(AreaItemState state)
+    {
+        if (ReferenceEquals(_s, state)) return;
+        _s = state;
+        if (!ReferenceEquals(Material, state.Material)) Material = state.Material;
+    }
 
     internal static Transform2D RasterTransform(Viewport viewport)
     {
@@ -218,17 +226,22 @@ public partial class AreaDrawItem : Node2D
         if (changed || FrameTexture is null || _drawn != Drawn()) QueueRedraw();
     }
 
-    private (ImageTexture, Rect2, bool, ActorDiagnosticDrawCommand?, bool) Drawn() => (FrameTexture!, _primitive, _mapping is not null, Actor, ShowGuide);
+    private (ImageTexture, Rect2, bool, ActorDiagnosticDrawCommand?, bool) Drawn() => (FrameTexture!, _s.Primitive, _s.Mapping is not null, Actor, ShowGuide);
 
     /// <summary>Sends the item's raster mapping and uniforms for the view; false when nothing it reads changed since the last full preparation.</summary>
     internal bool PrepareMapping(AreaDrawCommand command, Transform2D transform, Vector2I size)
     {
         var relit = AreaRelight.Active && !command.Multiply;
+        var view = View;
+        if (view is null) { view = _ownView ??= new AreaViewState(); view.Write(transform, size, Carried?.Lattice ?? Vector4I.Zero); }
         var prepared = new Prepared(FrameTexture!, HdScale, Actor is not null, command.Source, command.Destination, command.FlipX, command.FlipY,
-            command.Additive, command.Multiply, command.Alpha, command.WadeRows, Ambient, AmbientRight, WeightAmbient, Lattice, Carried,
+            command.Additive, command.Multiply, command.Alpha, command.WadeRows, Ambient, AmbientRight, WeightAmbient, Lattice, Carried?.Lighter, Carried?.Darker,
             RelightKind, RoofCorners, WallFade, relit, transform, size);
-        if (_prepared == prepared && _key is { } held)
+        var s = _s;
+        if (s.Prepared is { } last && s.Key is { } held && ReferenceEquals(Material, s.Material)
+            && (last == prepared || (last with { Transform = transform }) == prepared && Panned(s, last.Transform, transform, command.Destination, size)))
         {
+            s.Prepared = prepared;
             // Still in use: keep the shared row from being evicted by this submission.
             if (Mappings is { } kept) Bind(kept.Acquire(held));
             return false;
@@ -245,87 +258,85 @@ public partial class AreaDrawItem : Node2D
             || (long)source.Y + source.Height > FrameTexture.GetHeight())
             throw new InvalidOperationException("AREA_NEAREST_SOURCE_CROP_DOMAIN");
         var state = (transform, source, command.Destination, command.FlipX, command.FlipY, size);
-        _material ??= new ShaderMaterial();
-        if (_materialState != (command.Additive, command.Multiply, command.Alpha, command.WadeRows) || Material != _material || _relitState?.Relit != relit)
+        var material = s.Material ??= new ShaderMaterial();
+        if (s.MaterialState != (command.Additive, command.Multiply, command.Alpha, command.WadeRows) || !ReferenceEquals(Material, material) || s.RelitState?.Relit != relit)
         {
-            _material.Shader = command.Multiply ? MultiplyShader.Value
+            material.Shader = command.Multiply ? MultiplyShader.Value
                 : relit ? (command.Additive ? RelitAddShader.Value : RelitNormalShader.Value)
                 : command.Additive ? AddShader.Value : NormalShader.Value;
-            _relitState = (relit, -1, -1);
-            Material = _material;
-            _material.SetShaderParameter(Uniform.BodyAlpha, command.Alpha / 255f);
-            _material.SetShaderParameter(Uniform.WadeRows, command.WadeRows);
-            _material.SetShaderParameter(Uniform.WadeAlpha, AreaScenePlan.WadingAlpha / 255f);
-            _materialState = (command.Additive, command.Multiply, command.Alpha, command.WadeRows);
-            _ambientState = null; _weightState = null; _lightState = null; _fadeState = null; _cornerState = null; // re-send the per-item uniforms with every shader swap
+            s.RelitState = (relit, -1, -1);
+            Material = material;
+            material.SetShaderParameter(Uniform.ViewState, view.Texture);
+            material.SetShaderParameter(Uniform.BodyAlpha, command.Alpha / 255f);
+            material.SetShaderParameter(Uniform.WadeRows, command.WadeRows);
+            material.SetShaderParameter(Uniform.WadeAlpha, AreaScenePlan.WadingAlpha / 255f);
+            s.MaterialState = (command.Additive, command.Multiply, command.Alpha, command.WadeRows);
+            s.AmbientState = null; s.WeightState = null; s.LightState = null; s.FadeState = null; s.CornerState = null; // re-send the per-item uniforms with every shader swap
         }
-        if (_ambientState != Ambient)
+        if (s.AmbientState != Ambient)
         {
-            _material.SetShaderParameter(Uniform.Ambient, new Vector3(Ambient.R, Ambient.G, Ambient.B));
-            _ambientState = Ambient;
+            material.SetShaderParameter(Uniform.Ambient, new Vector3(Ambient.R, Ambient.G, Ambient.B));
+            s.AmbientState = Ambient;
         }
         var fadeState = (WallFade, legacy.Width, command.FlipX, HdScale, legacy.X);
-        if (_fadeState != fadeState)
+        if (s.FadeState != fadeState)
         {
             var (left, right) = FadeAlphas(WallFade);
-            _material.SetShaderParameter(Uniform.Fade, new Vector2(left / 255f, right / 255f));
-            _material.SetShaderParameter(Uniform.FadeWidth, legacy.Width);
-            _material.SetShaderParameter(Uniform.FadeFlip, command.FlipX);
-            _material.SetShaderParameter(Uniform.FadeScale, HdScale);
-            _material.SetShaderParameter(Uniform.FadeStart, legacy.X);
-            _fadeState = fadeState;
+            material.SetShaderParameter(Uniform.Fade, new Vector2(left / 255f, right / 255f));
+            material.SetShaderParameter(Uniform.FadeWidth, legacy.Width);
+            material.SetShaderParameter(Uniform.FadeFlip, command.FlipX);
+            material.SetShaderParameter(Uniform.FadeScale, HdScale);
+            material.SetShaderParameter(Uniform.FadeStart, legacy.X);
+            s.FadeState = fadeState;
         }
-        // Constant-ambient items (every item without local light) never re-send per camera move; a wading item needs
-        // the raster and its destination for its water line.
         var corners = (RoofCorners is not null, RoofCorners ?? Vector4.One);
-        if (_cornerState != corners)
+        if (s.CornerState != corners)
         {
-            _material.SetShaderParameter(Uniform.CornerFade, corners.Item1);
-            _material.SetShaderParameter(Uniform.Corners, corners.Item2);
-            _cornerState = corners;
+            material.SetShaderParameter(Uniform.CornerFade, corners.Item1);
+            material.SetShaderParameter(Uniform.Corners, corners.Item2);
+            s.CornerState = corners;
         }
         var mode = Lattice is not null || Carried is not null ? 2 : AmbientRight != Ambient ? 1 : 0;
-        var raster = mode == 0 && command.WadeRows == 0 && !relit ? default : new Vector4(transform.Origin.X, transform.Origin.Y, transform.X.X, transform.Y.Y);
-        if (relit && (_relitState?.Kind != RelightKind || _relitState?.Scale != HdScale))
+        if (relit && (s.RelitState?.Kind != RelightKind || s.RelitState?.Scale != HdScale))
         {
-            _material.SetShaderParameter(Uniform.RelightKind, RelightKind);
+            material.SetShaderParameter(Uniform.RelightKind, RelightKind);
             // ARC-RENDER-2060: an N-times HD frame has N times the texels over the same drawn size, so its luminance steps are 1/N as big: the gradient gain scales with N.
-            _material.SetShaderParameter(Uniform.RelightScale, HdScale);
-            _relitState = (true, RelightKind, HdScale);
+            material.SetShaderParameter(Uniform.RelightScale, HdScale);
+            s.RelitState = (true, RelightKind, HdScale);
         }
-        if (relit && _weightState != (WeightAmbient ?? Ambient))
+        if (relit && s.WeightState != (WeightAmbient ?? Ambient))
         {
             var weight = WeightAmbient ?? Ambient;
-            _material.SetShaderParameter(Uniform.RelightWeight, new Vector3(weight.R, weight.G, weight.B));
-            _weightState = weight;
+            material.SetShaderParameter(Uniform.RelightWeight, new Vector3(weight.R, weight.G, weight.B));
+            s.WeightState = weight;
         }
-        var light = (mode, AmbientRight, Lattice, Carried, mode == 1 || command.WadeRows > 0 ? command.Destination : default, raster);
-        if (_lightState != light)
+        // The raster is in the view state, so no item sends it for a camera move; the destination is read by the wall gradient and the water line only.
+        var light = (mode, AmbientRight, Lattice, Carried?.Lighter, Carried?.Darker, mode == 1 || command.WadeRows > 0 ? command.Destination : default);
+        if (s.LightState != light)
         {
-            _material.SetShaderParameter(Uniform.LightMode, mode);
-            _material.SetShaderParameter(Uniform.AmbientRight, new Vector3(AmbientRight.R, AmbientRight.G, AmbientRight.B));
-            _material.SetShaderParameter(Uniform.Raster, raster);
+            material.SetShaderParameter(Uniform.LightMode, mode);
+            material.SetShaderParameter(Uniform.AmbientRight, new Vector3(AmbientRight.R, AmbientRight.G, AmbientRight.B));
             var d = command.Destination;
-            _material.SetShaderParameter(Uniform.ItemRect, new Vector4(d.X, d.Y, d.Width, d.Height));
-            if (_lightState is null || !ReferenceEquals(_lightState.Value.Lattice, Lattice))
+            material.SetShaderParameter(Uniform.ItemRect, new Vector4(d.X, d.Y, d.Width, d.Height));
+            if (s.LightState is null || !ReferenceEquals(s.LightState.Value.Lattice, Lattice))
             {
-                _material.SetShaderParameter(Uniform.LightLighter, Lattice?.Lighter ?? default(Variant));
-                _material.SetShaderParameter(Uniform.LightDarker, Lattice?.Darker ?? default(Variant));
-                _material.SetShaderParameter(Uniform.Lattice, Lattice?.Lattice ?? Vector4I.Zero);
+                material.SetShaderParameter(Uniform.LightLighter, Lattice?.Lighter ?? default(Variant));
+                material.SetShaderParameter(Uniform.LightDarker, Lattice?.Darker ?? default(Variant));
+                material.SetShaderParameter(Uniform.Lattice, Lattice?.Lattice ?? Vector4I.Zero);
             }
-            if (_lightState is null || !ReferenceEquals(_lightState.Value.Carried, Carried))
+            if (s.LightState is null || !ReferenceEquals(s.LightState.Value.CarryLighter, Carried?.Lighter) || !ReferenceEquals(s.LightState.Value.CarryDarker, Carried?.Darker))
             {
-                _material.SetShaderParameter(Uniform.CarryLighter, Carried?.Lighter ?? default(Variant));
-                _material.SetShaderParameter(Uniform.CarryDarker, Carried?.Darker ?? default(Variant));
-                _material.SetShaderParameter(Uniform.CarryLattice, Carried?.Lattice ?? Vector4I.Zero);
+                material.SetShaderParameter(Uniform.CarryLighter, Carried?.Lighter ?? default(Variant));
+                material.SetShaderParameter(Uniform.CarryDarker, Carried?.Darker ?? default(Variant));
+                material.SetShaderParameter(Uniform.Carried, Carried is not null);
             }
-            _lightState = light;
+            s.LightState = light;
         }
-        if (_state == state)
+        if (s.Mapped == state)
         {
             // Still in use: keep the shared row from being evicted by this submission.
-            if (Mappings is { } current && _key is { } same) Bind(current.Acquire(same));
-            _prepared = prepared;
+            if (Mappings is { } current && s.Key is { } same) Bind(current.Acquire(same));
+            s.Prepared = prepared;
             return true;
         }
         if (size.X > MaxViewportAxis || size.Y > MaxViewportAxis)
@@ -335,7 +346,7 @@ public partial class AreaDrawItem : Node2D
         // A pure integer camera translation that moves the envelope by the same amount
         // keeps the exact row key (AreaNearestAxis.RowKey), so the key is reused.
         AreaMappingKey key;
-        if (_key is { } previousKey && _keyed is { } k && k.Source == source && k.Destination == command.Destination
+        if (s.Key is { } previousKey && s.Keyed is { } k && k.Source == source && k.Destination == command.Destination
             && k.X == command.FlipX && k.Y == command.FlipY && k.Transform.X == transform.X && k.Transform.Y == transform.Y
             && IntegerShift(k.Transform.Origin, transform.Origin) is { } shift && envelope == new Rect2I(k.Envelope.Position + shift, k.Envelope.Size))
             key = previousKey;
@@ -346,7 +357,7 @@ public partial class AreaDrawItem : Node2D
             var y = new AreaNearestAxis(transform.Origin.Y, transform.Y.Y, d.Y, d.Height, source.Y, source.Height, command.FlipY);
             key = new AreaMappingKey(x.RowKey(envelope.Position.X), y.RowKey(envelope.Position.Y), envelope.Size.X, envelope.Size.Y);
         }
-        _keyed = (transform, envelope, source, command.Destination, command.FlipX, command.FlipY);
+        s.Keyed = (transform, envelope, source, command.Destination, command.FlipX, command.FlipY);
         ImageTexture mapping;
         if (Mappings is { } shared) mapping = shared.Acquire(key);
         else
@@ -354,13 +365,31 @@ public partial class AreaDrawItem : Node2D
             _ownMappings ??= new AreaMappingCache();
             _ownMappings.BeginSubmission(); mapping = _ownMappings.Acquire(key); _ownMappings.DropUnused();
         }
-        Bind(mapping); _key = key;
-        _material.SetShaderParameter(Uniform.ScreenStart, envelope.Position);
-        _material.SetShaderParameter(Uniform.ScreenSize, envelope.Size);
+        Bind(mapping); s.Key = key;
+        var screen = (Start: envelope.Position - AreaViewState.WholeOrigin(transform), envelope.Size);
+        if (s.Screen != screen)
+        {
+            material.SetShaderParameter(Uniform.ScreenStart, screen.Start);
+            material.SetShaderParameter(Uniform.ScreenSize, screen.Size);
+            s.Screen = screen;
+        }
         var inverse = transform.AffineInverse();
         var a = inverse * (Vector2)envelope.Position;
         var b = inverse * (Vector2)envelope.End;
-        _primitive = new(a, b - a); _state = state; _prepared = prepared;
+        s.Primitive = new(a, b - a); s.Mapped = state; s.Prepared = prepared;
+        return true;
+    }
+
+    // ARC-RENDER-3416: a whole-pixel camera move at the same zoom that moves the item's envelope by the same amount, still on screen: the row key
+    // (AreaNearestAxis.RowKey), the start counted from the view's whole origin pixel and the world rectangle all stay, so the item sends nothing.
+    private static bool Panned(AreaItemState s, Transform2D from, Transform2D to, TerrainRect destination, Vector2I viewport)
+    {
+        if (s.Keyed is not { } k || s.Mapped is not { } mapped || k.Transform != from || from.X != to.X || from.Y != to.Y
+            || IntegerShift(from.Origin, to.Origin) is not { } shift) return false;
+        var envelope = ScreenEnvelope(to, destination, viewport);
+        if (envelope != new Rect2I(k.Envelope.Position + shift, k.Envelope.Size) || !envelope.Intersects(new Rect2I(Vector2I.Zero, viewport))) return false;
+        s.Keyed = k with { Transform = to, Envelope = envelope };
+        s.Mapped = mapped with { Transform = to };
         return true;
     }
 
@@ -386,8 +415,8 @@ public partial class AreaDrawItem : Node2D
 
     private void Bind(ImageTexture mapping)
     {
-        if (!ReferenceEquals(mapping, _mapping)) _material!.SetShaderParameter(Uniform.IndexRows, mapping);
-        _mapping = mapping;
+        if (!ReferenceEquals(mapping, _s.Mapping)) _s.Material!.SetShaderParameter(Uniform.IndexRows, mapping);
+        _s.Mapping = mapping;
     }
 
     /// <summary>Stops sampling the index rows. Shared rows stay owned by the cache;
@@ -395,8 +424,8 @@ public partial class AreaDrawItem : Node2D
     public void ReleaseMapping()
     {
         // An item that never had a material has no row to let go (and the names need an engine).
-        if (_material is not null) _material.SetShaderParameter(Uniform.IndexRows, default(Variant));
-        _mapping = null; _state = null; _key = null; _keyed = null; _prepared = null; _drawn = null;
+        if (_s.Material is not null) _s.Material.SetShaderParameter(Uniform.IndexRows, default(Variant));
+        _s.Mapping = null; _s.Mapped = null; _s.Key = null; _s.Keyed = null; _s.Prepared = null; _drawn = null;
         _ownMappings?.Clear();
     }
 
@@ -404,18 +433,24 @@ public partial class AreaDrawItem : Node2D
     {
         _drawn = null;
         if (Command is not { } command || FrameTexture is null) return;
-        var viewport = GetViewport();
-        PrepareMapping(command, RasterTransform(viewport), (Vector2I)viewport.GetVisibleRect().Size);
+        // ARC-RENDER-3416: a canvas item is drawn for the view the canvas submitted, which its view state shows.
+        if (View is { } view) PrepareMapping(command, view.Transform, view.Size);
+        else
+        {
+            var viewport = GetViewport();
+            PrepareMapping(command, RasterTransform(viewport), (Vector2I)viewport.GetVisibleRect().Size);
+        }
         _drawn = Drawn();
-        if (_mapping is not null) DrawTextureRect(FrameTexture, _primitive, false);
+        if (_s.Mapping is not null) DrawTextureRect(FrameTexture, _s.Primitive, false);
         if (Actor is not null && ShowGuide && _guide is null) { _guide = new AreaActorGuide(); AddChild(_guide); }
         if (_guide is not null) { _guide.Actor = ShowGuide ? Actor : null; _guide.QueueRedraw(); }
     }
 
     public override void _ExitTree()
     {
-        ReleaseMapping(); Material = null; _material?.Dispose(); _material = null; _materialState = null; _ambientState = null; _fadeState = null; _lightState = null; _prepared = null; _drawn = null;
+        ReleaseMapping(); Material = null; _s.Material?.Dispose(); _s = new();
         _ownMappings?.Dispose(); _ownMappings = null;
+        _ownView?.Dispose(); _ownView = null;
     }
 }
 
@@ -425,6 +460,61 @@ internal sealed record AreaLatticeBinding(ImageTexture Lighter, ImageTexture Dar
 
 /// <summary>ARC-DEV-335, ARC-DEV-353: the carried lights' lattice (lighter and darker sums, in the same node frame as <see cref="AreaLatticeBinding"/>).</summary>
 internal sealed record AreaCarriedBinding(ImageTexture Lighter, ImageTexture Darker, Vector4I Lattice);
+
+/// <summary>ARC-RENDER-3416: what the engine holds for one drawn command: its material with every input sent, its index row and its world rectangle.
+/// The canvas hands it to whichever node draws that command in the next submission, so a command that moved in the draw order sends nothing again.</summary>
+internal sealed class AreaItemState
+{
+    internal ShaderMaterial? Material;
+    internal (bool Additive, bool Multiply, int Alpha, int WadeRows)? MaterialState;
+    internal Color? AmbientState;
+    internal Color? WeightState;
+    internal (AreaWallFade Fade, int Width, bool Flip, int Scale, int Start)? FadeState;
+    internal (bool On, Vector4 Corners)? CornerState;
+    internal (int Mode, Color Right, AreaLatticeBinding? Lattice, ImageTexture? CarryLighter, ImageTexture? CarryDarker, TerrainRect Rect)? LightState;
+    internal (bool Relit, int Kind, int Scale)? RelitState;
+    internal ImageTexture? Mapping;
+    internal AreaMappingKey? Key;
+    internal (Transform2D Transform, Rect2I Envelope, TerrainRect Source, TerrainRect Destination, bool X, bool Y)? Keyed;
+    internal (Transform2D Transform, TerrainRect Source, TerrainRect Destination, bool X, bool Y, Vector2I Size)? Mapped;
+    internal (Vector2I Start, Vector2I Size)? Screen;
+    internal Rect2 Primitive;
+    internal AreaDrawItem.Prepared? Prepared;
+}
+
+/// <summary>ARC-RENDER-3416: what every item of one view reads that changes with the camera or a carried light, as three texels of a float texture:
+/// the raster (canvas origin and zoom), the whole pixels of that origin and the carried lattice (first column, first row, columns, rows).
+/// A camera move or a moved carried light writes these once, instead of an input of every item.</summary>
+internal sealed class AreaViewState : IDisposable
+{
+    private const int Floats = 12;
+    private readonly float[] _values = new float[Floats];
+    private readonly byte[] _bytes = new byte[Floats * sizeof(float)];
+    private ImageTexture? _texture;
+
+    /// <summary>The raster transform and visible size last written.</summary>
+    internal Transform2D Transform { get; private set; } = Transform2D.Identity;
+    internal Vector2I Size { get; private set; }
+    internal ImageTexture Texture => _texture ?? throw new InvalidOperationException("AREA_VIEW_STATE_UNWRITTEN");
+
+    /// <summary>The whole screen pixel at or before the raster's origin, which the items' screen starts are counted from.</summary>
+    internal static Vector2I WholeOrigin(Transform2D transform) => new(checked((int)MathF.Floor(transform.Origin.X)), checked((int)MathF.Floor(transform.Origin.Y)));
+
+    internal void Write(Transform2D transform, Vector2I size, Vector4I carry)
+    {
+        Transform = transform; Size = size;
+        var whole = WholeOrigin(transform);
+        ReadOnlySpan<float> next = [transform.Origin.X, transform.Origin.Y, transform.X.X, transform.Y.Y, whole.X, whole.Y, 0, 0, carry.X, carry.Y, carry.Z, carry.W];
+        if (_texture is not null && next.SequenceEqual(_values)) return;
+        next.CopyTo(_values);
+        Buffer.BlockCopy(_values, 0, _bytes, 0, _bytes.Length);
+        using var image = Image.CreateFromData(Floats / 4, 1, false, Image.Format.Rgbaf, _bytes);
+        if (_texture is null) _texture = ImageTexture.CreateFromImage(image);
+        else _texture.Update(image);
+    }
+
+    public void Dispose() { _texture?.Dispose(); _texture = null; }
+}
 
 // Guides are a diagnostic overlay, not pixels sampled by the source shader.
 internal partial class AreaActorGuide : Node2D

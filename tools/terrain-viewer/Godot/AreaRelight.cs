@@ -240,6 +240,7 @@ internal static class AreaRelight
             int mode = int(relight_params.x + 0.5);
             int count = int(relight_kinds.w + 0.5);
             if (mode == 0 || relight_kind == 0 || texel.a <= 0.0 || (count == 0 && mode != 3)) return vec4(base, texel.a * alpha);
+            vec4 raster = view_raster();
             vec2 world = (frag - raster.xy) / raster.zw;
             float gain = (relight_kind == 1 ? relight_kinds.x : (relight_kind == 2 ? relight_kinds.y : relight_kinds.z)) * float(max(relight_scale, 1));
             float bevel = relight_kind == 1 ? 0.0 : 0.6;
