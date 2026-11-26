@@ -319,9 +319,23 @@ class FaceTests(unittest.TestCase):
                     self.assertEqual(at(ring, plate, c.cx + 1.03 * c.cut * dx, c.cy + 1.03 * c.cut * dy)[3], 0, ring.name)
 
     def test_a_socket_domes_symbol_keeps_its_place_on_the_originals_dome(self):
-        for ring in (r for r in rk.RINGS if r.method in ("marker", "wedge")):
-            x, y = rk.ORIGINAL_DOME[ring.art]
-            self.assertEqual(rk.symbol_shift(ring), (ring.circle.cx - x, ring.circle.cy - y))
+        with tempfile.TemporaryDirectory() as folder:
+            root = tree(folder)
+            frames = root / "census" / "frames"
+            for name, state in (("mmb_chest", "pressed"), ("mmb_skull", "pressed"), ("mpcyclerightbutton", "idle")):
+                ring = rk.ring_named(name)
+                c = ring.circle
+                face, plate = rk.face_of(root, frames, ring, state), rk.dome_plate(root, ring)
+                drawn = [(i % face.w, i // face.w) for i in range(face.w * face.h) if max(abs(face.data[i * 4 + k] - plate.data[i * 4 + k]) for k in range(3)) > 60]
+                middle = ((min(x for x, _ in drawn) + max(x for x, _ in drawn) + 1) / 2 * c.width / face.w, (min(y for _, y in drawn) + max(y for _, y in drawn) + 1) / 2 * c.height / face.h)
+                if ring.method == "marker":
+                    x0, y0, x1, y1 = rk.SYMBOL_BOXES[name]
+                    original_middle = ((x0 + x1) / 2, (y0 + y1) / 2)
+                else:
+                    original_middle = ((9 + 15) / 2, 11.5)                    # the synthetic original's triangle: columns 9 to 14, rows 5 to 17
+                x, y = rk.ORIGINAL_DOME[ring.art]
+                for axis, (got, was, dome, centre) in enumerate(zip(middle, original_middle, (x, y), (c.cx, c.cy))):
+                    self.assertAlmostEqual(got - centre, was - dome, delta=0.2, msg=f"{name} axis {axis}")
 
     def test_a_missing_input_is_a_ring_error(self):
         with tempfile.TemporaryDirectory() as folder:

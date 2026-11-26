@@ -735,7 +735,7 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-UI-3347: the ringed buttons of the views no pass of this smoke opens (the strip's note entry and quantity pane, the dialog box), each made alone over the window: its buttons draw the kit's faces (read back by pixel on the quantity
-    /// pane's All button), a set without their plates keeps each art's own frame, and with the HD option off nothing is the kit's.
+    /// pane's All button, idle, hovered and pressed), a set without their plates keeps each art's own frame, and with the HD option off nothing is the kit's.
     /// </summary>
     private async Task CheckKitRingViewsAsync(string tag, string root, string ringlessRoot, Func<int, Task> frames, Action<bool, string> require)
     {
@@ -755,10 +755,27 @@ public partial class TerrainViewerApp
             dialog.SetArt(dialogArt);
         }
         var savedHd = _gameSettings.HdInterface;
-        try
+        void Draw()
         {
             pane.Bind(new(null, [.. QuantityPaneRules.Buttons.Select(_ => (Texture2D[]?)own)], null));
             note.Bind(new(null, [.. MapNoteEntry.Buttons.Select(_ => (Texture2D[]?)null)], [.. MapNoteEntry.Markers.Select(_ => (Texture2D[]?)[own[0], own[1]])], null!));
+            note.SetState("", 0);
+            dialog?.QueueRedraw();
+        }
+        async Task AllMiddleIs(Color expected, string state)
+        {
+            await frames(3);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            using var image = GetViewport().GetTexture().GetImage();
+            var all = QuantityPaneRules.Buttons.Single(button => button.Art == 299);
+            var at = pane.GetGlobalTransformWithCanvas() * new Vector2(all.X + 11.5f, all.Y - AreaGameBarLayout.BottomTop + 11.5f);
+            var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
+            var colour = image.GetPixel(Math.Clamp((int)(at.X * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(at.Y * ratio.Y), 0, image.GetHeight() - 1));
+            require(Near(colour, expected), $"[{tag}] the All button's middle is the kit's {state} face (got {colour})");
+        }
+        try
+        {
+            Draw();
             dialog?.Show("?", AreaDialogBoxKind.YesNo, (420, 20));
             int[] markers = [.. MapNoteEntry.Markers.Select(marker => marker.Art)];
             await frames(3);
@@ -766,15 +783,16 @@ public partial class TerrainViewerApp
             require(note.RingsShownForSelfTest.SequenceEqual(markers), $"[{tag}] the note entry's markers are the kit's (from the kit {string.Join(",", note.RingsShownForSelfTest)})");
             require(dialog is null || dialog.RingsShownForSelfTest.Order().SequenceEqual([AreaDialogBoxLayout.AcceptArt, AreaDialogBoxLayout.CancelArt]),
                 $"[{tag}] the dialog box's accept and cancel buttons are the kit's (from the kit {string.Join(",", dialog?.RingsShownForSelfTest ?? [])})");
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-            using (var image = GetViewport().GetTexture().GetImage())
-            {
-                var all = QuantityPaneRules.Buttons.Single(button => button.Art == 299);
-                var at = pane.GetGlobalTransformWithCanvas() * new Vector2(all.X + 11.5f, all.Y - AreaGameBarLayout.BottomTop + 11.5f);
-                var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
-                var colour = image.GetPixel(Math.Clamp((int)(at.X * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(at.Y * ratio.Y), 0, image.GetHeight() - 1));
-                require(Near(colour, KitRing), $"[{tag}] the All button's middle is the kit's face (got {colour})");
-            }
+            await AllMiddleIs(KitRing, "idle");
+            // AC1: every state. The pointer over the button, then held down on it, then gone.
+            var allRect = pane.GetNode<TextureRect>("QuantityAll");
+            allRect.EmitSignal(Control.SignalName.MouseEntered);
+            await AllMiddleIs(KitRingHover, "hover");
+            allRect.EmitSignal(Control.SignalName.GuiInput, new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = allRect.Size / 2 });
+            await AllMiddleIs(KitRingPressed, "pressed");
+            allRect.EmitSignal(Control.SignalName.GuiInput, new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = -Vector2.One });
+            allRect.EmitSignal(Control.SignalName.MouseExited);
+            await AllMiddleIs(KitRing, "idle again");
             // AC2: a set without the ringed buttons' plates keeps each art's own frame.
             SteamwovenKitStore.UseRoot(ringlessRoot);
             pane.Bind(new(null, [.. QuantityPaneRules.Buttons.Select(_ => (Texture2D[]?)own)], null));
@@ -782,7 +800,11 @@ public partial class TerrainViewerApp
             dialog?.QueueRedraw();
             await frames(3);
             require(pane.RingsShownForSelfTest.Count == 0 && note.RingsShownForSelfTest.Count == 0 && (dialog?.RingsShownForSelfTest.Count ?? 0) == 0, $"[{tag}] without their plates the ringed buttons draw their own frames");
+            // The kit's faces back on every view, so the HD switch below has something to take away; the switch alone redraws them.
             SteamwovenKitStore.UseRoot(root);
+            Draw();
+            await frames(3);
+            require(pane.RingsShownForSelfTest.Count == 1 && note.RingsShownForSelfTest.Count == markers.Length && (dialog is null || dialog.RingsShownForSelfTest.Count == 2), $"[{tag}] with their plates back the ringed buttons are the kit's again");
             _gameSettings = _gameSettings with { HdInterface = false };
             SyncInterfaceHd();
             await frames(3);
