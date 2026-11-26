@@ -101,6 +101,7 @@ are this project's own.
 | --- | --- |
 | Ctrl+B | [Bug report](alpha-build.md#9-reporting-a-bug-ctrlb) over anything: Ctrl+Enter (or Command+Enter) sends, Escape cancels |
 | Ctrl+Shift+F9 | Diagnostic palette |
+| Ctrl+Shift+J | Debug mode: the open inventory, loot, barter, identify or repair window changes between the original look and the diagnostic view |
 | Ctrl+Shift+F10 | [Diagnostic panel](alpha-build.md#8-showing-and-hiding-the-diagnostic-panel) shown or hidden |
 | Shift held while the packaged game starts | Opens the launcher (debug mode, settings) |
 
