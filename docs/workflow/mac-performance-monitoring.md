@@ -4,7 +4,7 @@ How to read fps, frame time, GPU time and memory of the packaged game with tools
 game. Part of the performance epic [#3377](https://github.com/Simarglok/arcanum-steamwoven/issues/3377).
 
 **What was checked.** 2026-11-26, M4 Pro 24 GB, macOS 27.2.1, Xcode 27.2, display 2560x1440 at 180 Hz, the
-`./arcanum package mac` build of main `27d9c280c`, Developer mode off, no `sudo`. The runs stayed in the launcher and
+`./arcanum package mac` build of main `27d9c280c`, Developer mode off; only `powermetrics` used `sudo`. The runs stayed in the launcher and
 main menu (no map was loaded) on a copy of the app, and the Mac was busy with other work, so this page says what each
 tool **does**; its numbers are not a baseline. Tools marked *not run* were not proven.
 
@@ -143,13 +143,14 @@ line of the Ctrl+B report and `ARC_PERF_PROBE=1`. To repeat (the tool needs `DOT
     "$DOTNET_ROOT/dotnet" tool install dotnet-counters --version 9.0.661903 --tool-path "$HOME/.arcanum-tools"
     "$HOME/.arcanum-tools/dotnet-counters" monitor -p "$(pgrep -nx "$GAME")" --counters System.Runtime
 
-## powermetrics (*not run*: needs your password)
+## powermetrics (GPU works, needs your password)
 
-`powermetrics -h` on macOS 27.2.1 lists the samplers `cpu_power`, `gpu_power` and `thermal`.
+    sudo powermetrics --samplers gpu_power -i 1000 -n 5
 
-    sudo powermetrics --samplers cpu_power,gpu_power,thermal -i 1000
-
-Expected, not seen: CPU and GPU power, GPU frequency and residency, thermal pressure each second. Ctrl+C stops it.
+**You see** five one-second samples with `GPU HW active frequency`, `GPU HW active residency`, `GPU idle residency` and
+`GPU Power` (run by the owner on 2026-11-26: 338 MHz, 2-4 % active, 20-43 mW, a nearly idle GPU). The figures are for the
+whole Mac, not for the game. `powermetrics -h` also lists `cpu_power` and `thermal`
+(`--samplers cpu_power,gpu_power,thermal`; those two *not run*).
 
 ## Activity Monitor (*partly checked*)
 
