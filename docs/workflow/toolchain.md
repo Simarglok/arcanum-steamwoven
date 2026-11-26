@@ -1402,7 +1402,7 @@ The rules: the lens ring's shape is analytic (a band of 5 original px outside th
 
 ## Steamwoven schematic wide button as a kit part, pack first (ARC-UI-3271)
 
-The schematic window's wide round button (a brass bar, a ring round the olive dome and two arrow wells, baked into art 365 Schematic_Base) is the kit part `plate.schematic_wide_button`, made by `tools/steamwoven_ui/wide_button_kit.py` PACK FIRST (owner rule 2026-11-25): the old HD pack has a good frame of the art (`local/hd-packs/interface-redraw-4x/interface/schematics/panels/schematic_base-f000.png`), so the part is that frame's brass under an analytic alpha (a stadium united with the ring's disc, minus the dome's and the two wells' holes, edges filtered by the lens ring's tent) with the surfaces' soft shadow baked outside it; nothing is generated. The holes are open: the surface keeps the original's dome face and arrows there. `zone_specs/ctx-schematic.json` lays it with `kit_parts` and three `disc_boxes`; the #3248 `part_boxes` entry for the button is gone.
+The schematic window's wide round button (a brass bar, a ring round the olive dome and two arrow wells, baked into art 365 Schematic_Base) is the kit part `plate.schematic_wide_button`, made by `tools/steamwoven_ui/wide_button_kit.py` PACK FIRST (owner rule 2026-11-25): the old HD pack has a good frame of the art (`local/hd-packs/interface-redraw-4x/interface/schematics/panels/schematic_base-f000.png`), so the part is that frame's brass under an analytic alpha (a stadium united with the ring's disc, minus the dome's and the two wells' holes, edges filtered by the lens ring's tent) with the surfaces' soft shadow baked outside it; nothing is generated. The holes are open; the dome and the two wells are parts of their own (ARC-UI-3269, next section), laid under the brass by `zone_specs/ctx-schematic.json`; the #3248 `part_boxes` entry for the button is gone.
 
 ```sh
 python3 -B tools/steamwoven_ui/wide_button_kit.py rule [--pack FILE] [--dry-run] [--out FILE]   # masters/plate.schematic_wide_button.png and provenance/rule/*.json (the gates run first)
@@ -1410,6 +1410,19 @@ python3 -B tools/steamwoven_ui/wide_button_kit.py outline --out FILE            
 python3 -B tools/steamwoven_ui/wide_button_kit.py self-test
 ```
 
+
+
+## Steamwoven brass-ringed round buttons, wide-button dome and wells (ARC-UI-3269)
+
+`tools/steamwoven_ui/ring_button_kit.py` makes the thick brass-ringed round buttons (arts 6 `bgrn_but`, 9 `m_dnbut`, 10 `m_upbut`; no window draws 9 and 10) and the dome (357) and the two arrow wells (358 to 360) of the schematic window's wide button: `plate.*` per state with an empty `glyph.*`, and `picture.combineindicator1..3`. Parts under about 40 units (owner rule 2026-11-26, [#3272](https://github.com/Simarglok/arcanum-steamwoven/issues/3272)) are generated large by Codex and reduced once; each goes out on a square canvas of flat grey (the generator did not keep a 37 x 36 aspect), is registered onto the original's circle, and a ringed button's brass takes the tone (mean and spread of CIE L\*a\*b\*) of the accepted strip metal, `hardware.hud_ring` and `hardware.menu_ring`. The dome (51 units) is pack-first (`--dome pack`, the old HD pack's two frames); `--dome olive` builds the variant from the #3202 plate. `--source pack` builds the small parts from the pack for comparison. Every part is cut by an analytic round alpha; shadows are not baked. Records: `provenance/rule/<part>.json` (`codex:` or `rule:ring_button_kit:<part>` in the manifest).
+
+```sh
+python3 -B tools/steamwoven_ui/ring_button_kit.py codex-inbox --stage idle      # inbox/B-BUTTONS-3269, then: codex_batch.py run B-BUTTONS-3269
+python3 -B tools/steamwoven_ui/ring_button_kit.py codex-place                    # registered frames; then --stage states, the batch and codex-place again
+python3 -B tools/steamwoven_ui/ring_button_kit.py build [--dry-run]              # masters/ and provenance/rule/
+python3 -B tools/steamwoven_ui/ring_button_kit.py sheet --out FILE [--only NAME,...] [--across]
+python3 -B tools/steamwoven_ui/ring_button_kit.py self-test
+```
 
 ## Steamwoven square HUD buttons, batch B-BUTTONS slice 1 (ARC-UI-2482)
 
