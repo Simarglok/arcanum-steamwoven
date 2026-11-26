@@ -767,7 +767,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set) { PublishKitBackground(null, null); AreaKitSheets.Publish(null); return null; }
         List<(Texture2D Texture, SteamwovenKitDraw Draw)>? loaded = null;
         Dictionary<int, Texture2D>? covers = null, sheets = null;
-        Dictionary<int, Texture2D[]>? rounds = null;
+        Dictionary<int, Texture2D[]>? rounds = null, faces = null;
         Dictionary<string, Texture2D>? fixtures = null;
         var held = new List<string>();
         if (_kitWindow is { } window && _backdropFamily is not null && Visible && middleHeight > 0 && SteamwovenKitComposer.Background(plan, set, window).Value is { } draws)
@@ -792,11 +792,10 @@ public partial class AreaGameBarPanel : CanvasLayer
                 // backdrops, sheets, fixtures and grids); a button whose idle face is missing or does not load keeps the art's own frame.
                 if (window == SteamwovenKitWindow.Character)
                     foreach (var art in SteamwovenKitTable.RoundFaces.Keys)
-                        if (SteamwovenKitComposer.RoundFace(set, art) is { } face && SteamwovenKitStore.Texture(set, face.Idle.Id) is { } idle)
-                        {
-                            Texture2D State(SteamwovenKitPart? part) => part is { } known && SteamwovenKitStore.Texture(set, known.Id) is { } texture ? texture : idle;
-                            (rounds ??= [])[art] = [idle, State(face.Pressed), State(face.Hover)];
-                        }
+                        if (SteamwovenKitComposer.RoundFace(set, art) is { } face && LoadFace(set, face) is { } textures) (rounds ??= [])[art] = textures;
+                // ARC-UI-3341: the window's flat small controls (the sheet's schematics tab, the schematic window's page arrows): the three faces of each one the set holds at the table's size; a control whose idle face is missing or does not load keeps the art.
+                foreach (var (art, spec) in SteamwovenKitTable.WindowFaces)
+                    if (spec.Window == window && SteamwovenKitComposer.WindowFace(set, art) is { } face && LoadFace(set, face) is { } textures) (faces ??= [])[art] = textures;
                 // ARC-UI-3098: the window's fixtures (pits, fields, signs, dials, the ruler, gears, cell wells) that the set holds at the table's size; one missing or not loading is left out and the window draws its stand-in for it.
                 foreach (var id in SteamwovenKitTable.PartsOf(window))
                     if (SteamwovenKitComposer.Fixture(set, id) is { } part && SteamwovenKitStore.Texture(set, part.Id) is { } texture) { (fixtures ??= [])[id] = texture; held.Add(part.Id); }
@@ -811,8 +810,16 @@ public partial class AreaGameBarPanel : CanvasLayer
         }
         SteamwovenKitStore.Retain("window", set, held);
         PublishKitBackground(loaded is not null ? _kitWindow : null, covers, loaded is not null ? fixtures : null);
-        AreaKitSheets.Publish(loaded is not null ? sheets : null, loaded is not null ? rounds : null);
+        AreaKitSheets.Publish(loaded is not null ? sheets : null, loaded is not null ? rounds : null, loaded is not null ? faces : null);
         return loaded;
+    }
+
+    /// <summary>A button's three textures in the original's frame order (idle, pressed, hover; a state the set lacks or that does not load is the idle face), or null when the idle face does not load.</summary>
+    private static Texture2D[]? LoadFace(SteamwovenKitSet set, SteamwovenKitFace face)
+    {
+        if (SteamwovenKitStore.Texture(set, face.Idle.Id) is not { } idle) return null;
+        Texture2D State(SteamwovenKitPart? part) => part is { } known && SteamwovenKitStore.Texture(set, known.Id) is { } texture ? texture : idle;
+        return [idle, State(face.Pressed), State(face.Hover)];
     }
 
     /// <summary>ARC-UI-2461: the kit is off (the HD option off or the bars hidden): the strips are the pack's or the original's again, nothing of the kit shows.</summary>
