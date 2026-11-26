@@ -495,6 +495,7 @@ public partial class TerrainCanvas
         // ARC-RES-1978: while the relit look is on, the carried lights stand where they stand now and the shaders read the merged list.
         AreaRelight.SetView(world);
         UploadRelightLights();
+        var viewport = GetViewport(); var raster = AreaDrawItem.RasterTransform(viewport); var rasterSize = (Vector2I)viewport.GetVisibleRect().Size;
         for (var index = 0; index < visible.Length; index++)
         {
             var item = _areaItems[index];
@@ -521,8 +522,7 @@ public partial class TerrainCanvas
             // The source drops every alpha mode for an additive (or sub/mul) object, and a constant-alpha body
             // replaces them with its own, so such a wall never fades (ARC-RENDER-018).
             item.WallFade = isActor || command.Additive || command.Unlit ? AreaWallFade.None : AreaWallFadeOf(command);
-            item.PrepareMapping(command);
-            item.Show(); item.QueueRedraw();
+            item.Submit(command, raster, rasterSize);
         }
         TrimAreaPool();
         AreaVisibleCommands = Array.AsReadOnly(logical.Where(command => command.Identity != ActorSentinel).ToArray());

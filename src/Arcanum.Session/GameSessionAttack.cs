@@ -747,7 +747,7 @@ public sealed partial class GameSessionOwner
         var state = _life.Hero!.Value.State;
         var facts = HeroLifeFacts(state);
         var status = LifeRules.Evaluate(state, facts);
-        var snapshot = _hero.Stats.Query(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth), SpeedShift: HeroTempusFugitShift())).Snapshot!;
+        var snapshot = HeroAttackStats(state);
         var aptitude = HeroAptitude();
         var skills = HeroSkills();
         var equipment = EquipmentRules.Evaluate(_equipment.Items(), aptitude, HeroWeaponTraining(skills));
@@ -787,6 +787,18 @@ public sealed partial class GameSessionOwner
         return new(combatant, equipment.Weapon, equipment.Skill, weaponSkill.Level, weaponSkill.Training, equipment.WeaponSpeed,
             snapshot.GetEffective(CharacterStat.Speed), range,
             equipment.Skill is CombatSkill.Melee or CombatSkill.Bow or CombatSkill.Firearms or CombatSkill.Throwing);
+    }
+
+    // The stats an attack reads of the hero in the life state <paramref name="state"/>.
+    private CharacterStatsSnapshot HeroAttackStats(LifeState state) =>
+        _hero!.Stats.Query(new(0, state.PoisonLevel, state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth), SpeedShift: HeroTempusFugitShift())).Snapshot!;
+
+    /// <summary>ARC-RENDER-3362: the perception of <see cref="QueryHeroAttack"/>'s combatant, or null for a session without a hero. The AI asks for it with every look at
+    /// the hero, many times a frame, and needs none of the rest of the attack (skills, equipment, resistances).</summary>
+    public int? QueryHeroPerception()
+    {
+        ThrowIfDisposed();
+        return _hero is null ? null : HeroAttackStats(_life.Hero!.Value.State).GetEffective(CharacterStat.Perception);
     }
 
     /// <summary>

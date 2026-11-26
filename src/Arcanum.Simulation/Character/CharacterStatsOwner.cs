@@ -5,7 +5,7 @@ namespace Arcanum.Simulation.Character;
 /// <summary>
 /// Caller-serialized authority for one character's stored stats, race, gender and applied effects.
 /// Every accepted change increments the revision once; rejected and no-op requests leave state untouched.
-/// Snapshots are recomputed from the authoritative state, so derived values never go stale.
+/// Snapshots are made from the authoritative state and kept only while its revision stands, so derived values never go stale.
 /// </summary>
 public sealed class CharacterStatsOwner
 {
@@ -17,6 +17,11 @@ public sealed class CharacterStatsOwner
     private CharacterGender gender;
     private long revision;
     private long nextEffectId = 1;
+    // ARC-RENDER-3362: the last snapshots, by context, while the revision stands. A frame asks for the same few contexts many thousands of times, and a
+    // snapshot is immutable and made from nothing but this state and the context; every accepted change moves the revision.
+    private const int SnapshotsKept = 4;
+    private readonly CharacterStatsSnapshot?[] snapshots = new CharacterStatsSnapshot?[SnapshotsKept];
+    private int nextSnapshot;
 
     private CharacterStatsOwner(CharacterStatsDefinition definition)
     {
@@ -59,7 +64,17 @@ public sealed class CharacterStatsOwner
         if (Math.Abs((long)context.SectorAptitudeAdjustment) > CharacterStatRules.MaxSectorAptitudeAdjustment ||
             context.PoisonLevel is < 0 or > CharacterStatRules.MaxPoisonLevel || context.Hour is < 0 or > 23)
             return new(CharacterStatsFailure.InvalidContext, null);
-        return new(CharacterStatsFailure.None, BuildSnapshot(context));
+        return new(CharacterStatsFailure.None, Snapshot(context));
+    }
+
+    private CharacterStatsSnapshot Snapshot(CharacterStatContext context)
+    {
+        foreach (var kept in snapshots)
+            if (kept is not null && kept.Revision == revision && kept.Context == context) return kept;
+        var built = BuildSnapshot(context);
+        snapshots[nextSnapshot] = built;
+        nextSnapshot = (nextSnapshot + 1) % SnapshotsKept;
+        return built;
     }
 
     /// <summary>

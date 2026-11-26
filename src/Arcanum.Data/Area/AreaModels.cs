@@ -58,10 +58,26 @@ public readonly record struct AreaSectorCoordinate
         return new(packed & 67108863, packed >> 26);
     }
 }
-public readonly record struct AreaSectorKey(string SourceSha256, int RuntimeMap, long Packed);
-public readonly record struct AreaObjectKey(string SourceSha256, int RuntimeMap, AreaSourceKind Kind, long? Sector, int SourceIndex, long Offset, string ObjectIdSha256, int Length);
-public readonly record struct AreaVisualKey(AreaSourceKind Kind, AreaSectorKey Sector, int SourceIndex, string ObjectIdSha256, AreaLayerKind Layer = AreaLayerKind.Body, int SparseIndex = 0, AreaObjectKey? Object = null);
-public sealed record AreaEntryIdentity(AreaInputKey Source, int Ordinal, uint Flags, uint StoredBytes, uint DecodedBytes, uint Offset, string NameSha256);
+public readonly record struct AreaSectorKey(string SourceSha256, int RuntimeMap, long Packed)
+{
+    /// <summary>ARC-RENDER-3362: from the numbers only; equal keys still give one value (<see cref="AreaKeyHash"/>).</summary>
+    public override int GetHashCode() => HashCode.Combine(RuntimeMap, Packed);
+}
+public readonly record struct AreaObjectKey(string SourceSha256, int RuntimeMap, AreaSourceKind Kind, long? Sector, int SourceIndex, long Offset, string ObjectIdSha256, int Length)
+{
+    /// <summary>ARC-RENDER-3362: from the numbers and a sample of the object id; equal keys still give one value (<see cref="AreaKeyHash"/>).</summary>
+    public override int GetHashCode() => HashCode.Combine(RuntimeMap, (int)Kind, Sector, SourceIndex, Offset, AreaKeyHash.Sample(ObjectIdSha256));
+}
+public readonly record struct AreaVisualKey(AreaSourceKind Kind, AreaSectorKey Sector, int SourceIndex, string ObjectIdSha256, AreaLayerKind Layer = AreaLayerKind.Body, int SparseIndex = 0, AreaObjectKey? Object = null)
+{
+    /// <summary>ARC-RENDER-3362: from the numbers and a sample of the object id; equal keys still give one value (<see cref="AreaKeyHash"/>).</summary>
+    public override int GetHashCode() => HashCode.Combine((int)Kind, Sector, SourceIndex, (int)Layer, SparseIndex, AreaKeyHash.Sample(ObjectIdSha256));
+}
+public sealed record AreaEntryIdentity(AreaInputKey Source, int Ordinal, uint Flags, uint StoredBytes, uint DecodedBytes, uint Offset, string NameSha256)
+{
+    /// <summary>ARC-RENDER-3362: from the entry's place in its source; equal identities still give one value (<see cref="AreaKeyHash"/>).</summary>
+    public override int GetHashCode() => HashCode.Combine(Source, Ordinal, Offset, DecodedBytes);
+}
 public sealed record AreaSparseElement(int Key, IReadOnlyList<long> Words);
 public sealed record AreaFieldValue(int Slot, AreaPresence Presence, AreaValueOrigin Origin, long? Number, IReadOnlyList<AreaSparseElement> Elements, string? Fingerprint);
 public sealed record AreaByteRange(int Start, int Length);

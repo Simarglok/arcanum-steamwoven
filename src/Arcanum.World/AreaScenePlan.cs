@@ -12,6 +12,9 @@ public sealed record AreaFrameKey(AreaEntryIdentity Entry, int Palette, int Grou
     public static AreaFrameKey From(AreaVisualRecord visual) => new(visual.Entry,
         visual.EffectivePalette, visual.PhysicalGroup, visual.Frame,
         visual.Policy, visual.PayloadSha256, visual.ViewLength, visual.RgbaSha256);
+
+    /// <summary>ARC-RENDER-3362: from the entry and the frame's numbers, without hashing the digests; equal keys still give one value.</summary>
+    public override int GetHashCode() => HashCode.Combine(Entry, Palette, Group, Frame, ViewLength);
 }
 public sealed record AreaDrawCommand(AreaVisualKey Visual, AreaFrameKey Frame, AreaObjectKey? Identity,
     TerrainRect Source, TerrainRect Destination, bool FlipX, bool FlipY, int Phase, int MapX, int MapY,
