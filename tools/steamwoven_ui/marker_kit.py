@@ -10,8 +10,10 @@ Where each part comes from is the owner's pick (2026-11-26):
   pack    the covers of the helmet, boots, gauntlets, medallion and both rings: the old HD pack's frame with its baked grid lines and black ground removed;
   codex   the covers of the armour, shield and weapon (the pack drew solid objects there, #3105): a flat grey silhouette with a light engraving, the shape of
           the original, in the style of the accepted pack covers; and the markers 141 to 144 and 204, drawn together on one sheet;
-  rule    the round markers 205, 206 and 814 (true circles of the original's radii and colours), and the second frame of every marker that has one: the first
-          frame with a yellow contour of one thickness round it.
+  rule    the round markers 205, 206 and 814 (true circles of the original's radii and colours), and the second frame of arts 204, 205 and 206: the first
+          frame with a yellow contour of one thickness round it. The two frames of art 814 are one picture in the original, so its second part is the first.
+The skull of art 144 on the accepted sheet frowned; the owner asked for the original's neutral hollow eyes, so it is redrawn by an item of its own
+(`skull-neutral`, an edit of the sheet's cell) and read from that picture.
 A cover is a translucent grey overlay on a transparent ground, so the kit's grid layer (`grid.inventory_cells`) draws the grid and shows through it as in
 the original. The originals, the pack and the generated sheets are local and never committed.
 """
@@ -54,6 +56,7 @@ GROUND_SLACK = 4            # a grey this close above the black ground is ground
 SILHOUETTE_SIGMA = 0.45     # in original cells: the smoothing of a silhouette's outline taken from the original
 MARKER_BATCH, COVER_BATCH = "B-BUTTONS-3207-markers", "B-BUTTONS-3207-covers"
 MARKER_ITEM = "marker-sheet"
+REDRAWN = {"mm_skull": "skull-neutral"}   # markers read from an item of their own instead of their cell of the sheet
 
 
 class MarkerError(Exception):
@@ -112,9 +115,13 @@ class Part:
         return "rule" if self.frame else self.art.source
 
 
+SAME_FRAMES = frozenset({"mm_locnew"})   # arts whose two frames are one picture in the original
+
+
 def parts_of(art: Art) -> list[Part]:
     base = (kit_check.snap(art.units[0]), kit_check.snap(art.units[1]))
-    lit = (base[0] + 2 * LIT_PAD, base[1] + 2 * LIT_PAD)
+    pad = 0 if art.name in SAME_FRAMES else LIT_PAD
+    lit = (base[0] + 2 * pad, base[1] + 2 * pad)
     return [Part(f"glyph.{art.name}" + ("" if n == 0 else "_lit"), art, n, base if n == 0 else lit) for n in range(art.frames)]
 
 
@@ -129,7 +136,9 @@ def note_of(ident: str) -> str:
     part = PARTS[ident]
     art = part.art
     what = ("the cover of an empty worn slot" if art.family == "cover" else "the map marker") + f" of art {art.art}"
-    if part.frame:
+    if part.frame and art.name in SAME_FRAMES:
+        how = "frame 1: one picture with frame 0, as in the original"
+    elif part.frame:
         how = "highlighted: the first frame with a yellow contour round it, by rule"
     elif part.source == "rule":
         how = "by rule: true circles of the original's radii and colours"
@@ -137,6 +146,8 @@ def note_of(ident: str) -> str:
         how = "the old HD pack's frame" + (f" of art {art_named(SAME_AS[art.name]).art} (the same original)" if art.name in SAME_AS else "") + ", grid and ground removed"
     elif art.family == "cover":
         how = "a flat engraved silhouette by Codex on the original's shape, no grid"
+    elif art.name in REDRAWN:
+        how = "redrawn by Codex from the marker sheet's cell with neutral eyes, placed on the original's outline"
     else:
         how = "one Codex sheet for arts 141 to 144 and 204, placed on the original's outline"
     return f"{what}: {how} (marker_kit.py, ARC-UI-3207)"
@@ -449,11 +460,16 @@ def keyed(cell: Image) -> Image:
     return out
 
 
-def codex_marker(part: Part, frames: Path, sheet: Image) -> tuple[Image, float]:
-    """The marker's cell of the sheet placed on the original's outline (its bounding box); and how much the placing stretched it (x scale over y scale)."""
-    index = SHEET_ORDER.index(part.art.name)
+def sheet_cell(sheet: Image, name: str) -> Image:
+    index = SHEET_ORDER.index(name)
     cw, ch = sheet.w // 3, sheet.h // 2
-    cell = keyed(sheet.crop((index % 3) * cw, (index // 3) * ch, cw, ch))
+    return sheet.crop((index % 3) * cw, (index // 3) * ch, cw, ch)
+
+
+def codex_marker(part: Part, frames: Path, picture: Image) -> tuple[Image, float]:
+    """The marker's cell (of the sheet; the whole picture for a `REDRAWN` marker) placed on the original's outline (its bounding box); and how much the
+    placing stretched it (x scale over y scale)."""
+    cell = keyed(picture if part.art.name in REDRAWN else sheet_cell(picture, part.art.name))
     solid = [cell.data[i * 4 + 3] >= 128 for i in range(cell.w * cell.h)]
     gx0, gy0, gx1, gy1 = opaque_box(solid, cell.w, cell.h, 3)
     if gx0 == 0 or gy0 == 0 or gx1 == cell.w or gy1 == cell.h:
@@ -533,6 +549,14 @@ Input image STYLE: four already accepted silhouettes of the same set (helmet, ga
 
 Rules: it must read as an empty slot's faint sign, not as a real object. No three-dimensional shading, no bevel, no highlights, no metallic shine, no strong texture, no colour, no gradient. Keep the outline, the proportions, the size and the position of ORIGINAL inside the picture; smooth the pixel staircase into clean curves and straight edges. The ground is pure flat black #000000. No grid lines, no frame, no text."""
 
+SKULL_PROMPT = """Edit one small map marker icon of a steampunk role-playing game: a skull over two crossed bones.
+
+Input image CURRENT: the accepted icon. Input image ORIGINAL: the original pixel marker, enlarged; it shows the expression wanted.
+
+Change only the eyes and brow: remove the angry frowning brow lines and the slanted eye shapes. Draw two plain rounded hollow eye sockets, dark, level and symmetrical, with a smooth white forehead above them: a neutral, expressionless skull as in ORIGINAL. Keep everything else of CURRENT exactly: the cranium, the nose, the jaw and teeth, the crossed bones with their knob ends, the bluish-violet shading, the bold black outline of the same thickness, the colours, the size and the position in the picture.
+
+The ground everywhere else is flat pure magenta #FF00FF, with no gradient. No text, no frame, no shadow."""
+
 COVER_ASK = {"cvr_armor": (1024, 1280), "cvr_shield": (960, 1280), "cvr_weapon": (960, 1280)}
 STYLE_ARTS = ("cvr_helmet", "cvr_gauntlet", "cvr_boot", "cvr_medalion")
 
@@ -544,6 +568,15 @@ def marker_reference(frames: Path) -> Image:
         big = small_kit.upscaled(frame, (frame.w * SHEET_ZOOM, frame.h * SHEET_ZOOM))
         small_kit.over(sheet, big, (index % 3) * SHEET_CELL + (SHEET_CELL - big.w) // 2, (index // 3) * SHEET_CELL + (SHEET_CELL - big.h) // 2)
     return sheet
+
+
+def single_reference(frames: Path, name: str) -> Image:
+    """One original marker as a cell of the reference sheet."""
+    frame = read_original(frames, art_named(name))
+    cell = Image(SHEET_CELL, SHEET_CELL, bytearray(bytes((255, 0, 255, 255)) * (SHEET_CELL * SHEET_CELL)))
+    big = small_kit.upscaled(frame, (frame.w * SHEET_ZOOM, frame.h * SHEET_ZOOM))
+    small_kit.over(cell, big, (SHEET_CELL - big.w) // 2, (SHEET_CELL - big.h) // 2)
+    return cell
 
 
 def cover_reference(frames: Path, art: Art, asked: tuple[int, int]) -> Image:
@@ -600,7 +633,12 @@ def write_batch(local_root: Path, batch: str, items: list[tuple[str, str, str, t
 
 def cmd_codex_inbox(args: argparse.Namespace) -> int:
     frames, rows = context(args)
-    write_batch(args.local_root, MARKER_BATCH, [(MARKER_ITEM, "map markers 141 to 144 and 204 on one sheet", MARKER_PROMPT, (SHEET_CELL * 3, SHEET_CELL * 2), [("original", marker_reference(frames))])])
+    markers = [(MARKER_ITEM, "map markers 141 to 144 and 204 on one sheet", MARKER_PROMPT, (SHEET_CELL * 3, SHEET_CELL * 2), [("original", marker_reference(frames))])]
+    sheet = args.local_root / "outbox" / MARKER_BATCH / f"{MARKER_ITEM}.png"
+    if sheet.is_file():   # the redrawn markers edit the sheet's cells, so they follow it
+        markers += [(item, f"{name} redrawn from its cell of the sheet", SKULL_PROMPT, (1024, 1024), [("current", sheet_cell(pngio.read(sheet), name)), ("original", single_reference(frames, name))])
+                    for name, item in REDRAWN.items()]
+    write_batch(args.local_root, MARKER_BATCH, markers)
     style = style_reference(frames, args.pack, rows)
     items = []
     for name, what in COVER_TEXT.items():
@@ -608,14 +646,14 @@ def cmd_codex_inbox(args: argparse.Namespace) -> int:
         items.append((name.replace("cvr_", "cover-"), f"empty slot silhouette of art {art.art}", COVER_PROMPT.format(what=what), COVER_ASK[name],
                       [("original", cover_reference(frames, art, COVER_ASK[name])), ("style", style)]))
     write_batch(args.local_root, COVER_BATCH, items)
-    print(f"MARKER KIT codex-inbox PASS: {MARKER_BATCH} (1 item), {COVER_BATCH} ({len(items)} items)")
+    print(f"MARKER KIT codex-inbox PASS: {MARKER_BATCH} ({len(markers)} item(s)), {COVER_BATCH} ({len(items)} items)")
     return 0
 
 
 # --- the build ----------------------------------------------------------------------------------------------------------------
 
 def generated(local_root: Path, part: Part) -> Path:
-    batch, item = (COVER_BATCH, part.art.name.replace("cvr_", "cover-")) if part.art.family == "cover" else (MARKER_BATCH, MARKER_ITEM)
+    batch, item = (COVER_BATCH, part.art.name.replace("cvr_", "cover-")) if part.art.family == "cover" else (MARKER_BATCH, REDRAWN.get(part.art.name, MARKER_ITEM))
     path = local_root / "outbox" / batch / f"{item}.png"
     if not path.is_file():
         raise MarkerError(f"{part.ident}: no generated picture {path}: run `codex-inbox`, then `codex_batch.py run {batch}`")
@@ -651,7 +689,12 @@ def build_parts(args: argparse.Namespace, arts: list[Art]) -> list[Made]:
                 image, stretch = codex_marker(first, frames, pngio.read(source))
                 made.append(Made(first, image, source, f"stretch {stretch:.2f}"))
         for lit in parts[1:]:
-            made.append(Made(lit, highlight(made[-1].image, lit.size), None))
+            if art.name in SAME_FRAMES:
+                if read_original(frames, art, lit.frame).data != read_original(frames, art).data:
+                    raise MarkerError(f"{lit.ident}: the original's frames of art {art.art} differ, so the first part does not serve the second")
+                made.append(Made(lit, Image(*lit.size, bytearray(made[-1].image.data)), None))
+            else:
+                made.append(Made(lit, highlight(made[-1].image, lit.size), None))
     return made
 
 
@@ -765,7 +808,8 @@ def cmd_sheet(args: argparse.Namespace) -> int:
             for part in parts_of(art):
                 original = read_original(frames, art, part.frame)
                 old = Image.blank(*part.size)
-                big = small_kit.upscaled(original, (int(round(original.w * part.size[0] / (art.units[0] + 2 * part.frame))), int(round(original.h * part.size[1] / (art.units[1] + 2 * part.frame)))))
+                first = parts_of(art)[0].size
+                big = small_kit.upscaled(original, (int(round(original.w * first[0] / art.units[0])), int(round(original.h * first[1] / art.units[1]))))
                 small_kit.over(old, big, (part.size[0] - big.w) // 2, (part.size[1] - big.h) // 2)
                 new = images[part.ident]
                 if art.family == "cover":

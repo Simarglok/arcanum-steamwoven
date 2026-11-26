@@ -104,6 +104,7 @@ class Rule(unittest.TestCase):
         lit = marker_kit.highlight(made, (54, 54))
         self.assertEqual(lit.pixel(27, 3), yellow, "the contour outside the ring")
         self.assertEqual(lit.pixel(27, 36)[3], 0, "the clear inside of the ring stays clear")
+        self.assertEqual(marker_kit.PARTS["glyph.mm_locnew_lit"].size, (42, 42), "art 814's second frame is the first, not a thicker ring")
 
     def test_the_highlight_is_the_first_frame_over_a_contour_of_one_width(self) -> None:
         red = (200, 0, 0, 255)
@@ -200,6 +201,7 @@ class Chain(unittest.TestCase):
             return (10, 200, 10, 255) if inside else MAGENTA
 
         pngio.write(folder / f"{marker_kit.MARKER_ITEM}.png", picture(cell * 3, cell * 2, sheet_at))
+        pngio.write(folder / "skull-neutral.png", picture(cell, cell, lambda x, y: (10, 200, 10, 255) if 20 <= x < 80 and 20 <= y < 80 else MAGENTA))
         folder = self.local / "outbox" / marker_kit.COVER_BATCH
         folder.mkdir(parents=True)
         for item in ("cover-armor", "cover-shield", "cover-weapon"):
@@ -217,6 +219,14 @@ class Chain(unittest.TestCase):
                 self.assertEqual(item["prompt_sha256"], marker_kit.hashlib.sha256((inbox / item["prompt_file"]).read_bytes()).hexdigest())
                 for reference in item["references"]:
                     self.assertEqual(reference["sha256"], marker_kit.button_kit.sha256_file(inbox / reference["file"]))
+
+    def test_the_redrawn_skull_item_follows_the_sheet(self) -> None:
+        self.generate()
+        code, text = self.tool("codex-inbox")
+        self.assertEqual(code, 0, text)
+        data = json.loads((self.local / "inbox" / marker_kit.MARKER_BATCH / "batch.json").read_text(encoding="utf-8"))
+        self.assertEqual([i["id"] for i in data["items"]], [marker_kit.MARKER_ITEM, "skull-neutral"])
+        self.assertEqual([r["slot"] for r in data["items"][1]["references"]], ["current", "original"])
 
     def test_a_missing_generated_picture_fails_with_the_batch_to_run(self) -> None:
         code, text = self.tool("build", "--only", "cvr_armor", "--dry-run")
@@ -243,12 +253,15 @@ class Chain(unittest.TestCase):
             image = pngio.read(masters / f"{ident}.png")
             self.assertEqual((image.w, image.h), part.size, ident)
             self.assertEqual(image.pixel(0, 0)[3], 0, f"{ident}: a transparent ground")
+        self.assertEqual((masters / "glyph.mm_locnew_lit.png").read_bytes(), (masters / "glyph.mm_locnew.png").read_bytes())
+
         def read(ident: str) -> dict:
             return json.loads((records / f"{ident}.json").read_text(encoding="utf-8"))
 
         self.assertEqual(read("glyph.cvr_ring2")["source"]["file"], "CVR_Ring1-f0.png")
         self.assertEqual(read("glyph.cvr_armor")["source"]["generation"], {"generator": "test"})
         self.assertEqual(read("glyph.mm_chest")["source"]["picture"], f"{marker_kit.MARKER_ITEM}.png")
+        self.assertEqual(read("glyph.mm_skull")["source"]["picture"], "skull-neutral.png")
         self.assertIsNone(read("glyph.mm_cross_lit")["source"])
 
 

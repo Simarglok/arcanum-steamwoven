@@ -1545,7 +1545,7 @@ The kit parts of the eight map markers (arts 141 to 144, 204 to 206, 814) and th
 ```sh
 python3 -B tools/steamwoven_ui/marker_kit.py plan                                     # the 21 parts, their master sizes, sources and the manifest check
 python3 -B tools/steamwoven_ui/marker_kit.py codex-inbox                              # the inboxes of batches B-BUTTONS-3207-markers and -covers (prompts, references)
-python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS-3207-markers              # then the same for B-BUTTONS-3207-covers (--dry-run first)
+python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS-3207-markers              # then B-BUTTONS-3207-covers (--dry-run first); the item skull-neutral joins the markers batch once the sheet exists: codex-inbox again, run --only skull-neutral
 python3 -B tools/steamwoven_ui/marker_kit.py build [--only NAME,...] [--dry-run] [--pack DIR]   # -> masters/ and provenance/rule/ (pack frame or generated picture with its record, original frame hash)
 python3 -B tools/steamwoven_ui/marker_kit.py sheet --out FILE [--parts DIR] [--zoom N] [--only NAME,...]   # the composite original | new; covers over the original's grid lines
 python3 -B tools/steamwoven_ui/marker_kit.py self-test
