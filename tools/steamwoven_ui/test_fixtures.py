@@ -59,6 +59,10 @@ class FixtureTests(unittest.TestCase):
         self.assertTrue(b > 150 and r < 80, "the cross is blue at the disc's centre")
         corner = fixtures.draw("fixture.weapon_frame")
         self.assertEqual(corner.pixel(corner.w - 1, 2)[3], 0, "the quarter frame leaves its far top corner clear")
+        for ident, across in (("fixture.weapon_frame", 0.35), ("fixture.shield_frame", 0.65)):
+            frame = fixtures.draw(ident)
+            ground = frame.pixel(round(frame.w * across), round(frame.h * 0.65))
+            self.assertEqual(tuple(ground), (0, 0, 0, 255), f"{ident}: the ground under the picture is the original's black")
         ruler = fixtures.draw("fixture.mt_ruler")
         dark = [y for y in range(ruler.h) if ruler.pixel(round(ruler.w * 0.28), y)[0] < 90]
         self.assertGreater(len(dark), 30, "the ruler has its ticks")

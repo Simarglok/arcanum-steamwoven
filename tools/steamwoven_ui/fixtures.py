@@ -236,15 +236,19 @@ def _pit(c: Canvas, variant: str, inner: tuple[float, float, float, float] | Non
         c.frame(c.X(x), c.Y(y), c.X(x + w), c.Y(y + h), 2, EDGE)
 
 
-def _quarter(c: Canvas, right: bool, fill: Colour, variant: str) -> None:
-    """A quarter disc whose corner is the part's bottom-left (right) or bottom-right (left) corner, with a brass arc."""
+QUARTER_GROUND: Colour = (0, 0, 0)  # the original's pure black under the weapon and shield pictures (ARC-UI-3360)
+
+
+def _quarter(c: Canvas, right: bool) -> None:
+    """A quarter disc whose corner is the part's bottom-left (right) or bottom-right (left) corner, with a brass arc. Its ground is the
+    original's pure black: the picture drawn over it (arts 676, 677) carries its own red or blue shade, which fades to near-black (ARC-UI-3360)."""
     r = c.Y(97)
     cx, cy = (0.0 if right else c.w), c.h
 
     def distance(x: float, y: float) -> float:
         inside = y <= cy and (x >= cx if right else x <= cx)
         return math.hypot(x - cx, y - cy) - r if inside else 1e3
-    c.shape((min(cx, cx + r if right else cx - r), cy - r, max(cx, cx + r if right else cx - r), cy), distance, fill)
+    c.shape((min(cx, cx + r if right else cx - r), cy - r, max(cx, cx + r if right else cx - r), cy), distance, QUARTER_GROUND)
     arc = max(5.0, c.s * 2.2)
     c.shape((min(cx, cx + r if right else cx - r), cy - r, max(cx, cx + r if right else cx - r), cy),
             lambda x, y: abs(math.hypot(x - cx, y - cy) - (r - arc / 2)) - arc / 2 if (y <= cy and (x >= cx if right else x <= cx)) else 1e3, BRASS)
@@ -394,9 +398,9 @@ def draw(ident: str, variant: str = "brass") -> pngio.Image:
     elif ident == "fixture.count_icons":
         _icons(c)
     elif ident == "fixture.weapon_frame":
-        _quarter(c, True, (52, 12, 12), variant)
+        _quarter(c, True)
     elif ident == "fixture.shield_frame":
-        _quarter(c, False, (10, 14, 54), variant)
+        _quarter(c, False)
     elif ident == "fixture.arrange_legend":
         _legend(c)
     elif ident == "fixture.align_dial":
