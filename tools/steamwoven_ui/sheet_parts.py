@@ -106,7 +106,7 @@ NEEDLE_FRAMES, NEEDLE_COLUMNS, NEEDLE_CELL = 21, 7, 35  # art 254's frames in ce
 NEEDLE_CAST = 0.30  # (red - blue) / (red + 1) above this is the needle's own red, rust or brass; the baked grey shadow is under it
 NEEDLE_PIECE = 40  # px: a smaller piece of that colour is a stray, as is one under a quarter of the frame's largest
 NEEDLE_SMOOTH = 1.6  # px: the found outline is smoothed this much (the pack's own edge keeps the original's pixel stairs)
-NEEDLE_SHADOW_OFFSET, NEEDLE_SHADOW_SIGMA, NEEDLE_SHADOW = 14, 4.8, 0.7  # px, px, alpha: the shared soft shadow (#3249: its 3.6 units down and right in whole px, 3.5 units, strength 0.7), its blur cut to 1.2 units as the needle is only 2.5 wide (the shared 4.4 would wash it out)
+NEEDLE_SHADOW_OFFSET, NEEDLE_SHADOW_SIGMA, NEEDLE_SHADOW = 14, 4.8, 0.49  # px, px, alpha: the thin-part exception of the shared soft shadow (#3249; owner 2026-11-26): its offset in whole px (3.5 units down and right), a near and sharp blur of 1.2 units, and the original's strength (its needle shadow darkens the scale by 36 %; at 0.49 the footprint here darkens it by the same 36 % in the median, measured on the composed picture)
 NEEDLE_FOOT_FADE = 8  # px: the shadow fades in over this from the needle's foot, so none of it falls past the foot onto the dial's hub
 IDENTS = tuple(part.ident for part in PARTS) + (NEEDLE,)  # every id this tool cuts
 
@@ -566,7 +566,7 @@ def self_test() -> int:
     if planes[0][30][26] != 0.0 or planes[3][30][26] > NEEDLE_SHADOW * 255.0 + 1.0:
         problems.append("the needle frame keeps its baked grey shadow")
     under = (30 + NEEDLE_SHADOW_OFFSET, 13 + NEEDLE_SHADOW_OFFSET)  # the shadow of the bar's middle
-    if not 0.25 * 255.0 < planes[3][under[0]][under[1]] <= NEEDLE_SHADOW * 255.0 + 1.0 or planes[0][under[0]][under[1]] != 0.0:
+    if not 0.1 * 255.0 < planes[3][under[0]][under[1]] <= NEEDLE_SHADOW * 255.0 + 1.0 or planes[0][under[0]][under[1]] != 0.0:
         problems.append("no translucent dark shadow down and right of the needle")
     for problem in problems:
         print("SHEET PARTS FAIL:", problem)

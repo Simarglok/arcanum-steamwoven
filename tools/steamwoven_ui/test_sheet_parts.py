@@ -109,7 +109,7 @@ class SheetPartTests(unittest.TestCase):
             self.assertEqual(at(12, 50), (90, 25, 20, 255), index)
             self.assertEqual(at(29, 50)[:3], (0, 0, 0), index)  # the baked grey shadow is gone: only the black soft shadow lies there
             if index == sheet_parts.NEEDLE_FRAMES // 2:  # the bar stands as the upright frame does: tip up, foot at the bottom
-                self.assertTrue(60 < at(26, 70)[3] <= 179 and at(26, 70)[:3] == (0, 0, 0))  # the new one is translucent black, 14 px down and right
+                self.assertTrue(40 < at(26, 70)[3] <= 125 and at(26, 70)[:3] == (0, 0, 0))  # the new one is translucent black, 14 px down and right
                 self.assertEqual(at(26, 118)[3], 0)  # none of it falls past the foot, where the dial's hub lies
 
     def test_the_shadow_stops_at_the_foot_of_a_needle_pointing_left_or_right(self) -> None:
@@ -119,10 +119,10 @@ class SheetPartTests(unittest.TestCase):
                 bar.data[(y * 100 + x) * 4:(y * 100 + x) * 4 + 4] = bytes((90, 25, 20, 255))
         # index 0 points left, so the foot is the right end and nothing falls past it; index 20 points right, so the same place is under the needle's tip
         left, right = (sheet_parts.clean_needle(bar, index)[3] for index in (0, sheet_parts.NEEDLE_FRAMES - 1))
-        self.assertGreater(left[26][50], 60.0)  # under the middle of the needle
-        self.assertGreater(right[26][50], 60.0)
+        self.assertGreater(left[26][50], 40.0)  # under the middle of the needle
+        self.assertGreater(right[26][50], 40.0)
         self.assertEqual(left[26][108], 0.0)  # right of the foot, where the shifted bar would reach
-        self.assertGreater(right[26][108], 60.0)
+        self.assertGreater(right[26][108], 40.0)
 
     def test_a_part_is_cut_by_one_cutter_only(self) -> None:
         self.assertEqual(set(sheet_parts.BY_ID) & set(label_parts.BY_ID), set())
