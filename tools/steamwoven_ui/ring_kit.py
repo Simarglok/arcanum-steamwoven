@@ -281,8 +281,12 @@ SYMBOL_BOXES = {"mmb_chest": (5, 4, 17, 17), "mmb_note": (5, 3, 16, 18), "mmb_qu
 IDLE_DIM = {"mmb_chest": 0.77, "mmb_note": 0.67, "mmb_ques": 0.78, "mmb_skull": 0.66}   # frame 0's symbol lightness as a share of frame 1's, measured on the originals
 
 
-def marker_sheet(local_root: Path) -> Path:
-    return local_root / "outbox" / MARKER_BATCH / "marker-sheet.png"
+MARKER_REDRAWN = {"mmb_skull": "skull-neutral"}   # symbols #3207 redrew as an item of their own (the owner asked for a neutral skull): the whole picture, not a cell of the sheet
+
+
+def marker_sheet(local_root: Path, name: str | None = None) -> Path:
+    """The picture a symbol is cut from: the marker sheet, or the item of its own that replaced the symbol's cell."""
+    return local_root / "outbox" / MARKER_BATCH / f"{MARKER_REDRAWN.get(name, 'marker-sheet')}.png"
 
 
 def keyed_magenta(picture: Image) -> Image:
@@ -307,13 +311,15 @@ def cropped(picture: Image, x0: int, y0: int, x1: int, y1: int) -> Image:
 
 
 def marker_symbol(local_root: Path, name: str) -> Image:
-    """The symbol of a message button: its cell of the marker sheet, keyed and cropped to what is drawn."""
+    """The symbol of a message button: its cell of the marker sheet (or the picture that replaced it), keyed and cropped to what is drawn."""
     try:
-        sheet = pngio.read(marker_sheet(local_root))
+        sheet = pngio.read(marker_sheet(local_root, name))
     except (OSError, pngio.PngError) as error:
-        raise RingError(f"the marker sheet of #3207 cannot be read: {error}") from error
-    column, row = MARKER_CELLS[name]
-    cell = keyed_magenta(cropped(sheet, column * sheet.w // 3, row * sheet.h // 2, (column + 1) * sheet.w // 3, (row + 1) * sheet.h // 2))
+        raise RingError(f"the marker drawing of #3207 cannot be read: {error}") from error
+    if name not in MARKER_REDRAWN:
+        column, row = MARKER_CELLS[name]
+        sheet = cropped(sheet, column * sheet.w // 3, row * sheet.h // 2, (column + 1) * sheet.w // 3, (row + 1) * sheet.h // 2)
+    cell = keyed_magenta(sheet)
     on = [i for i in range(cell.w * cell.h) if cell.data[i * 4 + 3] > 40]
     if not on:
         raise RingError(f"{name}: the marker sheet's cell is empty")
@@ -424,8 +430,8 @@ class Arrow:
 
 
 def fit_arrow(cells: dict[tuple[int, int], tuple[int, int, int]]) -> Arrow:
-    """The arrow of a frame's symbol cells (the body ones): the shaft is what the second column holds, the head begins where a column grows past it and ends after the last column."""
-    body = {k: v for k, v in cells.items() if v[0] >= LIT} or cells
+    """The arrow of a frame's symbol cells (all of them): the shaft is what the second column holds, the head begins where a column grows past it and ends after the last column."""
+    body = cells
     if len(body) < 12:
         raise RingError("no arrow in the frame")
     xs = sorted({x for x, _ in body})
@@ -438,9 +444,10 @@ def fit_arrow(cells: dict[tuple[int, int], tuple[int, int, int]]) -> Arrow:
     return Arrow(left, shaft[0], shaft[-1] + 1, neck, xs[-1] + 1.5, min(head) - 0.5, max(head) + 1.5)
 
 
-def arrow_face(local_root: Path, ring: Ring, frame: Image, glow: bool) -> Image:
+def arrow_face(local_root: Path, ring: Ring, frame: Image, idle: Image, glow: bool) -> Image:
+    """One outline for every state (the idle frame's, so the arrow neither grows nor moves), each state's own cells inside it."""
     cells = symbol_colours(frame)
-    arrow = fit_arrow(cells)
+    arrow = fit_arrow(symbol_colours(idle))
     body = {k: v for k, v in cells.items() if v[0] >= (LIT if glow else 0)} or cells
 
     def shade(x: float, y: float):
@@ -493,7 +500,9 @@ def face_of(local_root: Path, frames: Path, ring: Ring, state: str) -> Image:
     if ring.method == "marker":
         return marker_face(local_root, ring, state)
     frame = original_frame(frames, ring, state)
-    return wedge_face(local_root, ring, frame) if ring.method == "wedge" else arrow_face(local_root, ring, frame, state != "idle")
+    if ring.method == "wedge":
+        return wedge_face(local_root, ring, frame)
+    return arrow_face(local_root, ring, frame, original_frame(frames, ring, "idle"), state != "idle")
 
 
 def ring_parts(local_root: Path, frames: Path, ring: Ring) -> dict[str, Image]:
@@ -535,9 +544,12 @@ def record_of(local_root: Path, frames: Path, ring: Ring, ident: str, image_path
         else:
             add(f"outbox/{CODEX_BATCH}/{SHEETS[0].ident}.png", sheet_path(local_root))   # the plate under the symbol
             if ring.method == "marker":
-                add(f"outbox/{MARKER_BATCH}/marker-sheet.png", marker_sheet(local_root))
+                picture = marker_sheet(local_root, ring.name)
+                add(f"outbox/{MARKER_BATCH}/{picture.name}", picture)
+                add(f"outbox/{MARKER_BATCH}/{picture.stem}.provenance.json", picture.with_suffix(".provenance.json"))
             else:
-                add(f"census/frames/{ring.folder}/f{STATE_FRAMES[state]}.png", frames / ring.folder / f"f{STATE_FRAMES[state]}.png")
+                for number in sorted({STATE_FRAMES[state], *([0] if ring.method == "arrow" else [])}):   # the arrow's outline is the idle frame's
+                    add(f"census/frames/{ring.folder}/f{number}.png", frames / ring.folder / f"f{number}.png")
     c = ring.circle
     return {"part": ident, "rule": "ring_kit", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "source": "none (empty layer)" if state is None else ring.method, "sources": sources,
             "empty": not any(image.data[3::4]), "parameters": {"circle_units": {"cx": c.cx, "cy": c.cy, "radius": c.radius, "trim": c.trim, "art_size": [c.width, c.height]}, "brass_target": list(BRASS), "master": [image.w, image.h]},

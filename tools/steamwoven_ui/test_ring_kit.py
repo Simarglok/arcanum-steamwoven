@@ -102,6 +102,9 @@ def tree(folder: str) -> Path:
         box(markers, column * 64 + 16, row * 64 + 12, column * 64 + 48, row * 64 + 52, (240, 240, 240))
     rk.marker_sheet(root).parent.mkdir(parents=True)
     pngio.write(rk.marker_sheet(root), markers)
+    skull = pngio.Image(64, 64, bytearray(bytes((255, 0, 255, 255)) * (64 * 64)))
+    box(skull, 8, 8, 56, 56, (250, 250, 250))
+    pngio.write(rk.marker_sheet(root, "mmb_skull"), skull)
     return root
 
 
@@ -216,6 +219,24 @@ class PartTests(unittest.TestCase):
             rk.fit_arrow({(1, 1): RED})
 
 
+class ArrowStateTests(unittest.TestCase):
+    def test_a_checkered_idle_and_a_glowing_state_keep_one_outline(self):
+        ring = rk.ring_named("sm_rightarrow")
+        checker = {k: (150, 0, 30) if sum(k) % 2 else (124, 0, 25) for k in ARROW_CELLS}
+        lit = {**{k: (150, 0, 25) for k in ARROW_CELLS}, **{k: (255, 90, 90) for k in ARROW_CELLS if 8 <= k[0] <= 14}}
+        with tempfile.TemporaryDirectory() as folder:
+            root = tree(folder)
+            frames = root / "census" / "frames"
+            for number, cells in ((0, checker), (1, lit)):
+                pngio.write(frames / ring.folder / f"f{number}.png", original(ring, cells))
+            plate = rk.empty_plate(root, ring)
+            faces = [rk.face_of(root, frames, ring, state) for state in ("idle", "pressed")]
+            for x, y in ((7.5, 11.5), (12.5, 7.5), (17.9, 11.5), (13.5, 14.5)):   # the shaft's end, the head's top, the tip, the head's lower side
+                self.assertTrue(rk.fit_arrow(checker).holds(x, y), (x, y))
+                for face in faces:
+                    self.assertGreater(at(ring, face, x, y)[0], at(ring, plate, x, y)[0] + 60, (x, y))
+
+
 class FaceTests(unittest.TestCase):
     def test_the_generated_set_gets_one_ring_and_a_centred_symbol(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -247,6 +268,7 @@ class FaceTests(unittest.TestCase):
     def test_a_missing_input_is_a_ring_error(self):
         with tempfile.TemporaryDirectory() as folder:
             root = tree(folder)
+            self.assertEqual(pixel(rk.marker_symbol(root, "mmb_skull"), 0, 0)[:3], (250, 250, 250))   # the redrawn skull, not the sheet's cell
             rk.marker_sheet(root).unlink()
             with self.assertRaises(rk.RingError):
                 rk.face_of(root, root / "census" / "frames", rk.ring_named("mmb_chest"), "idle")

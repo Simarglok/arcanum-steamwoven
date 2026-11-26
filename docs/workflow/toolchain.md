@@ -1541,7 +1541,7 @@ Viewer (ARC-UI-3320): the kit smoke (`./arcanum smoke pr --stages bar --env ARC_
 ## Steamwoven small brass-ringed buttons, batch B-BUTTONS slice 3c (ARC-UI-3270)
 
 The kit parts of the 16 small round buttons in a thin brass ring: arts 23, 24 (19 x 19 units), 770, 771 (21 x 21), 145 to 148, 299, 757, 758 (23 x 23), 338 to 340 (28 x 27), 823 and 824 (28 x 29); how each family is made: [TRD](../ui/steamwoven-interface-trd.md), the 3270 paragraph.
-Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for `sheet`, no Godot and no `dotnet`, so no launch queue. Inputs, all read only: the generated sheet `outbox/B-BUTTONS-RING/pm.png`, the marker sheet `outbox/B-BUTTONS-3207-markers/marker-sheet.png` (#3207), the original frames `census/frames` and the pack `local/hd-packs/interface-redraw-4x`.
+Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for `sheet`, no Godot and no `dotnet`, so no launch queue. Inputs, all read only: the generated sheet `outbox/B-BUTTONS-RING/pm.png`, the marker drawings `outbox/B-BUTTONS-3207-markers/marker-sheet.png` and `skull-neutral.png` (#3207), the original frames `census/frames` and the pack `local/hd-packs/interface-redraw-4x`.
 
 ```sh
 python3 -B tools/steamwoven_ui/ring_kit.py codex-inbox                                       # the inbox of batch B-BUTTONS-RING (one sheet: prompt, original and pack references)
