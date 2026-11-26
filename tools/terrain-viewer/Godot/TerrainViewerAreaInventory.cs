@@ -151,6 +151,7 @@ public partial class TerrainViewerApp
             _unreadCarriedLeft = _areaSession is { } asking ? leaving.UnreadCarried(asking) : [];
         }
         EndInventory();
+        DropInventoryOpenWarm();
         // ARC-DEV-323: the window no longer clears a theft in progress, so a replaced session drops its "trying" note here.
         _pickPocketTrying = false;
         UnbindAreaCombat();
@@ -321,6 +322,36 @@ public partial class TerrainViewerApp
 
     private GameSessionOwner? _junkPileSession;
 
+    /// <summary>The inventory window's panel, built at its first use: the first opening, or the background step ahead of it (ARC-UI-3419).</summary>
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_inventoryPanel))]
+    private void EnsureInventoryPanel()
+    {
+        if (_inventoryPanel is not null) return;
+        _inventoryPanel = new AreaInventoryPanel(); AddChild(_inventoryPanel); _inventoryPanel.DiagnosticSwitch = DebugMode;
+        _inventoryPanel.CloseRequested += EndInventory;
+        _inventoryPanel.TakeRequested += item => { if (!ContentsWindow) TakeFromBody(item); };
+        _inventoryPanel.TakeAllRequested += () => { if (!ContentsWindow) TakeAllFromBody(); };
+        _inventoryPanel.ArrangeRequested += ArrangeFromWindow;
+        _inventoryPanel.StatRequested += ShowStatLines;
+        _inventoryPanel.SoundRequested += id => PlayInterfaceSound(id, "inventory arrange button");
+        _inventoryPanel.PlantRequested += item => { if (!ContentsWindow) PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item); };
+        _inventoryPanel.UseRequested += item => { if (!ContentsWindow) UseItemFromWindow(item); };
+        _inventoryPanel.ItemPicked += InventoryItemPicked;
+        _inventoryPanel.PickCancelled += () => { if (_itemAiming is not null) CancelArmedLockpicks("right click"); else CancelSpellTargeting("right click"); };
+        _inventoryPanel.PointerStill += InventoryPointerStill;
+        _inventoryPanel.ReadRequested += item => { if (!ContentsWindow) ReadItem(item); };
+        _inventoryPanel.PickRequested += item => { if (!ContentsWindow) ArmLockpick(item); };
+        _inventoryPanel.RepairRequested += item => { if (!ContentsWindow) RepairItem(item); };
+        _inventoryPanel.WearRequested += (item, slot) => { if (!ContentsWindow) WearItem(item, slot); };
+        _inventoryPanel.TakeOffRequested += slot => { if (!ContentsWindow) TakeOffItem(slot); };
+        _inventoryPanel.DropRequested += drop => { if (!ContentsWindow) DropItem(drop); };
+        _inventoryPanel.MapDropRequested += held => { if (!ContentsWindow) LiftToGameCursor(held.Entity, "round-view"); };
+        _inventoryPanel.QuantityAccepted += AcceptQuantity;
+        _inventoryPanel.QuantityCancelled += CancelQuantity;
+        _inventoryPanel.HolderView = InventoryHolderView;
+        _inventoryPanel.PortraitTextures = HolderPortraitTexture;
+    }
+
     /// <summary>Opens the window on the PC's list, or (with <paramref name="holder"/>) on a dead NPC, junk pile or (ARC-WORLD-101, through
     /// <c>OpenContainer</c>) container to loot.</summary>
     private void OpenInventory(string? holder = null)
@@ -328,32 +359,7 @@ public partial class TerrainViewerApp
         var mode = InventoryModeOf(holder);
         if (!InventoryActive || InventoryOpen || !WindowCanOpen(mode)) { _containerLootSession = null; _contentsHolder = null; return; }
         if (holder is null || SessionJunkPile.Number(holder) is not null) _containerLootSession = null;
-        if (_inventoryPanel is null)
-        {
-            _inventoryPanel = new AreaInventoryPanel(); AddChild(_inventoryPanel); _inventoryPanel.DiagnosticSwitch = DebugMode;
-            _inventoryPanel.CloseRequested += EndInventory;
-            _inventoryPanel.TakeRequested += item => { if (!ContentsWindow) TakeFromBody(item); };
-            _inventoryPanel.TakeAllRequested += () => { if (!ContentsWindow) TakeAllFromBody(); };
-            _inventoryPanel.ArrangeRequested += ArrangeFromWindow;
-            _inventoryPanel.StatRequested += ShowStatLines;
-            _inventoryPanel.SoundRequested += id => PlayInterfaceSound(id, "inventory arrange button");
-            _inventoryPanel.PlantRequested += item => { if (!ContentsWindow) PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item); };
-            _inventoryPanel.UseRequested += item => { if (!ContentsWindow) UseItemFromWindow(item); };
-            _inventoryPanel.ItemPicked += InventoryItemPicked;
-            _inventoryPanel.PickCancelled += () => { if (_itemAiming is not null) CancelArmedLockpicks("right click"); else CancelSpellTargeting("right click"); };
-            _inventoryPanel.PointerStill += InventoryPointerStill;
-            _inventoryPanel.ReadRequested += item => { if (!ContentsWindow) ReadItem(item); };
-            _inventoryPanel.PickRequested += item => { if (!ContentsWindow) ArmLockpick(item); };
-            _inventoryPanel.RepairRequested += item => { if (!ContentsWindow) RepairItem(item); };
-            _inventoryPanel.WearRequested += (item, slot) => { if (!ContentsWindow) WearItem(item, slot); };
-            _inventoryPanel.TakeOffRequested += slot => { if (!ContentsWindow) TakeOffItem(slot); };
-            _inventoryPanel.DropRequested += drop => { if (!ContentsWindow) DropItem(drop); };
-            _inventoryPanel.MapDropRequested += held => { if (!ContentsWindow) LiftToGameCursor(held.Entity, "round-view"); };
-            _inventoryPanel.QuantityAccepted += AcceptQuantity;
-            _inventoryPanel.QuantityCancelled += CancelQuantity;
-            _inventoryPanel.HolderView = InventoryHolderView;
-            _inventoryPanel.PortraitTextures = HolderPortraitTexture;
-        }
+        EnsureInventoryPanel();
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         // ARC-DEV-339: the arrange button's layout flag is cleared at every open (0x57341F, ledger IW37): the first press lays out row by row.
