@@ -1,0 +1,10 @@
+KIND: PLATE (a small torn parchment label, bare)
+Part: {part_id} - {part_note}. Size: {width} x {height} px (a square). References: ORIGINAL (the layout truth: the original button enlarged 24 times; take ONLY the outline of the parchment in it, including its notches), SHEET (an earlier redraw: the sample of the paper's colour and of its soft mottled texture; its stone, symbol and layout of two cells must NOT appear).
+
+Draw ONLY one bare piece of old parchment, upright, centred, about 11 wide to 14 high, filling about nine tenths of the picture height. No symbol, no ink, no writing on it.
+
+The edge is clearly torn and uneven all the way round: many small irregular tears, teeth and nibbles between about one fortieth and one twentieth of the paper's width deep, no long straight run anywhere, each side different. Keep the outline of the ORIGINAL, with its notch on the right side near the top and its notch on the left side near the bottom. A thin slightly darker, browner rim follows the torn edge. The tears must stay visible after the picture is reduced about ten times.
+
+The paper is light creamy tan, not khaki, no green or olive cast. Its surface has a faint but visible mottled texture like the SHEET: soft warm brown blotches of different sizes, a few small dark flecks, fine fibres; calm, never dirty or high in contrast.
+
+Everything outside the parchment, the tears and notches included, is one flat pure magenta ground (#FF00FF). This replaces common rule 7 for this picture: do not use alpha, paint the magenta ground. No stone, no frame, no shadow. The parchment does not touch the picture edges.
