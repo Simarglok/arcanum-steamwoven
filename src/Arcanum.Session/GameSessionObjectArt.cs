@@ -29,8 +29,7 @@ public sealed partial class GameSessionOwner
     public IReadOnlyList<(string Entity, uint Art)> QueryObjectArts(SessionMapId map)
     {
         ThrowIfDisposed();
-        return Array.AsReadOnly(_maps.ForMap(map).Where(change => change.Key.Scope == MapChangeScope.Entity && change.Key.Property == SessionObjectArt.Property && change.Value is >= 0 and <= uint.MaxValue)
-            .Select(change => (change.Key.Entity!, (uint)change.Value)).ToArray());
+        return _maps.ArtsOf(map);
     }
 
     /// <summary>

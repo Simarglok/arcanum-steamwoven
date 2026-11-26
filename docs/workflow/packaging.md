@@ -168,6 +168,10 @@ Nothing else under `artifacts/packages` is written by `daily` itself, so the bug
   `Arcanum Steamwoven alpha · main <first 10 digits> · <date>` in the bottom right corner of the launcher and the main
   menu (a source run or an endpoint export shows `not a packaged build`). Every run prints
   `ARC-DEV-047 build <that line> user=<user folder>` at start.
+- **Precompiled code** (ARC-UI-3419): the release export publishes the viewer's assemblies ReadyToRun
+  (`PublishReadyToRun` in the viewer project for the `ExportRelease` configuration), so the first use of a window or a
+  rule does not wait for the JIT compiler. It makes the macOS universal app about 80 MB larger and the first export
+  downloads the matching `Microsoft.NETCore.App.Crossgen2` package from NuGet; a source run is unchanged.
 
 ## Not done
 

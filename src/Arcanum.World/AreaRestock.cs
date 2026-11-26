@@ -42,6 +42,8 @@ public sealed class AreaRestockHost
     private readonly AreaInventoryHost _inventory;
     private readonly AreaBarterData? _data;
     private readonly IAreaRestockScreen _screen;
+    // ARC-RENDER-3418: a map row's combat fields are read once; the row never changes, and the viewer asks for worn items often.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Arcanum.Data.Area.AreaObjectRecord, CombatFieldRead> _rowFields = new();
 
     public AreaRestockHost(GameSessionOwner session, AreaInventoryHost inventory, AreaBarterData? data, IAreaRestockScreen screen)
     {
@@ -162,7 +164,7 @@ public sealed class AreaRestockHost
         SessionWearableItem? Item(SessionInventoryItem item)
         {
             if (inventoryMap.TryGetRow(item.Entity, out var row))
-                return CombatFieldReader.Read(row).Fields is { } fields ? SessionEquipmentFacts.Wearable(item.Facts.Kind, fields) : null;
+                return _rowFields.GetValue(row, static data => CombatFieldReader.Read(data)).Fields is { } fields ? SessionEquipmentFacts.Wearable(item.Facts.Kind, fields) : null;
             return _data?.Prototype(item.Facts.Kind.Prototype) is { } prototype ? SessionEquipmentFacts.Wearable(item.Facts.Kind, prototype) : null;
         }
         return new(combat.Wearer(state.Conditions), combat.Chooser(state), Item, (_, _) => true);
@@ -176,27 +178,15 @@ public sealed class AreaRestockHost
     /// stores the size it computed at the event: the difference is an aptitude that moved since, which the hero's light follows as well). Null: the saved light stands (the NPC was not recalculated, or has no light item now or at load), and for an NPC the
     /// restock does not know (no wielder).
     /// </summary>
-    public Arcanum.Data.Lighting.CarriedLightSize? NpcLight(SessionMapId map, string npc, IAreaEventObjects? objects) => NpcLight(map, npc, objects, new(() => _session.QueryMapInventory(map)));
-
-    /// <summary>ARC-MAGIC-1561: <see cref="NpcLight(SessionMapId, string, IAreaEventObjects?)"/> for each of <paramref name="npcs"/> with the map's inventory view read once, and only when an NPC passes the cheap test.</summary>
-    public IReadOnlyDictionary<string, Arcanum.Data.Lighting.CarriedLightSize> NpcLights(SessionMapId map, IEnumerable<string> npcs, IAreaEventObjects? objects)
-    {
-        ArgumentNullException.ThrowIfNull(npcs);
-        var lights = new Dictionary<string, Arcanum.Data.Lighting.CarriedLightSize>(StringComparer.Ordinal);
-        var view = new Lazy<SessionMapInventory?>(() => _session.QueryMapInventory(map));
-        foreach (var npc in npcs)
-            if (NpcLight(map, npc, objects, view) is { } size) lights[npc] = size;
-        return lights;
-    }
-
-    private Arcanum.Data.Lighting.CarriedLightSize? NpcLight(SessionMapId map, string npc, IAreaEventObjects? objects, Lazy<SessionMapInventory?> view)
+    public Arcanum.Data.Lighting.CarriedLightSize? NpcLight(SessionMapId map, string npc, IAreaEventObjects? objects)
     {
         if (objects is null) return null;
         // The cheap test first: the viewer asks for every NPC of the shown map each time the session changes.
         var recalculated = _session.QueryNpcWorn(npc) is not null || _session.QueryCritterIndexedWrites(npc).Stats.Keys.Any(index => index is 22 or 23);
         if (!recalculated) return null;
         if (Wielder(map, npc, objects.Critter(npc)) is not { } wielder || Holder(map.RuntimeMap, npc) is not { } found) return null;
-        if (view.Value?.Holders.FirstOrDefault(holder => holder.Entity == npc && holder.Kind == SessionHolderKind.Npc) is not { } listed) return null;
+        // ARC-RENDER-3418: the one holder, not the view of the whole map.
+        if (_session.QueryMapHolder(map, npc) is not { Kind: SessionHolderKind.Npc } listed) return null;
         // What it wears now: the host's worn items (a broken or destroyed item is taken off), each with the wear facts of its list entry.
         if (objects.Worn(_session, map.RuntimeMap, npc) is not { } wornNow) return null;
         var worn = new List<Arcanum.Simulation.Equipment.EquipmentItem>();
@@ -215,6 +205,16 @@ public sealed class AreaRestockHost
             if (!atLoad) return null;
         }
         return Size(Arcanum.Simulation.Equipment.EquipmentRules.Light(worn, wielder.Chooser.MagickTechAptitude));
+    }
+
+    /// <summary>ARC-MAGIC-1561: <see cref="NpcLight(SessionMapId, string, IAreaEventObjects?)"/> for each of <paramref name="npcs"/>.</summary>
+    public IReadOnlyDictionary<string, Arcanum.Data.Lighting.CarriedLightSize> NpcLights(SessionMapId map, IEnumerable<string> npcs, IAreaEventObjects? objects)
+    {
+        ArgumentNullException.ThrowIfNull(npcs);
+        var lights = new Dictionary<string, Arcanum.Data.Lighting.CarriedLightSize>(StringComparer.Ordinal);
+        foreach (var npc in npcs)
+            if (NpcLight(map, npc, objects) is { } size) lights[npc] = size;
+        return lights;
     }
 
     private static Arcanum.Data.Lighting.CarriedLightSize Size(Arcanum.Simulation.Combat.LightEmission light) => light switch

@@ -5,6 +5,11 @@
     <TargetFramework>net8.0</TargetFramework>
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
+  <!-- ARC-UI-3419: the release export ships the game's assemblies precompiled (ReadyToRun), so the first use of a window or a rule
+       does not stall on the JIT compiler; hot methods are still recompiled by tiered compilation. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'ExportRelease'">
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../../src/Arcanum.Input.Godot/GodotInputAdapter.cs" Link="GodotInputAdapter.cs" />
     <!-- ARC-RES-2000: the relight lab's CPU normal generator, for the smoke stage's Godot-native comparison (normal maps of the same frames); one source, no copy. -->

@@ -3277,6 +3277,24 @@ not a contract): first opening to the next drawn frame, cold against warmed-up, 
 opening is the panel's own cost (inventory 39 ms, sheet 50 ms, logbook 27 ms inside the opening call). The self-test case `ARC-DEV-369 self-test prepared HD frames`
 checks that a prepared frame draws the pixels of a lazily resolved one, that refusals stay refusals, and that a stale or dropped frame resolves at the draw.
 
+### Inventory opening (ARC-UI-3419)
+
+On a busy map the first opening of the inventory held the key press's frame for 60–80 ms of main-thread time with the art already warm, and every opening and
+closing of a window was followed by a frame about 10 ms longer than usual. Three changes, none of which changes what is drawn:
+
+- **Precompiled release export.** The packaged game's assemblies are published ReadyToRun ([packaging](../workflow/packaging.md#what-makes-the-package-different-from-a-developer-build)), so the first use of a window or a rule no longer waits for the JIT compiler (about 40 of the first
+  opening's 67 ms).
+- **Hidden diagnostic panel.** A window hides the follower frames and its close brings them back, and the diagnostic panel starts right of them. A hidden panel
+  and failure line now take that inset when they are shown: moving the hidden panel laid out its long status text again, about 10 ms each time.
+- **Prepared opening.** After the art warm-up, with a hero in play and no window open, one frame builds the inventory panel, a later one asks for the hero's
+  view, and the following ones make the pictures of the items the grid and the doll show, with their HD redraws, in slices of about 3 ms a frame, once per
+  session (`ARC-UI-3419 inventory opening warm view items=N`, then `ARC-UI-3419 inventory opening warmed`). Nothing is shown; the opening reads the view anew.
+  `ARC_WINDOW_ART_WARMUP=0` switches this off too.
+
+Measured in the release package on the owner's Mac (M4 Pro, 2560×1440, HD, a walked-in busy map with followers, three alternating runs before and after, median
+main-thread CPU of the key press's frame and of the frame after it): first opening 67 + 26 → 31 + 13 ms, a repeated opening 14 + 17 → 15 + 9 ms, a close
+10 + 20 → 10 + 10 ms (first) and 7 + 19 → 7 + 7 ms (repeated). These are measurements, not a budget or a gate.
+
 
 ## Performance overlay (ARC-DEV-3389)
 

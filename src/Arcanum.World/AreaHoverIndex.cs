@@ -24,6 +24,10 @@ public sealed class AreaHoverIndex
 
     private readonly Dictionary<AreaObjectKey, AreaObjectRecord> _rows;
     private readonly Dictionary<(AreaObjectKey Key, CritterRecognition Recognition), string?> _names = [];
+    // ARC-RENDER-3418: the hover picks at every moving frame, so the merged order is built in reused lists (one thread, and
+    // the opacity test does not pick again).
+    private readonly List<AreaDrawCommand> _drawn = [];
+    private readonly HashSet<AreaObjectKey?> _movingKeys = [];
 
     /// <param name="objects">The map's object rows (<see cref="AreaSnapshot.Objects"/>).</param>
     /// <param name="commands">The map's plan commands in draw order (<see cref="AreaScenePlan.Commands"/>).</param>
@@ -83,17 +87,20 @@ public sealed class AreaHoverIndex
     {
         if (moving is null || moving.Count == 0) return Pick(opaqueAt);
         ArgumentNullException.ThrowIfNull(opaqueAt);
-        var keys = moving.Select(command => command.Identity).ToHashSet();
-        var bodies = Bodies.Where(body => !keys.Contains(body.Identity)).ToList();
+        _movingKeys.Clear(); _drawn.Clear();
+        foreach (var command in moving) _movingKeys.Add(command.Identity);
+        foreach (var body in Bodies) if (!_movingKeys.Contains(body.Identity)) _drawn.Add(body);
         foreach (var command in moving)
         {
             if (command.Identity is not { } key || !_rows.TryGetValue(key, out var row) || ClickThrough(row)) continue;
-            var at = bodies.FindLastIndex(body => body.Phase < command.Phase
-                || (body.Phase == command.Phase && AreaScenePlan.CompareUpright(body, command) <= 0)) + 1;
-            bodies.Insert(at, command);
+            // After the last body drawn before it.
+            var at = _drawn.Count;
+            while (at > 0 && !(_drawn[at - 1].Phase < command.Phase
+                || (_drawn[at - 1].Phase == command.Phase && AreaScenePlan.CompareUpright(_drawn[at - 1], command) <= 0))) at--;
+            _drawn.Insert(at, command);
         }
-        for (var index = bodies.Count - 1; index >= 0; index--)
-            if (opaqueAt(bodies[index])) return bodies[index].Identity;
+        for (var index = _drawn.Count - 1; index >= 0; index--)
+            if (opaqueAt(_drawn[index])) return _drawn[index].Identity;
         return null;
     }
 
