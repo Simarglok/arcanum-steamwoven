@@ -1551,7 +1551,7 @@ python3 -B tools/steamwoven_ui/ring_kit.py build [--only NAME,...] [--out DIR] [
 python3 -B tools/steamwoven_ui/ring_kit.py sheet --out FILE [--real FILE] [--only NAME,...]  # original | new with the shadow; --real: every button at its size on a 2560 x 1440 screen (English labels)
 ```
 
-`plate.<name>` is the idle face, `plate.<name>_pressed` and `_hover` the other states in full (two-frame arts have no hover look), `glyph.<name>` an empty layer. The generated discs are registered onto each art's circle (`RINGS`) by their own centre and radius; the red symbol is moved to the middle with one offset per button. Every ring is brought to the accepted brass (`BRASS`). The viewer does not draw these arts from the kit yet ([#3347](https://github.com/Simarglok/arcanum-steamwoven/issues/3347)).
+`plate.<name>` is the idle face, `plate.<name>_pressed` and `_hover` the other states in full (two-frame arts have no hover look), `glyph.<name>` an empty layer. The generated disc is registered onto each art's circle (`RINGS`) by its own centre and radius; the plus and minus are drawn over it by rule (`SIGN_LENGTH`, `SIGN_THICKNESS`). Every ring is brought to the accepted brass (`BRASS`). The viewer does not draw these arts from the kit yet ([#3347](https://github.com/Simarglok/arcanum-steamwoven/issues/3347)).
 Tests: `python3 -B -m unittest tools.steamwoven_ui.test_ring_kit` (in the batched `tools/local_dev/run_tests.py`).
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
