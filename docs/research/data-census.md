@@ -91,7 +91,7 @@ is itself a mounted source, so files under it also appear under their
 | All `.scr` (2,399 under `scr/`) | 2,402 | 3.3 MB | SCR framing | all framed, 23,878 lines |
 | Townmap tiles `townmap/**.bmp`, `.tmi` | 57,522 / 114 | 180 MB | none | not needed for the world |
 | World map `worldmap/*.bmp` | 65 | 4.2 MB | none | world-map stage only |
-| Sound `.mp3` / `.wav` | 2,704 / 706 | 325 MB | audio lab (ARC-DATA-010) | out of scope here |
+| Sound `.mp3` / `.wav` | 2,704 / 706 | 325 MB | `Arcanum.Data.Audio` | out of scope here |
 | Movies `.bik`, slides, portraits | 18 / 42 / 126 | 351 MB | none | out of scope here; the movies are read in [Bink movies](bink-movies.md) (the installation holds ten, 167 MB) |
 
 ## Maps and sectors

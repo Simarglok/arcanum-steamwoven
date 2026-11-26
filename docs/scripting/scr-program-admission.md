@@ -117,13 +117,6 @@ On the installed module S1 admits 144 of the 2,399 scripts whole (the census
 count; the opt-in `RealData` test checks it). It is a correctness core, not a
 coverage target.
 
-## NPC dialog entry
-
-The bounded [NPC dialog entry resolver](npc-dialog-entry-runtime.md) now frames
-its script with `ScrProgram.Read` instead of its own private parser and keeps its
-own rules on top (at least one line, capacity within its entry limit, no file
-flags, its query-only walk and frontier codes). Its results are unchanged.
-
 ## Checks
 
 - `tests/Arcanum.Data.Tests/Scripts/ScrProgramTests.cs`: header and clause

@@ -149,11 +149,6 @@ public sealed class GlobalFlagOwnerTests
         }
         Assert.AreEqual(new GlobalFlagWriteReceipt(RequestId, GlobalFlagOperation.Write, Version(9_223_372_036_854_775_807), new FlagId(3), true, Version(9_223_372_036_854_775_807), GlobalFlagWriteDisposition.NoChange, GlobalFlagReason.None),
             owner.Write(new(RequestId, Version(9_223_372_036_854_775_807), new(3), true)));
-        var adapter = new GlobalFlagAdapter(owner.Binding, owner);
-        Assert.AreEqual(new GlobalFlagWriteReceipt(RequestId, GlobalFlagOperation.Write, Version(9_223_372_036_854_775_807), new FlagId(3), true, Version(9_223_372_036_854_775_807), GlobalFlagWriteDisposition.NoChange, GlobalFlagReason.None),
-            adapter.Write(RequestId, Version(9_223_372_036_854_775_807), Descriptor("3", "1")));
-        Assert.AreEqual(new GlobalFlagWriteReceipt(RequestId, GlobalFlagOperation.Write, Version(9_223_372_036_854_775_807), new FlagId(3), false, Version(9_223_372_036_854_775_807), GlobalFlagWriteDisposition.Rejected, GlobalFlagReason.RevisionExhausted),
-            adapter.Write(RequestId, Version(9_223_372_036_854_775_807), Descriptor("3", "0")));
         State(owner, 9_223_372_036_854_775_807, true, true, false, false, false, null);
     }
 

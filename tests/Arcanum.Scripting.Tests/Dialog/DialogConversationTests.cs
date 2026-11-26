@@ -572,6 +572,79 @@ public sealed class DialogConversationTests
         Assert.AreEqual(DialogConversationFailureKind.InvalidOperation, signed.Failure!.Kind);
     }
 
+    // The field caps and operand bounds below were pinned only by the retired bounded runtime's tests; here they hold the live grammar to them.
+    [TestMethod]
+    public void Field_byte_and_operation_caps_are_exact_and_fail_closed_before_effects()
+    {
+        const string action = "QU 1 1; QU 2 2"; // 14 bytes, 2 operations
+        var document = Read(Record("10", "?", action: action) + Record("11", "x", iq: "1", response: "0"));
+        var exact = Start(document, new Ports(), Owner(), options: new DialogConversationOptions { MaxOperationFieldBytes = 14, MaxOperationsPerField = 2 });
+        Assert.AreEqual(DialogConversationPhase.AwaitingSelection, exact.Phase);
+        Assert.AreEqual(2, exact.Effects.Count);
+
+        foreach (var (options, ordinal) in new[]
+        {
+            (new DialogConversationOptions { MaxOperationFieldBytes = 13 }, 0),
+            (new DialogConversationOptions { MaxOperationsPerField = 1 }, 1),
+        })
+        {
+            var ports = new Ports();
+            var failed = Start(document, ports, Owner(), options: options);
+            Assert.AreEqual(DialogConversationPhase.Failed, failed.Phase);
+            Assert.AreEqual(DialogConversationFailureKind.OperationLimit, failed.Failure!.Kind);
+            Assert.AreEqual(ordinal, failed.Failure.Source!.Value.OperationOrdinal);
+            Assert.AreEqual(0, ports.Commands.Count);
+        }
+
+        // An over-cap reply action blocks only its reply.
+        var reply = Read(Record("10", "?") + Record("11", "x", iq: "1", response: "0", action: action) + Record("12", "y", iq: "1", response: "0"));
+        var blocked = Start(reply, new Ports(), Owner(), options: new DialogConversationOptions { MaxOperationsPerField = 1 });
+        Assert.IsNotNull(blocked.Options[0].Block);
+        Assert.IsNull(blocked.Options[1].Block);
+
+        foreach (var options in new[]
+        {
+            new DialogConversationOptions { MaxOperationFieldBytes = 0 }, new DialogConversationOptions { MaxOperationFieldBytes = 4097 },
+            new DialogConversationOptions { MaxOperationsPerField = 0 }, new DialogConversationOptions { MaxOperationsPerField = 33 },
+        })
+        {
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Start(document, new Ports(), Owner(), options: options));
+        }
+    }
+
+    [TestMethod]
+    public void Operand_overflow_signs_and_trailing_bytes_are_invalid_before_commands()
+    {
+        foreach (var action in new[]
+        {
+            "QU 2147483648 0", "QU -2147483649 0", "QU 1 2147483648", "RU 2147483648",
+            "LF -1 0", "LF 1 2", "QU 1 -1", "LF 1", "LF 1 0\x01", "LF 1 0\x80",
+        })
+        {
+            var ports = new Ports();
+            var failed = Start(Read(Record("10", "?", action: action) + Record("11", "x", iq: "1", response: "0")), ports, Owner());
+            Assert.AreEqual(DialogConversationPhase.Failed, failed.Phase, action);
+            Assert.AreEqual(DialogConversationFailureKind.InvalidOperation, failed.Failure!.Kind, action);
+            Assert.AreEqual(0, ports.Commands.Count, action);
+        }
+    }
+
+    [TestMethod]
+    public void Operand_bounds_letter_case_and_leading_zeros_are_admitted_exactly()
+    {
+        foreach (var (action, commands) in new[]
+        {
+            ("lF 31 0; qU 2147483647 6; rU 2147483647", new[] { "LF:31:0:900", "QU:2147483647:6:900", "RU:2147483647" }),
+            ("LF00 -0; qu 01 00; RU01000", new[] { "LF:0:0:900", "QU:1:0:900", "RU:1000" }),
+        })
+        {
+            var ports = new Ports();
+            var conversation = Start(Read(Record("10", "?", action: action) + Record("11", "x", iq: "1", response: "0")), ports, Owner());
+            Assert.AreEqual(DialogConversationPhase.AwaitingSelection, conversation.Phase, action);
+            CollectionAssert.AreEqual(commands, ports.Commands, action);
+        }
+    }
+
     internal static string Describe(DialogEffectReceipt receipt) => receipt.Command switch
     {
         GlobalFlagWriteCommand global => $"GF({global.Flag},{global.Value})@{receipt.Turn}",
