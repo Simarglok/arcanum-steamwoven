@@ -1540,16 +1540,18 @@ Viewer (ARC-UI-3320): the kit smoke (`./arcanum smoke pr --stages bar --env ARC_
 
 ## Steamwoven map markers and empty-slot covers, batch B-BUTTONS slice 7 (ARC-UI-3207)
 
-The kit parts of the eight map markers (arts 141 to 144, 204 to 206, 814) and the nine covers of the empty worn slots (241 to 249): one `glyph.<name>` per art and `glyph.<name>_lit` for the second frame of arts 204, 205, 206 and 814 ([TRD](../ui/steamwoven-interface-trd.md#asset-kit)). No Codex item. Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for the sheet, no Godot and no `dotnet`, so no launch queue:
+The kit parts of the eight map markers (arts 141 to 144, 204 to 206, 814) and the nine covers of the empty worn slots (241 to 249): one `glyph.<name>` per art and `glyph.<name>_lit` for the second frame of arts 204, 205, 206 and 814; which part comes from the pack, from Codex or from a rule is in the [TRD](../ui/steamwoven-interface-trd.md#asset-kit). Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for the sheet, no Godot and no `dotnet`, so no launch queue:
 
 ```sh
-python3 -B tools/steamwoven_ui/marker_kit.py plan                                     # the 21 parts, their master sizes, pack coverage and the manifest check
-python3 -B tools/steamwoven_ui/marker_kit.py build [--look pick|pack|rule] [--only NAME,...] [--dry-run] [--pack DIR]   # -> masters/ and provenance/rule/ (pack file and original frame hashes in each record)
-python3 -B tools/steamwoven_ui/marker_kit.py sheet --out FILE [--zoom N] [--only NAME,...]   # the composite original | A pack first | B by rule, the picked cell framed green
+python3 -B tools/steamwoven_ui/marker_kit.py plan                                     # the 21 parts, their master sizes, sources and the manifest check
+python3 -B tools/steamwoven_ui/marker_kit.py codex-inbox                              # the inboxes of batches B-BUTTONS-3207-markers and -covers (prompts, references)
+python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS-3207-markers              # then the same for B-BUTTONS-3207-covers (--dry-run first)
+python3 -B tools/steamwoven_ui/marker_kit.py build [--only NAME,...] [--dry-run] [--pack DIR]   # -> masters/ and provenance/rule/ (pack frame or generated picture with its record, original frame hash)
+python3 -B tools/steamwoven_ui/marker_kit.py sheet --out FILE [--parts DIR] [--zoom N] [--only NAME,...]   # the composite original | new; covers over the original's grid lines
 python3 -B tools/steamwoven_ui/marker_kit.py self-test
 ```
 
-`pick` (default) is what the manifest records: the arts of `RULE_PICK` by rule, every other art the old HD pack's frame (a missing pack frame is an error). `pack` falls back to the rule where the pack has no frame; `rule` takes nothing from the pack. The originals are `local/steamwoven-ui/census/frames/` (`--frames` names another folder), the pack is the installed `interface-redraw-4x` (`--pack`); both are read, never written. Tests: `python3 -B -m unittest tools.steamwoven_ui.test_marker_kit` (under a second; also in `tools/local_dev/run_tests.py`).
+The originals are `local/steamwoven-ui/census/frames/` (`--frames` names another folder), the pack is the installed `interface-redraw-4x` (`--pack`), both read and never written; the generated pictures are `local/steamwoven-ui/outbox/<batch>/`. `build` prints, per generated part, how well it sits on the original (the outline overlap of a cover, the stretch of a marker). Tests: `python3 -B -m unittest tools.steamwoven_ui.test_marker_kit` (about 10 s; also in `tools/local_dev/run_tests.py`).
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
 

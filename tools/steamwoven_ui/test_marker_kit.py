@@ -1,4 +1,4 @@
-"""ARC-UI-3207: tests of `marker_kit.py` (map markers and slot covers) on synthetic frames only: no original and no pack data."""
+"""ARC-UI-3207: tests of `marker_kit.py` (map markers and slot covers) on synthetic frames only: no original, no pack and no generated data."""
 from __future__ import annotations
 
 import contextlib
@@ -13,6 +13,7 @@ from tools.steamwoven_ui import kit_check, marker_kit, pngio
 
 Image = pngio.Image
 CLEAR = (0, 0, 0, 0)
+MAGENTA = (255, 0, 255, 255)
 GROUND, SHAPE, DETAIL = (0, 1, 2, 255), (41, 42, 43, 255), (20, 21, 22, 255)
 LINE, LINE_SHAPE = (46, 51, 60, 255), (80, 84, 91, 255)
 
@@ -35,42 +36,44 @@ def disc(size: int, outer: tuple, inner: tuple, split: float) -> Image:
     return picture(size, size, at)
 
 
-def cover_frame() -> Image:
-    """32 x 32: a clear top row, grid lines at column 15 and row 31, a square silhouette with a darker block in it."""
+def cover_frame(w: int = 32, h: int = 32) -> Image:
+    """A clear first cell, grid lines at column 15 and row 31, a silhouette in the middle with a darker block in it, a dim left edge column."""
 
     def at(x: int, y: int) -> tuple:
-        if y == 0:
+        if (x, y) == (0, 0):
             return CLEAR
-        inside = 6 <= x < 26 and 6 <= y < 26
+        inside = w // 5 <= x < w * 4 // 5 and h // 5 <= y < h * 4 // 5
         if x == 15 or y == 31:
             return LINE_SHAPE if inside else LINE
-        if 18 <= x < 23 and 18 <= y < 23:
+        if x == 0:
+            return (22, 23, 24, 255)
+        if w * 3 // 5 <= x < w * 7 // 10 and h * 3 // 5 <= y < h * 7 // 10:
             return DETAIL
         return SHAPE if inside else GROUND
 
-    return picture(32, 32, at)
+    return picture(w, h, at)
 
 
 class Table(unittest.TestCase):
-    def test_seventeen_arts_give_a_part_per_frame_at_the_snapped_size(self) -> None:
+    def test_seventeen_arts_give_a_part_per_frame(self) -> None:
         self.assertEqual(len(marker_kit.ARTS), 17)
         self.assertEqual(len(marker_kit.PARTS), 21)
         self.assertEqual(marker_kit.PARTS["glyph.mm_loc"].size, (30, 30))
         self.assertEqual(marker_kit.PARTS["glyph.mm_loc_lit"].size, (42, 42))
         self.assertEqual(marker_kit.PARTS["glyph.cvr_armor"].size, (462, 576))
 
-    def test_the_picked_mix_names_the_look_in_the_provenance(self) -> None:
-        self.assertEqual(marker_kit.provenance_of("glyph.mm_chest"), "pack:marker_kit:glyph.mm_chest")
-        self.assertEqual(marker_kit.provenance_of("glyph.mm_wayp_lit"), "rule:marker_kit:glyph.mm_wayp_lit")
-        self.assertEqual(marker_kit.provenance_of("glyph.cvr_ring2"), "pack:marker_kit:glyph.cvr_ring2")
+    def test_every_part_has_the_owners_source(self) -> None:
+        by_source: dict[str, set[int]] = {}
+        for part in marker_kit.PARTS.values():
+            if not part.frame:
+                by_source.setdefault(part.source, set()).add(part.art.art)
+        self.assertEqual(by_source["pack"], {241, 242, 243, 245, 246, 247})
+        self.assertEqual(by_source["codex"], {141, 142, 143, 144, 204, 244, 248, 249})
+        self.assertEqual(by_source["rule"], {205, 206, 814})
+        self.assertEqual({p.source for p in marker_kit.PARTS.values() if p.frame}, {"rule"})
+        self.assertEqual(marker_kit.provenance_of("glyph.mm_cross_lit"), "rule:marker_kit:glyph.mm_cross_lit")
+        self.assertEqual(marker_kit.provenance_of("glyph.cvr_armor"), "codex:marker_kit:glyph.cvr_armor")
         self.assertIn("art 246", marker_kit.note_of("glyph.cvr_ring2"))
-        self.assertTrue(marker_kit.RULE_PICK <= {a.name for a in marker_kit.ARTS})
-
-    def test_the_violet_place_marker_is_not_a_leaked_ground(self) -> None:
-        violet = (217, 142, 249, 255)
-        made = marker_kit.round_marker(disc(9, violet, (0, 0, 0, 255), 3.4), (30, 30))
-        self.assertTrue(kit_check.ground_pixels(made.data, made.w), "the colour alone would read as the generation ground")
-        self.assertIn("glyph.mm_loc", kit_check.OWN_MAGENTA)
 
     def test_the_manifest_holds_every_part_as_a_master(self) -> None:
         rows = {r["id"]: r for r in json.loads(marker_kit.small_kit.MANIFEST.read_text(encoding="utf-8"))["parts"]}
@@ -78,6 +81,11 @@ class Table(unittest.TestCase):
             self.assertEqual(rows[ident]["status"], "master", ident)
             self.assertEqual(rows[ident]["provenance"], marker_kit.provenance_of(ident), ident)
             self.assertEqual(rows[ident]["size"], list(part.size) if part.frame == 0 else None, ident)
+
+    def test_the_violet_place_marker_is_not_a_leaked_ground(self) -> None:
+        made = marker_kit.round_marker(disc(9, (217, 142, 249, 255), (0, 0, 0, 255), 3.4), (30, 30))
+        self.assertTrue(kit_check.ground_pixels(made.data, made.w), "the colour alone would read as the generation ground")
+        self.assertIn("glyph.mm_loc", kit_check.OWN_MAGENTA)
 
 
 class Rule(unittest.TestCase):
@@ -90,116 +98,158 @@ class Rule(unittest.TestCase):
     def test_the_new_place_ring_keeps_its_cross_and_a_clear_inside(self) -> None:
         yellow = (255, 246, 0, 255)
         frame = picture(11, 11, lambda x, y: yellow if 4.4 < math.hypot(x - 5, y - 5) <= 5.4 or (abs(x - 5) + abs(y - 5) <= 1) else CLEAR)
-        made = marker_kit.round_marker(frame, (44, 44))
-        self.assertEqual(made.pixel(22, 22), yellow)
-        self.assertEqual(made.pixel(22, 30)[3], 0, "between the cross and the ring nothing is drawn")
-        self.assertEqual(made.pixel(22, 2), yellow)
+        made = marker_kit.round_marker(frame, (42, 42))
+        self.assertEqual(made.pixel(21, 21), yellow)
+        self.assertEqual(made.pixel(21, 30)[3], 0, "between the cross and the ring nothing is drawn")
+        lit = marker_kit.highlight(made, (54, 54))
+        self.assertEqual(lit.pixel(27, 3), yellow, "the contour outside the ring")
+        self.assertEqual(lit.pixel(27, 36)[3], 0, "the clear inside of the ring stays clear")
 
-    def test_a_drawn_marker_keeps_flat_colours_and_its_outline(self) -> None:
-        red, black = (255, 0, 0, 255), (0, 0, 0, 255)
-        frame = picture(8, 8, lambda x, y: CLEAR if x in (0, 7) or y in (0, 7) else black if x in (1, 6) or y in (1, 6) else red)
-        made = marker_kit.smooth_marker(frame, (32, 32))
-        self.assertEqual(made.pixel(16, 16), red)
-        self.assertEqual(made.pixel(6, 16), black)
-        self.assertEqual(made.pixel(1, 16)[3], 0)
-
-    def test_a_cover_keeps_ground_shape_darker_detail_lines_and_the_clear_row(self) -> None:
-        made = marker_kit.cover(cover_frame(), (128, 128))
-        self.assertEqual(made.pixel(10, 60), GROUND)
-        self.assertEqual(made.pixel(40, 40), SHAPE)
-        self.assertEqual(made.pixel(62, 40), LINE_SHAPE)
-        self.assertEqual(made.pixel(62, 112), LINE)
-        self.assertEqual(made.pixel(60, 1)[3], 0)
-        detail = made.pixel(82, 82)[0]
-        self.assertTrue(GROUND[0] < detail < SHAPE[0], f"the darker block stays a darker step, not {detail}")
+    def test_the_highlight_is_the_first_frame_over_a_contour_of_one_width(self) -> None:
+        red = (200, 0, 0, 255)
+        base = picture(30, 30, lambda x, y: red if 3 <= x < 27 and 3 <= y < 27 else CLEAR)
+        lit = marker_kit.highlight(base, (42, 42))
+        self.assertEqual(lit.pixel(21, 21), red)
+        yellow = (*marker_kit.YELLOW, 255)
+        # the square begins at 9 on the new canvas; the contour is the RING px before it, on every side
+        for point in ((21, 9 - marker_kit.RING + 1), (21, 41 - 9 + marker_kit.RING - 1), (9 - marker_kit.RING + 1, 21), (41 - 9 + marker_kit.RING - 1, 21)):
+            self.assertEqual(lit.pixel(*point), yellow, point)
+        self.assertEqual(lit.pixel(21, 9 - marker_kit.RING - 2)[3], 0)
 
 
-class Pack(unittest.TestCase):
+class Covers(unittest.TestCase):
+    def test_the_layers_drop_the_grid_and_the_shaded_edge_and_keep_a_darker_detail(self) -> None:
+        coverage, columns, rows = marker_kit.cover_layers(cover_frame())
+        self.assertEqual((columns, rows), ([15], [31]))
+        self.assertEqual(coverage[16 * 32 + 15], 1.0, "silhouette under a line")
+        self.assertEqual(coverage[31 * 32 + 3], 0.0, "ground under a line")
+        self.assertEqual(coverage[16 * 32], 0.0, "the shaded left edge is no silhouette")
+        self.assertTrue(0 < coverage[20 * 32 + 20] < 1)
+
+    def test_lines_are_painted_out_between_their_neighbours(self) -> None:
+        image = picture(20, 4, lambda x, y: (250, 250, 250, 255) if 8 <= x < 12 else (40, 40, 40, 255))
+        clean = marker_kit.remove_lines(image, [(8, 12)], [])
+        self.assertEqual({clean.pixel(x, 2) for x in range(20)}, {(40, 40, 40, 255)})
+
+    def test_an_overlay_is_the_picture_over_black_and_lets_a_line_show_through(self) -> None:
+        image = picture(10, 10, lambda x, y: (41, 42, 43, 255) if 2 <= x < 8 else (1, 1, 1, 255))
+        made = marker_kit.overlay(image, [True] * 100)
+        self.assertEqual(made.pixel(0, 0)[3], 0, "the ground is clear")
+        black, line = Image.blank(10, 10, (0, 0, 0, 255)), Image.blank(10, 10, (46, 51, 60, 255))
+        for ground in (black, line):
+            marker_kit.small_kit.over(ground, made, 0, 0)
+        self.assertLessEqual(max(abs(a - b) for a, b in zip(black.pixel(5, 5), (41, 42, 43, 255))), 1)
+        self.assertGreater(line.pixel(5, 5)[0], 70, "the line shows through the silhouette, brighter, as in the original")
+
+    def test_nothing_outside_the_kept_area_is_drawn(self) -> None:
+        image = Image.blank(4, 4, (90, 90, 90, 255))
+        keep = [False] * 8 + [True] * 8
+        made = marker_kit.overlay(Image(4, 4, bytearray(bytes((0, 0, 0, 255)) * 8) + image.data[32:]), keep)
+        self.assertEqual([made.data[i * 4 + 3] for i in range(8)], [0] * 8)
+
+
+class Markers(unittest.TestCase):
+    def test_the_key_leaves_black_outlines_black_and_the_ground_clear(self) -> None:
+        cell = picture(3, 1, lambda x, y: (MAGENTA, (128, 0, 128, 255), (255, 0, 0, 255))[x])
+        keyed = marker_kit.keyed(cell)
+        self.assertEqual(keyed.pixel(0, 0)[3], 0)
+        mixed = keyed.pixel(1, 0)
+        self.assertEqual(mixed[:3], (0, 0, 0), "half black, half ground: black")
+        self.assertTrue(100 < mixed[3] < 160)
+        self.assertEqual(keyed.pixel(2, 0), (255, 0, 0, 255))
+
+
+class Chain(unittest.TestCase):
+    """The whole tool on a synthetic census, pack and generated pictures."""
+
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
-        self.frames, self.pack = self.root / "frames", self.root / "pack"
+        self.frames, self.pack, self.local = self.root / "frames", self.root / "pack", self.root / "local"
         self.pack.mkdir()
-        self.rows: list[str] = []
+        rows = []
         for art in marker_kit.ARTS:
             (self.frames / art.folder).mkdir(parents=True)
-            for part in marker_kit.parts_of(art):
-                w, h = part.units
-                frame = picture(w, h, lambda x, y: CLEAR if (x, y) == (0, 0) else SHAPE if 2 <= x < w - 2 and 2 <= y < h - 2 else GROUND)
-                pngio.write(self.frames / art.folder / f"f{part.frame}.png", frame)
-                held = art.name not in ("mm_cross", "cvr_ring2") and not (art.name in ("mm_loc", "mm_wayp") and part.frame)
-                if held:
-                    rel = f"{art.pack_name}-f{part.frame}.png"
-                    # a pack frame with a clear black rim: its alpha is not used and its black must not bleed into the part
-                    pngio.write(self.pack / rel, picture(w * 4, h * 4, lambda x, y: (0, 0, 0, 0) if x < 4 or y < 4 else (200, 100, 50, 255)))
-                    self.rows.append(f"g\tp\t{art.pack_name}\t{part.frame}\t{rel}")
-        (self.pack / "index.tsv").write_text("\n".join(self.rows) + "\n", encoding="utf-8")
-        self.index = marker_kit.small_kit.pack_index(self.pack)
+            w, h = art.units
+            if art.family == "cover":
+                frame = cover_frame(w, h)
+            else:
+                frame = disc(w, (217, 142, 249, 255), (0, 0, 0, 255), w / 2 - 1.2) if art.source == "rule" else picture(w, h, lambda x, y: (200, 0, 0, 255) if 1 <= x < w - 1 and 1 <= y < h - 1 else CLEAR)
+            for number in range(art.frames):
+                pngio.write(self.frames / art.folder / f"f{number}.png", frame)
+            if art.source == "pack" and art.name != "cvr_ring2":
+                rel = f"{art.pack_name}-f0.png"
+                pngio.write(self.pack / rel, marker_kit.small_kit.upscaled(frame, (w * 4, h * 4)))
+                rows.append(f"g\tp\t{art.pack_name}\t0\t{rel}")
+        (self.pack / "index.tsv").write_text("\n".join(rows) + "\n", encoding="utf-8")
 
-    def test_a_pack_part_takes_the_originals_alpha_and_no_dark_fringe(self) -> None:
-        image, source = marker_kit.build_part(marker_kit.PARTS["glyph.mm_chest"], self.frames, self.pack, self.index, "pick")
-        self.assertEqual(source, self.pack / "mm_chest-f0.png")
-        self.assertEqual((image.w, image.h), (60, 66))
-        self.assertEqual(image.pixel(0, 0)[3], 0, "the original's clear corner")
-        self.assertEqual(image.pixel(1, 30), (200, 100, 50, 255), "opaque by the original, the colour bled over the pack's clear rim")
+    def tool(self, *arguments: str) -> tuple[int, str]:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = marker_kit.main([arguments[0], "--local-root", str(self.local), "--pack", str(self.pack), "--frames", str(self.frames), *arguments[1:]])
+        return code, out.getvalue()
 
-    def test_a_pack_cover_is_opaque_but_for_the_originals_clear_cells(self) -> None:
-        image, source = marker_kit.build_part(marker_kit.PARTS["glyph.cvr_helmet"], self.frames, self.pack, self.index, "pick")
-        self.assertIsNotNone(source)
-        self.assertEqual(image.pixel(0, 0)[3], 0, "the original's one clear cell")
-        self.assertEqual({image.data[i] for i in range(3, len(image.data), 4)}, {0, 255})
-        self.assertEqual(sum(1 for i in range(3, len(image.data), 4) if not image.data[i]), 16, "nothing else is clear, the pack's clear rim included")
-        self.assertEqual(image.pixel(100, 100), (200, 100, 50, 255))
-        self.assertIn("opaque but for", marker_kit.note_of("glyph.cvr_helmet"))
+    def generate(self) -> None:
+        folder = self.local / "outbox" / marker_kit.MARKER_BATCH
+        folder.mkdir(parents=True)
+        cell = 100
 
-    def test_the_rule_look_needs_no_pack(self) -> None:
-        code, text = self.run_tool("--look", "rule", "--dry-run", "--pack", str(self.root / "nowhere"))
+        def sheet_at(x: int, y: int) -> tuple:
+            inside = 20 <= x % cell < 80 and 20 <= y % cell < 80 and not (x >= 200 and y >= 100)
+            return (10, 200, 10, 255) if inside else MAGENTA
+
+        pngio.write(folder / f"{marker_kit.MARKER_ITEM}.png", picture(cell * 3, cell * 2, sheet_at))
+        folder = self.local / "outbox" / marker_kit.COVER_BATCH
+        folder.mkdir(parents=True)
+        for item in ("cover-armor", "cover-shield", "cover-weapon"):
+            pngio.write(folder / f"{item}.png", picture(96, 120, lambda x, y: (150, 150, 150, 255) if 30 <= x < 66 and 20 <= y < 100 else (0, 0, 0, 255)))
+        (folder / "cover-armor.provenance.json").write_text('{"generator": "test"}', encoding="utf-8")
+
+    def test_the_inboxes_are_batches_the_runner_reads(self) -> None:
+        code, text = self.tool("codex-inbox")
         self.assertEqual(code, 0, text)
+        for batch, count in ((marker_kit.MARKER_BATCH, 1), (marker_kit.COVER_BATCH, 3)):
+            inbox = self.local / "inbox" / batch
+            data = json.loads((inbox / "batch.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(data["items"]), count)
+            for item in data["items"]:
+                self.assertEqual(item["prompt_sha256"], marker_kit.hashlib.sha256((inbox / item["prompt_file"]).read_bytes()).hexdigest())
+                for reference in item["references"]:
+                    self.assertEqual(reference["sha256"], marker_kit.button_kit.sha256_file(inbox / reference["file"]))
 
-    def test_the_second_ring_takes_the_first_rings_pack_frame(self) -> None:
-        _, source = marker_kit.build_part(marker_kit.PARTS["glyph.cvr_ring2"], self.frames, self.pack, self.index, "pick")
-        self.assertEqual(source, self.pack / "CVR_Ring1-f0.png")
+    def test_a_missing_generated_picture_fails_with_the_batch_to_run(self) -> None:
+        code, text = self.tool("build", "--only", "cvr_armor", "--dry-run")
+        self.assertEqual(code, 1)
+        self.assertIn(marker_kit.COVER_BATCH, text)
+
+    def test_a_dry_run_writes_nothing(self) -> None:
+        code, text = self.tool("build", "--only", "cvr_helmet,mm_loc", "--dry-run")
+        self.assertEqual(code, 0, text)
+        self.assertFalse(self.local.exists())
 
     def test_the_second_ring_is_refused_when_the_originals_differ(self) -> None:
         pngio.write(self.frames / "247-CVR_Ring2" / "f0.png", Image.blank(32, 32, SHAPE))
-        with self.assertRaises(marker_kit.MarkerError):
-            marker_kit.build_part(marker_kit.PARTS["glyph.cvr_ring2"], self.frames, self.pack, self.index, "pick")
+        code, text = self.tool("build", "--only", "cvr_ring2", "--dry-run")
+        self.assertEqual(code, 1, text)
 
-    def test_a_missing_pack_frame_fails_the_pick_and_falls_back_in_the_pack_look(self) -> None:
-        del self.index[("mm_chest", 0)]
-        part = marker_kit.PARTS["glyph.mm_chest"]
-        with self.assertRaises(marker_kit.MarkerError):
-            marker_kit.build_part(part, self.frames, self.pack, self.index, "pick")
-        self.assertIsNone(marker_kit.build_part(part, self.frames, self.pack, self.index, "pack")[1])
-
-    def test_a_pack_frame_of_a_wrong_size_is_refused(self) -> None:
-        pngio.write(self.pack / "mm_chest-f0.png", Image.blank(10, 10, SHAPE))
-        with self.assertRaises(marker_kit.MarkerError):
-            marker_kit.build_part(marker_kit.PARTS["glyph.mm_chest"], self.frames, self.pack, self.index, "pick")
-
-    def run_tool(self, *more: str) -> tuple[int, str]:
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            code = marker_kit.main(["build", "--local-root", str(self.root / "local"), "--pack", str(self.pack), "--frames", str(self.frames), "--only", "mm_chest,mm_loc", *more])
-        return code, out.getvalue()
-
-    def test_a_dry_run_writes_nothing(self) -> None:
-        code, text = self.run_tool("--dry-run")
+    def test_a_build_writes_every_part_with_a_record_that_names_its_source(self) -> None:
+        self.generate()
+        code, text = self.tool("build")
         self.assertEqual(code, 0, text)
-        self.assertFalse((self.root / "local").exists())
+        masters, records = self.local / "masters", self.local / "provenance" / "rule"
+        self.assertEqual(sorted(p.stem for p in masters.iterdir()), sorted(marker_kit.PARTS))
+        for ident, part in marker_kit.PARTS.items():
+            image = pngio.read(masters / f"{ident}.png")
+            self.assertEqual((image.w, image.h), part.size, ident)
+            self.assertEqual(image.pixel(0, 0)[3], 0, f"{ident}: a transparent ground")
+        def read(ident: str) -> dict:
+            return json.loads((records / f"{ident}.json").read_text(encoding="utf-8"))
 
-    def test_a_build_writes_masters_and_records_that_name_their_sources(self) -> None:
-        code, text = self.run_tool()
-        self.assertEqual(code, 0, text)
-        local = self.root / "local"
-        self.assertEqual(sorted(p.name for p in (local / "masters").iterdir()), ["glyph.mm_chest.png", "glyph.mm_loc.png", "glyph.mm_loc_lit.png"])
-        packed = json.loads((local / "provenance" / "rule" / "glyph.mm_chest.json").read_text(encoding="utf-8"))
-        self.assertEqual(packed["source"]["file"], "mm_chest-f0.png")
-        self.assertEqual(len(packed["source"]["sha256"]), 64)
-        ruled = json.loads((local / "provenance" / "rule" / "glyph.mm_loc.json").read_text(encoding="utf-8"))
-        self.assertIsNone(ruled["source"])
-        self.assertEqual(ruled["original"]["frame"], "205-MM_Loc/f0.png")
+        self.assertEqual(read("glyph.cvr_ring2")["source"]["file"], "CVR_Ring1-f0.png")
+        self.assertEqual(read("glyph.cvr_armor")["source"]["generation"], {"generator": "test"})
+        self.assertEqual(read("glyph.mm_chest")["source"]["picture"], f"{marker_kit.MARKER_ITEM}.png")
+        self.assertIsNone(read("glyph.mm_cross_lit")["source"])
 
 
 if __name__ == "__main__":
