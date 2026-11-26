@@ -64,21 +64,26 @@ class WideButtonKitTest(unittest.TestCase):
         self.assertAlmostEqual(wb.MASTER_RING - r, 13.5, places=1)                       # the ring is 15 pack px (13.5 master px) wide
         left, right = wb.bar_ends()
         self.assertAlmostEqual((left + right) / 2, dx, places=6)                         # the bar is symmetric about the dome
-        # the surface's disc boxes (the old wood outside the three holes, the original's pixels inside them) hold the part's holes
+        # ARC-UI-3269: the dome and the wells are parts of their own, laid before the brass (its lip covers their edges); each covers its holes, and no disc box keeps the original's pixels there
         spec = surface_compose.load_spec(SPEC)
-        discs = [d for d in spec.disc_boxes if d[1] >= 1200]
-        self.assertEqual(len(discs), 3)
-        centres = sorted(((d[4] + d[6]) / 2, (d[5] + d[7]) / 2, (d[6] - d[4]) / 2) for d in discs)
-        for (cx, cy, rad), (hx, hy, hr) in zip(centres, sorted([(w[0], w[1], wb.MASTER_WELL_R) for w in wb.MASTER_WELLS] + [wb.MASTER_DOME])):
-            self.assertAlmostEqual(cx, hx, delta=1.0)
-            self.assertAlmostEqual(cy, hy, delta=1.0)
-            self.assertTrue(hr < rad <= hr + 4, msg=f"disc {rad} for hole {hr}")        # the disc ellipse reaches a little past the hole: the part's anti-aliased edge lies on the original's pixels
-        self.assertEqual([p for p in spec.kit_parts], [{"id": wb.PART, "file": f"{wb.PART}.png", "x": wb.ORIGIN[0], "y": wb.ORIGIN[1]}])
+        self.assertEqual([d for d in spec.disc_boxes if d[1] >= 1200], [])
+        placed = list(spec.kit_parts)
+        self.assertEqual([p["id"] for p in placed], ["plate.combinebutt", "picture.combineindicator2", wb.PART])
+        self.assertEqual(placed[-1], {"id": wb.PART, "file": f"{wb.PART}.png", "x": wb.ORIGIN[0], "y": wb.ORIGIN[1]})
+        manifest = json.loads((SPEC.parents[1] / "kit.json").read_text(encoding="utf-8"))
+        sizes = {p["id"]: p["size"] for p in manifest["parts"] if p["id"] in ("plate.combinebutt", "picture.combineindicator2")}
+        (dome, wells) = placed[0], placed[1]
+        width, height = sizes[dome["id"]]
+        self.assertAlmostEqual(dome["x"] + width / 2, dx, delta=1.5)
+        self.assertAlmostEqual(dome["y"] + height / 2, dy, delta=1.5)
+        self.assertGreaterEqual(width / 2, r)
+        width, height = sizes[wells["id"]]
+        for hx, hy in wb.MASTER_WELLS:                                                   # each well's hole lies within the indicator's disc at that end
+            end = wells["x"] + (height / 2 if hx < dx else width - height / 2)
+            self.assertAlmostEqual(end, hx, delta=1.5)
+            self.assertAlmostEqual(wells["y"] + height / 2, hy, delta=1.5)
+        self.assertGreaterEqual(height / 2 + 0.5, wb.MASTER_WELL_R)
         self.assertEqual(spec.part_boxes, ())                                            # the #3248 shape cut is replaced by this part
-        for d in discs:                                                                   # the three boxes tile the button's region without overlap
-            self.assertTrue(d[0] <= d[4] and d[2] >= d[6] and d[1] <= d[5] and d[3] >= d[7])
-        boxes = sorted(d[:4] for d in discs)
-        self.assertEqual([b[2] for b in boxes[:2]], [b[0] for b in boxes[1:]])
 
     def test_the_part_is_opaque_brass_and_its_edges_are_anti_aliased(self):
         dx, dy, r = wb.MASTER_DOME
