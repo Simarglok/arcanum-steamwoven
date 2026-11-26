@@ -12,7 +12,6 @@ internal static class GlobalFlagFixture
     internal static readonly GlobalFlagRequestId RequestId = new(Guid.Parse("44444444-4444-4444-4444-444444444444"));
     internal static readonly Guid Other = Guid.Parse("55555555-5555-5555-5555-555555555555");
     internal static GlobalFlagVersion Version(long revision) => new(Identity, Epoch, revision);
-    internal static GlobalFlagOperationDescriptor Descriptor(string flag, string value) => new(1, "GF", new[] { flag, value });
     internal static GlobalFlagOwnerDescriptor Bootstrap(long revision = 0) => new(Identity, Epoch, revision,
         new[] { new FlagId(3), new FlagId(4), new FlagId(5), new FlagId(6), new FlagId(8), new FlagId(9) },
         new[] { new GlobalFlagBootstrapValue(new(3), false), new(new(4), true), new(new(5), false), new(new(6), false), new(new(8), false) });
@@ -34,13 +33,4 @@ internal static class GlobalFlagFixture
         CollectionAssert.AreEqual(new[] { 3, 4, 5, 6, 8, 9 }, snapshot.Entries.Select(e => e.Flag.Value).ToArray());
         CollectionAssert.AreEqual(values, snapshot.Entries.Select(e => e.Value).ToArray());
     }
-}
-
-internal sealed class CountingOwner(GlobalFlagOwner owner) : IGlobalFlagOwner
-{
-    internal int Reads { get; private set; }
-    internal int Writes { get; private set; }
-    public GlobalFlagBinding Binding => owner.Binding;
-    public GlobalFlagReadResult Read(GlobalFlagReadRequest request) { Reads++; return owner.Read(request); }
-    public GlobalFlagWriteReceipt Write(GlobalFlagWriteRequest request) { Writes++; return owner.Write(request); }
 }

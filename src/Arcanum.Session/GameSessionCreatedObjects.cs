@@ -137,13 +137,6 @@ public sealed partial class GameSessionOwner
     /// <summary>ARC-MAGIC-053 (E1-e, SUM5): the object flag <c>OF_DONTDRAW</c> (0x100) and the critter flags 2 bit <c>OCF2_NO_PICKPOCKET</c> (0x80) the summon effect writes on every NPC it makes (0x450C40: 0x43D0E0 with 0x100, field 0xDB |= 0x80).</summary>
     public const int SummonedDontDrawFlag = 0x100, SummonedNoPickpocketFlag2 = 0x80;
 
-    /// <summary>ARC-MAGIC-053 (E1-e): why <see cref="CreateSummonedCritter"/> would refuse a creation before any effect (the checks of <see cref="QueryCreateCritterRefusal"/> with the summoner and the run), or null when it would not.</summary>
-    public GameSessionFailure? QueryCreateSummonedCritterRefusal(int prototype, SessionMapId map, CellCoord cell, string? summoner, int? run)
-    {
-        ThrowIfDisposed();
-        return CreateCritterRefusal(prototype, map, cell, 1, summoner, run);
-    }
-
     /// <summary>
     /// ARC-MAGIC-053 (E1-e of the missing-systems plan; ARC-RES-101, ledger SUM2, SUM3, SUM5): the Summon component's creation of a critter (0x450C40 for a type 16 object) at <paramref name="cell"/> exactly (the entry's tile: the
     /// summon places nothing near it) from the prototype file <paramref name="prototype"/>: an <c>oid:critter:n</c> (<see cref="SessionCreatedKind.Critter"/>) marked summoned (spell flag 0x4000, the one

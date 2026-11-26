@@ -131,8 +131,8 @@ yet. Current state: the component catalogue
   The root solution leaves out the terrain viewer and its tests,
   `Arcanum.Input`, research probes and labs (own commands in the toolchain
   doc). Real-data tests are opt-in by env vars (`DAT_ROOT`, `ARCANUM_*`,
-  `ARC_AREA_*`, `ARC_CAVE_*`, `ARC_NPC_*`) and categories (`RealData`,
-  `DlgRealData`, `DlgRuntimeRealData`, `NpcDialogEntryRealData`)
+  `ARC_AREA_*`, `ARC_CAVE_*`) and categories (`RealData`,
+  `DlgRealData`)
   ([opt-in original data](docs/workflow/toolchain.md#opt-in-original-data)).
 - Code: `src/` holds `Arcanum.Data`, `Arcanum.Simulation`,
   `Arcanum.Scripting`, `Arcanum.Presentation`, `Arcanum.Input`,

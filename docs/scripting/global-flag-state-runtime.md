@@ -3,19 +3,18 @@
 ## Status and boundary
 
 `Arcanum.Scripting.GlobalFlags` implements ARC-SCRIPT-003's bounded, Godot-free,
-synchronous in-memory GF owner and standalone typed GF comparison/write adapter.
+synchronous in-memory GF owner.
 It lives in the existing Scripting assembly, with no new package or runtime
 dependency. Calls, input collections and all external mutations must be
 serialized by the host; this is not thread-safe or distributed exactly-once.
 
-This is **not** a DLG expression parser, `DialogSession` integration, SCR VM,
+This is **not** a DLG expression parser, SCR VM,
 world/new-game bootstrap, save service, LF owner, inventory/IN, reaction/RE,
-quest/QU, rumor/RU, UI or conversation implementation. Current
-[DialogTransitionRuntime](dialog-transition-runtime.md) still rejects GF as
-`UnsupportedOperation`, retains its serialized structural cap5 and its existing
-LF/QU/RU grammar/limits. ARC-SCRIPT-005's separate
-[conversation runtime](dialog-conversation-runtime.md) reads and writes GF in DLG conditions
-and actions through this owner (Unknown is a frontier there). The
+quest/QU, rumor/RU, UI or conversation implementation. The
+[conversation runtime](dialog-conversation-runtime.md) (ARC-SCRIPT-005) reads and writes GF in DLG conditions
+and actions through this owner (Unknown is a frontier there). The standalone typed GF
+compare/write adapter of ARC-SCRIPT-003 had no production caller and was
+removed on 2026-11-26, [#3384](https://github.com/Simarglok/arcanum-steamwoven/issues/3384). The
 [original dialog evidence](dialog-conversation-runtime.md#original-dialog-evidence-carried-from-the-state-contract) holds the source readings; the
 retired RES-019 proposal for the other seams is [in git history](https://github.com/Simarglok/arcanum-steamwoven/blob/e4f18fd4bd5c7798aab3f451ed52dc24e8ec2420/docs/scripting/dialog-state-contract.md).
 
@@ -53,12 +52,12 @@ throwing/side-effectful collection accessors and concurrent mutation are outside
 that host contract, not a callback sandbox. The binding sorts its detached
 read-only domain by numeric flag ID; it does **not** sort dialogue records.
 
-Transport structs deliberately permit `default`/invalid values. Every owner,
-snapshot and adapter request boundary validates them (nonempty request/identity/
+Transport structs deliberately permit `default`/invalid values. Every owner
+and snapshot request boundary validates them (nonempty request/identity/
 epoch, nonnegative revision/index). A valid FlagId0 is not confused with an
 invalid empty GUID. No arbitrary opcode adds a domain member or creates an owner.
 
-## Typed read, comparison and failure semantics
+## Typed read and failure semantics
 
 `GlobalFlagReadRequest(RequestId, Expected, Flag)` requires a complete expected
 `GlobalFlagVersion(Identity, Epoch, Revision)`. The production
@@ -68,15 +67,12 @@ invalid empty GUID. No arbitrary opcode adds a domain member or creates an owner
 | --- | --- |
 | `Known` | Explicit bool true **or false**, reason `None`; current version equals expected. |
 | `Unknown` | Null value, `MissingBootstrapValue`, admitted member with no known bit. |
-| `Unavailable` | Null value, `OwnerDisposed`; standalone adapter also returns `OwnerUnavailable` for a missing port. |
+| `Unavailable` | Null value, `OwnerDisposed`. |
 | `Failed` | Null value, safe reason such as `WrongWorld`, `WrongModule`, `FlagNotAdmitted`, invalid request/version, or `OwnerFailed`. |
 | `Stale` | Null value, `StaleEpoch` or `StaleRevision`; never a false bit. |
 
-`GlobalFlagAdapter.Compare` admits a typed single-operation descriptor and
-compares a **known** bit to its explicit boolean. It returns the bound read
-result plus nullable `Matches`: only a known read gives true/false; every other
-status gives null. No guessed boolean is passed through a failed gate. Reads,
-comparisons, version inspection and snapshot capture never change any bit or
+No guessed boolean stands for a status other than `Known`. Reads,
+version inspection and snapshot capture never change any bit or
 flag revision.
 
 Owner checks validate request/identity/domain/epoch first, then disposed/failed
@@ -101,7 +97,7 @@ even if the requested value is false.
 | `Applied` | Value/knowledge changed; revision advances exactly once. |
 | `NoChange` | Value was already known and equal; successful explicit receipt, no state/revision bump. |
 | `Rejected` | Safe refusal, attempted write has no effects. |
-| `Indeterminate` | Only the adapter's external-port boundary: a write exception or malformed receipt cannot prove no effects. Stop and inspect authoritative state; do not replay automatically. |
+| `Indeterminate` | For an external `IGlobalFlagOwner` whose write cannot prove no effects; `GlobalFlagOwner` never returns it. Stop and inspect authoritative state; do not replay automatically. |
 
 At maximum revision, changed/Unknown-to-known writes reject with
 `RevisionExhausted` atomically. Equal known writes still return `NoChange`.
@@ -112,9 +108,7 @@ recoverability from process death/out-of-memory.
 
 Receipts contain only typed request identity, operation (`Write`), expected
 version, admitted flag/bool where available, resulting owner version, disposition
-and enum reason. Owner refusals return current version; adapter predispatch
-refusals have no result version because no owner was called. Invalid descriptors
-have no admitted flag or bool. There is no original text, raw expression,
+and enum reason. Owner refusals return current version. There is no original text, raw expression,
 exception object/message or file path. Receipts are returned, **not retained in
 an unbounded history**; the host owns any bounded audit storage.
 
@@ -125,39 +119,12 @@ be repeated with the same version. A new valid version with the same request ID
 can authorize another different write. Epoch/version admission does not prove
 an entire dialogue entry is safe to replay.
 
-## Standalone descriptor admission and external-port contract
+## External-port contract
 
-`GlobalFlagOperationDescriptor` is **schema1**, opcode exactly two ASCII letters
-`GF` (ASCII case-insensitive), and exactly two string operands. It represents
-one operation, not a raw field, mnemonic-plus-arguments string, DLG source plan,
-sequence or expression. `Compare` and `Write` have separate API entry points.
-
-Each operand has1..32 characters and contains only ASCII digits. Leading zeros
-are accepted; signs (including `-0`/`+1`), whitespace, punctuation, combinators,
-extra arguments, controls, non-ASCII and unsupported schemas/opcodes fail before
-any owner read/write. The decimal flag fits Int32 and must belong to the binding;
-the decimal bool is exactly numeric0 or1. Overflow is checked before multiplication
-can overflow. Limits are fixed; callers cannot enlarge them through descriptors.
-This stricter transport admission is project policy, not the original setter's permissiveness (unmasked writes, ledger X10)
-or a change to the existing DLG parser.
-
-`GlobalFlagAdapter(binding, owner)` requires the owner's **exact validated binding
-instance**. Passing a different owner's metadata is a programmer error
-(`ArgumentException`); passing no owner is an explicit unavailable capability.
-Adapter preparation validates structure, operands, identity/domain and epoch
-before dispatch; dynamic revision/lifecycle is checked by the owner. Missing
-owner after otherwise valid preparation refuses without a call.
-
-The extension port `IGlobalFlagOwner` must be bounded, serialized, read-only on
-reads, no-effect on `Rejected`, and truthful about effects and versions. The
-adapter checks result request/flag/version/enum/value shape: malformed read
-results become `Failed/InvalidOwnerResult`, malformed write receipts become
-`Indeterminate/InvalidOwnerResult`. External read exceptions become
-`Failed/OwnerFailed`; external write exceptions become `Indeterminate/OwnerFailed`.
-No exception text is exposed. The adapter cannot verify whether an arbitrary
-external port lied about state; this production owner, not untrusted callbacks,
-is the tested authoritative implementation. A blocked port cannot be interrupted
-by these synchronous APIs. The adapter stores no owner registry or receipt list.
+An `IGlobalFlagOwner` must be bounded, serialized, read-only on reads, no-effect on
+`Rejected`, and truthful about effects and versions. A blocked port cannot be
+interrupted by these synchronous APIs. `GlobalFlagOwner` is the tested authoritative
+implementation.
 
 ## Detached snapshots
 
@@ -185,12 +152,10 @@ var creation = GlobalFlagOwner.Create(new GlobalFlagOwnerDescriptor(
 if (creation.Owner is not { } owner) throw new InvalidOperationException("Invalid synthetic binding.");
 using (owner)
 {
-    var adapter = new GlobalFlagAdapter(owner.Binding, owner);
-    var descriptor = new GlobalFlagOperationDescriptor(1, "GF", new[] { "3", "1" });
     var before = owner.CaptureSnapshot();
-    var receipt = adapter.Write(new GlobalFlagRequestId(Guid.NewGuid()), before.Version, descriptor);
-    var condition = adapter.Compare(new GlobalFlagRequestId(Guid.NewGuid()), owner.Version, descriptor);
-    // receipt: Applied/revision1; condition: Known(true), Matches=true.
+    var receipt = owner.Write(new(new GlobalFlagRequestId(Guid.NewGuid()), before.Version, new FlagId(3), true));
+    var read = owner.Read(new(new GlobalFlagRequestId(Guid.NewGuid()), owner.Version, new FlagId(3)));
+    // receipt: Applied/revision1; read: Known(true).
     // before.Read at before.Version still returns Known(false) for3;9 remains Unknown.
 }
 ```
@@ -198,29 +163,21 @@ using (owner)
 ## Verification and provenance
 
 Focused [production-path tests](../../tests/Arcanum.Scripting.Tests/GlobalFlags/)
-use literal whole-state, version and receipt expectations and an independently
-computed state-machine oracle. Counting ports forward to the **real owner**, not
-unconditionally Applied mocks. Tests cover bootstrap rejection/bounds, identity/
-module/world isolation, lifecycle statuses, historical readability/immutability,
-false/true/equal/Unknown writes, stale/default/foreign tokens, revision exhaustion,
-ASCII/arity/schema/domain/overflow admission-before-calls and corrupted ports.
-Frontier fixtures go through the actual `DlgReader` and `DialogTransitionRuntime`.
-Existing LF/QU/RU/NPC tests are retained unchanged.
+use literal whole-state, version and receipt expectations. Tests cover bootstrap
+rejection/bounds, identity/module/world isolation, lifecycle statuses, historical
+readability/immutability, false/true/equal/Unknown writes, stale/default/foreign
+tokens and revision exhaustion.
 
-C01 and C02 cover standalone post-write comparison and both explicit writes.
-C09 covers **GF-only** ordered writes3/4/5/6/8, not IN/QU/RU/RE, offers or traversal.
-C16 covers only the first-three-GF checkpoint/historical snapshot, not IN
-rejection/recovery/session replay protection. Equal-write revision policy here
-is the accepted no-bump rule, **not** RES-019's worksheet's illustrative
-always-increment convention. Neither these tests nor that worksheet establish
-whole Virgil-trace PASS or original-runtime parity.
+Equal-write revision policy here is the accepted no-bump rule, **not** RES-019's
+worksheet's illustrative always-increment convention. The tests do not establish
+original-runtime parity.
 
 Source-confirmed GF read-equality and explicit write observations come from a
 reading of the original's functions at the cited addresses: GF query (0x4150D0),
 GF action (0x415BA0), global-bit owner (0x444CF0, 0x444D20), evidence level F0
 (not checked in the executable) except the unmasked write (0x444D20, ledger X10).
-This owner/adapters/fixtures are independently authored MIT work.
-Identity/version/Unknown/bootstrap/bounds/receipt/strict admission and equal-write
+This owner and its fixtures are independently authored MIT work.
+Identity/version/Unknown/bootstrap/bounds/receipt and equal-write
 semantics are accepted ARC-SCRIPT-003 project safety policies, not observed
 original version guarantees. Original live flags/defaults remain Unknown and are not
 imported. No original payload, private machine paths or private ledgers are public.

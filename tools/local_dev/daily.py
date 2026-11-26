@@ -36,7 +36,7 @@ DOTNET_CHECKS = ('dotnet restore Arcanum.Steamwoven.sln --locked-mode && dotnet 
                  'dotnet test --no-build --filter "TestCategory!=RealData"')
 # The owner's opt-in data and settings variables (DAT_ROOT, ARC_*, ARCANUM_*) would turn on real-data tests in the root
 # checks; they stay synthetic, as in the PR checks. The launcher's home (the queue and its configuration) is kept.
-CHECKS_KEPT = frozenset({"ARCANUM_LOCAL_HOME", "ARCANUM_QUEUE_LEGACY_LOCK", "ARCANUM_ORACLE_VENV"})
+CHECKS_KEPT = frozenset({"ARCANUM_LOCAL_HOME", "ARCANUM_ORACLE_VENV"})
 # The oracle self-test installs its locked Unicorn into this venv when it has none; a fresh worktree has no local/, so
 # the run reuses the main checkout's venv (a cache of the lock's wheels) instead of installing from the network each day.
 ORACLE_VENV = Path("local/original-oracle/venv")

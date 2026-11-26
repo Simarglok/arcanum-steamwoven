@@ -9,7 +9,7 @@ namespace Arcanum.Scripting.Tests.Scr;
 [TestClass]
 public sealed class ScrContainerVicinityTests
 {
-    private const byte Attachee = 1, Triggerer = 0, Looped = 10, Container = 17;
+    private const byte Attachee = 1, Triggerer = 0, Container = 17;
     private const int Script = 1596;
 
     private sealed class ContainerHost(FakeHost inner) : IScrHost, IScrWorldQueries, IScrContainerQueries, IScrObjectStateQueries

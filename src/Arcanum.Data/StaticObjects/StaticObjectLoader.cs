@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 using Arcanum.Data.Terrain;
@@ -23,7 +22,6 @@ public static class StaticObjectLoader
             [4038] = new(414, "2531e1a1c6ddca2f483a2d557bebcfd6c1b0b89bd2d996a3f559adc28924214b"),
             [4048] = new(378, "ec807b77ea283d8d84387993a439953b7acf1a1ef7bdfb30b6a86a334dcfe8d1")
         };
-    private const int ObjectVersion = 119;
     private const uint DynamicFlag = 0x00002000;
     private const int CurrentArtSlot = 0;
     private const int LocationSlot = 1;
@@ -319,21 +317,6 @@ public static class StaticObjectLoader
             record.Type == 3 ? (int?)Number(OffsetYSlot) : null);
     }
 
-    private static bool[] ReadMasks(ref Cursor cursor, int type, int fieldLength, out int count)
-    {
-        var set = new bool[fieldLength]; count = 0;
-        for (var word = 0; word < MaskWords(type); word++)
-        {
-            var start = MaskStart(type, word);
-            var length = MaskLength(type, word);
-            var mask = cursor.U32();
-            var allowed = length == 32 ? uint.MaxValue : (1u << length) - 1u;
-            if ((mask & ~allowed) != 0) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "An object override mask has a reserved bit.");
-            for (var bit = 0; bit < length; bit++) if ((mask & (1u << bit)) != 0) { set[start + bit] = true; count++; }
-        }
-        return set;
-    }
-
     private static Dictionary<int, Prototype> ReadPrototypes(StaticObjectPrototypeSource source, IEnumerable<ParsedRecord> records,
         StaticObjectLoaderOptions limits, IReadOnlyDictionary<int, PrototypeInput>? inputs, bool allowUnresolved = false)
     {
@@ -596,29 +579,6 @@ public static class StaticObjectLoader
         new(value.SourceIndex, value.ObjectType, value.PrototypeAid, value.DirectCurrentArt, value.DirectFlags, value.Location, value.DirectOffsetX, value.DirectOffsetY,
             value.FieldStatus, value.CurrentArt, value.CurrentArtInherited, value.EffectiveFlags, value.FlagsInherited, value.IsStatic, status, metadata);
 
-    private static void Skip(ref Cursor cursor, WireKind kind, StaticObjectLoaderOptions limits)
-    {
-        switch (kind)
-        {
-            case WireKind.I32: cursor.Skip(4); return;
-            case WireKind.OptI64: _ = cursor.OptionalI64(); return;
-            case WireKind.OptObjectId: if (cursor.Present()) _ = cursor.ObjectId(allowBlocked: false); return;
-            case WireKind.OptString:
-                if (!cursor.Present()) return;
-                var length = cursor.I32(); if (length < 0 || length > limits.MaxStringBytes) throw new StaticObjectException(StaticObjectErrorCode.LimitExceeded, "A string exceeds its configured limit.");
-                var text = cursor.Bytes(checked(length + 1)); if (text[^1] != 0) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "A string lacks its terminal NUL."); return;
-            default:
-                if (!cursor.Present()) return;
-                var size = cursor.I32(); var count = cursor.I32(); _ = cursor.I32(); var expected = kind switch { WireKind.ArrI32 or WireKind.ArrU32 => 4, WireKind.ArrI64 or WireKind.ArrU64 => 8, WireKind.ArrScript => 12, WireKind.ArrQuest => 16, WireKind.ArrObjectId => 24, _ => throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "An object wire kind is unknown.") };
-                if (size != expected || count < 0) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "An array envelope is invalid.");
-                if (count > limits.MaxArrayElements) throw new StaticObjectException(StaticObjectErrorCode.LimitExceeded, "An array element count exceeds its configured limit.");
-                cursor.Skip(checked(size * count)); var words = cursor.I32(); if (words < 1) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "An array bitset is invalid.");
-                if (words > limits.MaxArrayElements) throw new StaticObjectException(StaticObjectErrorCode.LimitExceeded, "An array bitset exceeds its configured limit.");
-                var bitset = cursor.Bytes(checked(words * 4)); var population = 0; for (var index = 0; index < words; index++) population += BitOperations.PopCount(BinaryPrimitives.ReadUInt32LittleEndian(bitset.Slice(index * 4, 4)));
-                if (population != count) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "An array bitset population differs from its element count."); return;
-        }
-    }
-
     private static WireKind[] K(string specification)
     {
         var values = new List<WireKind>();
@@ -680,7 +640,6 @@ public static class StaticObjectLoader
     }
 
     internal enum WireKind { I32, OptI64, ArrI32, ArrI64, ArrU32, ArrU64, ArrScript, ArrQuest, OptString, OptObjectId, ArrObjectId }
-    private readonly record struct ObjectId(short Kind, int? Aid);
     private sealed record ParsedRecord(int SourceIndex, int PrototypeAid, int Type, int? DirectCurrentArt, uint? DirectFlags, long? Location, int? DirectOffsetX, int? DirectOffsetY);
     private sealed record Prototype(int CurrentArt, uint Flags);
     private sealed record PrototypeInput(int Aid, string Path, StaticObjectInputFingerprint? Fingerprint);
@@ -695,12 +654,6 @@ public static class StaticObjectLoader
         public int Offset { get; private set; }
         public ReadOnlySpan<byte> Remaining => _bytes[Offset..];
         public bool AtEnd => Offset == _bytes.Length;
-        public short I16() => BinaryPrimitives.ReadInt16LittleEndian(Bytes(2));
-        public int I32() => BinaryPrimitives.ReadInt32LittleEndian(Bytes(4));
-        public uint U32() => BinaryPrimitives.ReadUInt32LittleEndian(Bytes(4));
-        public long? OptionalI64() => Present() ? BinaryPrimitives.ReadInt64LittleEndian(Bytes(8)) : null;
-        public bool Present() { var value = Bytes(1)[0]; if (value is not 0 and not 1) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "An optional envelope has an invalid presence byte."); return value == 1; }
-        public ObjectId ObjectId(bool allowBlocked) { var kind = I16(); Skip(6); var payload = Bytes(16); if (kind == -1 && allowBlocked) return new ObjectId(kind, null); if (kind is < 0 or > 3) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "An object identifier form is invalid."); return new ObjectId(kind, kind == 1 ? BinaryPrimitives.ReadInt32LittleEndian(payload) : null); }
         public ReadOnlySpan<byte> Bytes(int count) { if (count < 0 || count > _bytes.Length - Offset) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "The object record is truncated."); var result = _bytes.Slice(Offset, count); Offset = checked(Offset + count); return result; }
         public void Skip(int count) => _ = Bytes(count);
     }

@@ -564,12 +564,9 @@ before it. It replaces the earlier
   estimate) first in line (after the runs holding its lane), with no time limit, and keep it until the viewer window closes; the command stays in the terminal until then.
   Ctrl-C there, or closing the terminal, gives the place up while the viewer stays open. `--no-queue` starts at
   once, and `--dry-run` never queues.
-- **Lanes still on lockf.** While some threads still use the lockf rule, a Godot run also takes
-  `/tmp/arcanum-godot-window.lock` (shared, so the runs of the lanes hold it side by side), and a `lockf` user (exclusive)
-  and the queue's Godot runs never overlap (a queued run then prints that it waits for a lockf user).
 
 Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (arrival and length order, lanes and their accounting, quick runs, gaps, export
-quiet, crashed and killed runs, limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
+quiet, crashed and killed runs, limits, nesting, locales); they use their own `ARCANUM_LOCAL_HOME`.
 
 ### Owner is playing mode (ARC-DEV-2272)
 
@@ -805,8 +802,7 @@ waiting against about 3 hours with a heavy lane and two short lanes. The owner a
   count Godot lanes only: `dotnet` runs (2 places) and `quick` runs (2 places) come on top, so a machine under strain
   takes `--set-lanes 0` or `1` and a guard around 12 to 16.
 - **Same environment.** The lanes need no change to a command: every lane's smoke still has its own settings and saves
-  per process (the system pointer is gated, ARC-DEV-060). `lockf` users keep excluding the queue ([above](#launch-queue-arc-dev-033)); the queue's runs hold that lock shared, so with
-  overlapping lane runs a `lockf` user may wait for as long as the lanes stay busy (a retired rule).
+  per process (the system pointer is gated, ARC-DEV-060).
 - **Red runs per lane.** The history of every Godot run (`history.jsonl`, and `./arcanum queue --history N`) records its
   `lane`, the other Godot runs running at its start and end (`peersStart`, `peersEnd`) and the load average at its start
   and end (`loadStart`, `loadEnd`). `./arcanum queue --lanes [--history N]` counts per lane the runs and the red ones
@@ -1776,7 +1772,7 @@ Original inputs remain read-only and local. Set only the inputs needed for the s
 | Spell census (ARC-DEV-356) | `DAT_ROOT` = the installed game folder | Session project, `FullyQualifiedName~SpellCensusRealDataTests&TestCategory=RealData` (a few seconds); a failure prints the changed rows to paste into the test; [census](../research/magic-audit-res-103.md#spell-census-ma-0) |
 | `wa` census (ARC-SCRIPT-1136) | `DAT_ROOT` | Scripting project, `FullyQualifiedName~DialogWaCensusRealDataTests&TestCategory=RealData` (a few seconds); the 47 installed `wa` replies, the 20 a static walk reaches and the 5 a free NPC can be offered from its script's talk; [ledger CF10](../research/ledger/scripts.md#dialog-companion-state-and-actions-arc-dev-195) |
 | DLG reader | `DAT_ROOT` | Data project, `TestCategory=DlgRealData`; [DLG reader](../formats/dlg-reader.md) |
-| Dialog transition | `DAT_ROOT` | Scripting project, `TestCategory=DlgRuntimeRealData`; [runtime](../scripting/dialog-transition-runtime.md) |
+| Virgil's talk entry (#3384) | `DAT_ROOT` = the installed game folder | Scripting project, `FullyQualifiedName~ScrVirgilEntryRealData&TestCategory=RealData` (a few seconds); the installed script 1324 picks the DLG node 1, 527, 235, 385 or 538 from the follower, local flag and jilted state, each an NPC line; [dispatcher](../scripting/scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3) |
 | Terrain | `ARCANUM_TERRAIN_MODULE`, `ARCANUM_TERRAIN_RESOURCE` | Data project, `FullyQualifiedName~TerrainLoaderTests&TestCategory=RealData`; [loader](../world/terrain-loader.md) |
 | Static objects | `ARCANUM_STATIC_MODULE`, `ARCANUM_STATIC_RESOURCE`, `ARCANUM_STATIC_PROTOTYPES` | Data project, `FullyQualifiedName~StaticObjectLoaderTests&TestCategory=RealData`; [loader](../world/static-object-loader.md) |
 | Complete exterior area | `ARC_AREA_MODULE`, `ARC_AREA_RESOURCE1`, `ARC_AREA_RESOURCE2`, `ARC_AREA_MOBILE`, `ARC_AREA_PROTOTYPES`, `ARC_AREA_ORACLE` | Data project, `FullyQualifiedName~AreaOriginalTests&TestCategory=RealData`; [profile, independent oracle and measurements](../world/area-loader.md) |

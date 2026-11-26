@@ -14,7 +14,6 @@ public sealed class ScrSpellStateTests
 {
     private const byte Triggerer = 0, Attachee = 1;
     private const int Script = 2800;
-    private static readonly ScrObjectRef Other = new(1, "npc.2");
 
     private static readonly ScrAdmissionSet Set = new("test-spell-state", ScrAdmissionSet.S2.Conditions.Concat(ScrAdmissionSet.SpellQueryConditions),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy]), ScrAdmissionSet.S2.ValueKinds, ScrAdmissionSet.S3.FocusKinds);

@@ -9,7 +9,7 @@ namespace Arcanum.Scripting.Tests.Scr;
 [TestClass]
 public sealed class ScrPortalVicinityTests
 {
-    private const byte Attachee = 1, Triggerer = 0, Looped = 10, Portal = 19;
+    private const byte Attachee = 1, Triggerer = 0, Portal = 19;
     private const int Script = 2213;
 
     private sealed class PortalHost(FakeHost inner) : IScrHost, IScrWorldQueries, IScrPortalQueries

@@ -366,7 +366,7 @@ class LaneAccountingTests(unittest.TestCase):
         self.assertEqual(len(run_queue.lane_report(history=1)), 3)  # the last run only: one lane, no red run
 
     def test_a_finished_run_records_its_lane_peers_and_load(self) -> None:
-        with patch.dict(os.environ, {run_queue.SHUTDOWN_ENV: "0", "ARCANUM_QUEUE_LEGACY_LOCK": str(Path(self.temp.name) / "legacy.lock")}):
+        with patch.dict(os.environ, {run_queue.SHUTDOWN_ENV: "0"}):
             os.environ.pop(run_queue.TICKET_ENV, None)
             self.assertEqual(run_queue.run("window", [sys.executable, "-c", "pass"], estimate=500.0), 0)
             self.assertEqual(run_queue.run("window", [sys.executable, "-c", "raise SystemExit(3)"], estimate=20.0), 3)
@@ -920,7 +920,6 @@ class QueueRunTests(unittest.TestCase):
         self.root = Path(self.temp.name).resolve()
         self.log = self.root / "events.log"
         self.env = patch.dict(os.environ, {"ARCANUM_LOCAL_HOME": str(self.root / "home"),
-                                           "ARCANUM_QUEUE_LEGACY_LOCK": str(self.root / "legacy.lock"),
                                            run_queue.SHUTDOWN_ENV: "0"})
         self.env.start()
         os.environ.pop(run_queue.TICKET_ENV, None)
@@ -1128,27 +1127,6 @@ class QueueRunTests(unittest.TestCase):
         found = self.events()
         self.assertNotIn("start gone", found)
         self.assertGreaterEqual(found["start b"], found["end a"])
-
-    def test_the_lockf_rule_and_the_queue_exclude_each_other(self) -> None:
-        legacy = os.environ["ARCANUM_QUEUE_LEGACY_LOCK"]
-        holder = subprocess.Popen(["/usr/bin/lockf", legacy, sys.executable, "-c",
-                                   f"import time; open({str(self.log)!r}, 'a').write('start lockf %f\\n' % time.time()); "
-                                   f"deadline = time.time() + 90\n"
-                                   f"while not __import__('os').path.exists({str(self.root / 'release')!r}) and time.time() < deadline: time.sleep(0.05)\n"
-                                   f"open({str(self.log)!r}, 'a').write('end lockf %f\\n' % time.time())"])
-        self.processes.append(holder)
-        self.until(lambda: self.log.exists())
-        self.queued("window", "q", 0.5)  # q waits for the lockf holder, which ends only on release
-        self.assertNotIn("start q ", self.log.read_text())
-        self.release()
-        self.until(lambda: "start q" in self.log.read_text(), 60.0)
-        late = subprocess.Popen(["/usr/bin/lockf", legacy, sys.executable, "-c",
-                                 f"import time; open({str(self.log)!r}, 'a').write('start late %f\\n' % time.time())"])
-        self.processes.append(late)
-        self.finish()
-        found = self.events()
-        self.assertGreaterEqual(found["start q"], found["end lockf"])
-        self.assertGreaterEqual(found["start late"], found["end q"])
 
     def test_a_nested_run_uses_its_parents_place(self) -> None:
         inner = f"{sys.executable} -B {ARCANUM} run --kind window -- {sys.executable} -c pass"

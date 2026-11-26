@@ -81,6 +81,11 @@ class Ring:
     method: str              # `codex`, `marker`, `wedge`, `arrow` or `pack` (the module's header)
 
     @property
+    def socket_dome(self) -> bool:
+        """True for a face without a ring of its own: it stands in a socket the screen paints (#3347)."""
+        return self.method in SOCKET_DOME_METHODS
+
+    @property
     def states(self) -> tuple[str, ...]:
         return ("idle", "pressed", "hover") if self.frames >= 3 else ("idle", "pressed")
 
@@ -89,6 +94,7 @@ def _ring(method: str, art: int, folder: str, frames: int, master: tuple[int, in
     return Ring(art, f"{art}-{folder}", folder.lower(), frames, master, school_kit.Circle(size[0], size[1], cx, cy, round(cut - TRIM, 3), TRIM), method)
 
 
+SOCKET_DOME_METHODS = frozenset({"marker", "wedge"})   # the methods whose face is a socket dome
 SOCKET_DOME_CUT = 11.1       # units: half the inner diameter of the socket's gold ring (22.2, measured on arts 200, 765 and 825)
 DOME_SHARE = 0.735           # where the generated button's ring begins, as a share of its disc's radius: the socket dome is the disc inside it
 ORIGINAL_DOME = {**{art: (10.4, 10.14) for art in (145, 146, 147, 148)}, 757: (11.42, 11.17), 758: (11.42, 11.17)}   # the dome's centre in the original art (matched against the socket the screen paints)
@@ -279,7 +285,7 @@ def without_bar(frame: Image, circle: school_kit.Circle) -> Image:
 
 
 def empty_plate(local_root: Path, ring: Ring) -> Image:
-    """The plate of the buttons that carry a drawn or cut symbol: the SAME ring and glossy dome as the plus and minus (the idle Minus of the generated set, its bar taken out), brought to the accepted brass and cut to this circle."""
+    """The ringed plate under a drawn sign or arrow (`codex_face`, `arrow_face`; a socket dome takes `dome_plate`): the SAME ring and glossy dome as the plus and minus (the idle Minus of the generated set, its bar taken out), brought to the accepted brass and cut to this circle."""
     placed = placed_minus(local_root, ring.circle)
     frame = without_bar(centred(placed, ring.circle, symbol_offset(placed, ring.circle)), ring.circle)
     return toned(part_of(ring, frame), ring.circle, INNER["codex"])
