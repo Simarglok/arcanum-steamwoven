@@ -1,0 +1,12 @@
+KIND: PLATE (a small square stone button slab, empty)
+Part: {part_id} - {part_note}. Size: {width} x {height} px (a square). References: ORIGINAL (the layout truth and the sample of the stone: the original button enlarged 24 times; its paper label and symbol must NOT appear; look only at the grey stone around the paper: its mottling, its light and dark chips, where it is lighter and where darker), SHEET (an older, soft HD redraw of the same button: a sample of the stone's colour only; its paper label and symbol must NOT appear).
+
+Redraw ONLY the bare stone slab, sharp and detailed: one square slab of rough grey stone with a slight violet cast that fills the whole image edge to edge (opaque, no margin, no ground around it, no shadow outside it).
+
+The stone is clearly mottled, like speckled granite: many irregular patches and chips of light grey and dark grey, from small specks to patches about one tenth of the side, a few short pale veins and small pits. The contrast between the chips is strong enough to stay visible after the picture is reduced about eleven times. It is NOT a smooth even surface.
+
+As in the ORIGINAL, the stone is not the same on all sides: the left strip (about one sixth of the side) is the lightest, with large pale chips and a pale vein, and the upper left corner has a broad pale patch; the right strip is darker with only small chips; the top edge is light, the bottom is darker.
+
+It stands raised, lit from the upper left: a narrow chamfer along all four edges, about one thirtieth of the side wide; the top and left chamfers light grey, the bottom and right chamfers a darker grey that is still clearly stone (not black). The chamfer lines are straight, but the stone grain runs across them, with a few small nicks. The middle of the slab will be covered by a paper label later: draw plain mottled stone there.
+
+No paper, no symbol, no recess, no inner frame, no text.
