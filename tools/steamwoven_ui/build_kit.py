@@ -35,6 +35,7 @@ from tools.steamwoven_ui import popup_kit  # noqa: E402
 from tools.steamwoven_ui import wide_button_kit  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
 from tools.steamwoven_ui import parchment_kit  # noqa: E402
+from tools.steamwoven_ui import ring_button_kit  # noqa: E402
 from tools.steamwoven_ui import round_kit  # noqa: E402
 from tools.steamwoven_ui import school_kit  # noqa: E402
 from tools.steamwoven_ui import small_kit  # noqa: E402
@@ -277,6 +278,23 @@ def small_parts(plates: dict[str, dict]) -> list[dict]:
     return parts
 
 
+def ring_parts(plates: dict[str, dict]) -> list[dict]:
+    """ARC-UI-3269, slice 3b of B-BUTTONS: the glyph and the hover and pressed plate of the thick brass-ringed round buttons and of the wide schematic button's dome (`ring_button_kit.py`); each sits where its plate sits."""
+    parts = []
+    for b in ring_button_kit.BUTTONS:
+        plate = plates.get(f"plate.{b.name}")
+        if plate is None:  # an indicator (no states, no glyph) or a census without the button
+            continue
+        for ident in ring_button_kit.part_ids(b):
+            if ident == plate["id"]:
+                continue
+            states = [next((s for s in b.frames if ring_button_kit.ident_of(b, s) == ident), "idle")]
+            parts.append(new_part(ident, "glyph" if ident.startswith("glyph.") else "plate", plate["anchor"], list(plate["used_by"]), None, "B-BUTTONS",
+                                  f"{ring_button_kit.note_of(ident)}; the plate's canvas, size open", states=states, master=True, provenance=ring_button_kit.provenance_of(ident)))
+    return parts
+
+
+RING_IDLE = frozenset(ring_button_kit.ident_of(b, "idle") for b in ring_button_kit.BUTTONS)
 SMALL_PLATES = {f"plate.{b.name}": b for b in (*small_kit.SMALL, *small_kit.GENERATED)}
 ROUND_HUD_PLATES = {f"plate.{b.name}": b for b in (*round_kit.ROUND_BUTTONS, round_kit.BALL)}
 SKILL_PLATES = {f"plate.{b.name}": b for b in round_kit.SKILL_BUTTONS}
@@ -349,6 +367,9 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["status"], part["provenance"] = "master", f"rule:parchment_kit:{ident}"
             part["note"] = (f"the idle face of art {part['source_arts'][-1]}: the old HD pack's frame (pack-first rule) resampled to the master, the alpha the ring's ellipse united with the four corner triangles (parchment_kit.py, ARC-UI-3205); the symbol is in the frame" if ident in BOX_PLATES else
                             f"the {'lit' if ident.endswith('_on') else 'refused'} face of art {part['source_arts'][-1]}: the old HD pack's frame of that state (green or red corners kept), the same alpha (parchment_kit.py, ARC-UI-3205)")
+        if ident in RING_IDLE:  # ARC-UI-3269: the thick brass-ringed buttons, the wide button's dome and its two wells
+            part["status"], part["provenance"] = "master", ring_button_kit.provenance_of(ident)
+            part["note"] = ring_button_kit.note_of(ident)
         if ident in SMALL_PLATES:
             family = SMALL_PLATES[ident].family
             part["status"], part["provenance"] = "master", f"{SMALL_FAMILY_TEXT[family][0]}:small_kit:{ident}"
@@ -372,6 +393,7 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
     parts.extend(new_parts())
     parts.extend(dome_hud_parts({p["id"]: p for p in parts if p["id"] in SKILL_PLATES or p["id"] in DISC_PLATES or p["id"] in SCHOOL_PLATES}))
     parts.extend(small_parts({p["id"]: p for p in parts if p["id"] in SMALL_PLATES}))
+    parts.extend(ring_parts({p["id"]: p for p in parts if p["id"] in RING_IDLE and p["id"].startswith("plate.")}))
     by_art = {s: p for p in parts for s in p["source_arts"]}
     # Layers over a part (draw order, bottom first): the end caps over a HUD strip, the grid layer over a backdrop that paints it in today.
     for art, layers in (("335", hardware_build.layers_of("board.charcreatebottombar")), ("336", hardware_build.layers_of("board.charcreatetopbar")),
