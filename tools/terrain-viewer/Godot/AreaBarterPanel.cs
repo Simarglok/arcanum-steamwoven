@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer;
 /// is shown with its reason and its button is disabled outside a follower's window. It renders an <see cref="AreaBarterView"/>; the app
 /// runs every trade through the session. ARC-UI-064: with the game's art and a shown object the window draws the original barter window
 /// instead (<see cref="AreaInventoryGridArea"/> in mode 1, the round view, <see cref="AreaBarterArtLayout"/>): an item dragged from the
-/// merchant's grid onto the hero's is bought, one dragged the other way sold; a switch below the frame shows the diagnostic window.
+/// merchant's grid onto the hero's is bought, one dragged the other way sold; ARC-UI-2615: the debug block's key shows the diagnostic window.
 /// ARC-UI-069: the opening shop's docked window shows the original look too, at the menu screen's (0, 41) between the shop's strips, without
 /// the round view or its release (the main menu is up, IW33, IW34) and without the switch.
 /// </summary>
@@ -99,8 +99,11 @@ public partial class AreaBarterPanel : CanvasLayer
     }
     private AreaKitBackdrop? _shopKit;
     internal Button LookToggleForSelfTest => _lookToggle;
+    private AreaDebugBlock _debugBlock = null!;
+    internal AreaDebugBlock DebugBlockForSelfTest => _debugBlock;
+    internal Rect2 WindowRectForSelfTest => _panel.GetGlobalRect();
 
-    /// <summary>ARC-UI-2764: the "Diagnostic view" switch is a debug and self-test path; false (the default) draws none in play.</summary>
+    /// <summary>ARC-UI-2764: the switch to the diagnostic view is a debug and self-test path (ARC-UI-2615: the debug block's key outside the window); false (the default) gives none in play.</summary>
     public bool DiagnosticSwitch
     {
         get => _diagnosticSwitch;
@@ -160,14 +163,10 @@ public partial class AreaBarterPanel : CanvasLayer
         _area.CycleRequested += direction => CycleRequested?.Invoke(direction);
         _area.HoleReleased += () => CloseRequested?.Invoke();
         _lookToggle = new Button { Name = "LookToggle", Flat = true, FocusMode = Control.FocusModeEnum.All, Alignment = HorizontalAlignment.Left, Visible = false };
-        _lookToggle.Pressed += () => Callable.From(() =>
-        {
-            if (!_diagnosticSwitch) return;
-            _diagnosticChosen = !_diagnosticChosen;
-            if (View is { } view) Render(view, _message.Text, _art);
-        }).CallDeferred();
+        _lookToggle.Pressed += () => Callable.From(ToggleLook).CallDeferred();
         foreach (var control in new Control[] { _header, _area, _scroll, _message, _close, _hint, _lookToggle }) contents.AddChild(control);
         _roundView = new AreaRoundView(); AddChild(_roundView);
+        _debugBlock = AreaDebugBlock.For(DescribeDebug, () => Callable.From(ToggleLook).CallDeferred()); AddChild(_debugBlock);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
@@ -217,8 +216,20 @@ public partial class AreaBarterPanel : CanvasLayer
         ResizePanel(); UpdateRoundView();
     }
 
+    /// <summary>ARC-UI-2615: the debug mode can change this window between the original look and the diagnostic one.</summary>
+    private bool LookSwitchable => _diagnosticSwitch && _look is { BarterReady: true } && _art is not null && !_docked;
+
+    private void ToggleLook()
+    {
+        if (!LookSwitchable) return;
+        _diagnosticChosen = !_diagnosticChosen;
+        if (View is { } view) Render(view, _message.Text, _art);
+    }
+
+    private AreaDebugNote? DescribeDebug() => IsOpen && LookSwitchable ? new(!ArtMode, _message.Text, _panel.Position.X) : null;
+
     /// <summary>ARC-UI-064: the original look hides the diagnostic lists, buttons and texts (the frame's drags trade, its quote line shows
-    /// the messages); the switch below the frame changes to the diagnostic window and back.</summary>
+    /// the messages); ARC-UI-2615: the debug block's key changes to the diagnostic window and back.</summary>
     private void ApplyLook()
     {
         var art = ArtMode;
@@ -230,8 +241,10 @@ public partial class AreaBarterPanel : CanvasLayer
         _area.Visible = art;
         foreach (var control in new Control[] { _header, _scroll, _message, _hint }) control.Visible = !art;
         _close.Visible = !art && !_docked;
-        _lookToggle.Visible = _diagnosticSwitch && _look is { BarterReady: true } && _art is not null && !_docked;
-        _lookToggle.Text = art ? "Diagnostic view" : "Original look";
+        _lookToggle.Visible = !art && LookSwitchable;
+        _lookToggle.Text = "Original look";
+        // ARC-UI-2615: in the debug mode's diagnostic view the debug block shows the message.
+        if (LookSwitchable) _message.Visible = false;
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
         // ARC-UI-3136: the diagnostic look (Godot's default font) is developer-only; the original look carries the art grid and stays.
         _panel.Modulate = art || AreaFallbackLook.Allowed ? Colors.White : new Color(1, 1, 1, 0);
@@ -273,8 +286,8 @@ public partial class AreaBarterPanel : CanvasLayer
 
     private List<Button> Focusable()
     {
-        // ARC-UI-064: in the original look the switch to the diagnostic buttons is the one focusable control.
-        if (ArtMode) return _diagnosticSwitch ? [_lookToggle] : [];
+        // ARC-UI-064: the original look's diagnostic buttons are hidden (ARC-UI-2615: the debug switch is a key).
+        if (ArtMode) return [];
         var list = _sellButtons.Concat(_buyButtons).Where(button => !button.Disabled).ToList();
         list.Add(_close);
         if (_lookToggle.Visible) list.Add(_lookToggle);
@@ -323,7 +336,7 @@ public partial class AreaBarterPanel : CanvasLayer
         }
         if (ArtMode)
         {
-            // ARC-UI-064: the window's 800 × 400 at its place between the bars, scaled to the free part with room for the switch below it
+            // ARC-UI-064: the window's 800 × 400 at its place between the bars, scaled to the free part
             // (as the inventory window's original look).
             if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
             var (top, free) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
@@ -343,11 +356,13 @@ public partial class AreaBarterPanel : CanvasLayer
         var size = GetViewport().GetVisibleRect().Size;
         var width = Math.Max(1, Math.Min(1040, size.X - 48));
         var reserve = _docked ? DockReserve : 0;
-        _scroll.CustomMinimumSize = new(0, Math.Max(40, Math.Min(_columns.GetCombinedMinimumSize().Y, size.Y - 260 - reserve)));
+        // ARC-UI-2615: the debug block at the top left (no margin beside the window) is not covered.
+        var above = _debugBlock.TopReserve;
+        _scroll.CustomMinimumSize = new(0, Math.Max(40, Math.Min(_columns.GetCombinedMinimumSize().Y, size.Y - 260 - reserve - above)));
         _panel.Size = new(width, 0);
-        var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48 - reserve));
+        var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48 - reserve - above));
         _panel.Size = new(width, height);
-        _panel.Position = new((size.X - width) / 2, _docked ? 24 : Math.Max(24, (size.Y - height) / 2));
+        _panel.Position = new((size.X - width) / 2, _docked ? 24 : Math.Max(Math.Max(24, above), (size.Y - height) / 2));
     }
 
     public override void _Process(double delta)

@@ -8,7 +8,7 @@ namespace Arcanum.TerrainViewer;
 // ARC-UI-1884: the original's quantity pane (bar mode 9, ledger QW3, QW3a) in the bottom strip while the quantity window asks (interface mode 13, ARC-UI-029): the
 // mode's background art 298, the five buttons (All, up, down, Accept, Cancel), the kind's icon (an item art of place 2) and the count in the roller font. The
 // window's logic is the inventory panel's (QuantityBar, Accept, Cancel); the pane shows its count and acts on a release over a button, as the skill pane does.
-// Without the bars or the pane's background art the diagnostic row of the inventory panel stays the question.
+// Without the pane's art the diagnostic row of the inventory panel stays the question, on the bottom strip's message window (ARC-UI-2615); without the bars it stays above the window's frame.
 public partial class TerrainViewerApp
 {
     private AreaQuantityPaneView? _quantityPaneView;
@@ -16,6 +16,7 @@ public partial class TerrainViewerApp
     private (object? Move, object? Icons)? _quantityIconKey;
     private Texture2D? _quantityIcon;
     private bool _quantityPaneHiddenForCapture;
+    private PanelContainer? _quantityRowHost;
     private int _quantityPanePressesForSelfTest;
 
     internal AreaQuantityPaneView? QuantityPaneForSelfTest => _quantityPaneView is { Visible: true } ? _quantityPaneView : null;
@@ -39,6 +40,7 @@ public partial class TerrainViewerApp
         var shown = _inventoryPanel is { Quantity: not null } && font is not null && Art(QuantityPaneRules.BackgroundArt) is not null
             && QuantityPaneRules.Buttons.All(button => Art(button.Art) is { Length: > 0 }) && !_quantityPaneHiddenForCapture;
         if (_quantityPaneView.Visible != shown) _quantityPaneView.Visible = shown;
+        SyncQuantityRowHost(shown);
         _inventoryPanel?.HideQuantityRow(shown);
         if (!shown || _inventoryPanel?.Quantity is not { } bar) return;
         var stamp = ((object?)_hotkeyBarArt, (object?)font);
@@ -61,10 +63,36 @@ public partial class TerrainViewerApp
             return found;
         }, [QuantityPaneRules.BackgroundArt, .. QuantityPaneRules.Buttons.Select(button => button.Art).Where(art => art is not (805 or 804))], BarDeviceScale, () => _quantityPaneView?.BackgroundForSelfTest is not null, new Vector2I(1600, 1200));
 
-    /// <summary>The bars went away or the question ended: no pane is drawn and the diagnostic row is as it was.</summary>
+    /// <summary>ARC-UI-2615: while the quantity window asks, the diagnostic row stands on the bottom strip's message window (made with the pane, so over it), on a black ground; under the original's pane it is
+    /// kept, unseen, for the keyboard and the pad.</summary>
+    private void SyncQuantityRowHost(bool paneShown)
+    {
+        if (_quantityRowHost is null)
+        {
+            var (x, y, width, height) = AreaMessageLayout.Window;
+            _quantityRowHost = new PanelContainer { Name = "QuantityRowHost", Position = new(x, y - AreaGameBarLayout.BottomTop), Size = new(width, height), Visible = false };
+            _quantityRowHost.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = Colors.Black });
+            _gameBarPanel!.AddPart(AreaBarStrip.Bottom, _quantityRowHost);
+        }
+        var asking = _inventoryPanel is { IsOpen: true, Quantity: not null };
+        // Shown before the row moves in: a focused button takes the focus again only where it is visible.
+        _quantityRowHost.Visible = asking;
+        _inventoryPanel?.HostQuantityRow(asking ? _quantityRowHost : null);
+        // ARC-UI-3136: as the panel it left, the row is unseen in a player's run whose window could only draw the diagnostic look.
+        var unseen = paneShown || _inventoryPanel is { ArtMode: false } && !AreaFallbackLook.Allowed;
+        _quantityRowHost.Modulate = unseen ? new Color(1, 1, 1, 0) : Colors.White;
+        _quantityRowHost.MouseFilter = paneShown ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Stop;
+    }
+
+    /// <summary>The bars went away or the question ended: no pane is drawn and the diagnostic row is back in its window.</summary>
     private void HideQuantityPane()
     {
         if (_quantityPaneView is not null) _quantityPaneView.Visible = false;
+        if (_quantityRowHost is not null)
+        {
+            _inventoryPanel?.HostQuantityRow(null);
+            _quantityRowHost.Visible = false;
+        }
         _inventoryPanel?.HideQuantityRow(false);
     }
 

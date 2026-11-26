@@ -42,7 +42,7 @@ Read in the redraw 0x576520 and the open 0x572340; rows [IW20–IW25](../researc
 
 Done in the viewer: backgrounds, covers, item arts (inventory art everywhere, scaled down when larger than the
 item's place), boxes with their hover art, lines, counts, names, quotes and ratings in the original's art fonts (ARC-UI-2795), the window at its place
-between the bars, the debug-only "Diagnostic view" switch below it (ARC-UI-2764: not drawn in play). Barter and the other modes keep the diagnostic window;
+between the bars, the debug mode's Ctrl+Shift+J switch to the diagnostic view (ARC-UI-2764: none in play; ARC-UI-2615: nothing of it in or around the window). Barter and the other modes keep the diagnostic window;
 the loot window is done by ARC-UI-052 and the steal window by ARC-UI-065 (below).
 
 Left for the next inventory slices (each its own task):
@@ -76,7 +76,7 @@ Done in the viewer: the backgrounds, the body's image, the body's items at their
 eight shown rows; a junk pile's items at their pile slots; PROJECT: an item the session keeps at no location, -1, at the first free
 place), the hero's grid, counts and boxes, the Take all button; a press on a body's item and its release on the hero's
 grid takes it (a gold pile or ammunition stack asks how many), on a box or elsewhere it goes back; the mouse wheel scrolls the
-body's grid (PROJECT: the original's scroll bar at (330, 136) is not drawn); the debug-only "Diagnostic view" switch shows the diagnostic
+body's grid (PROJECT: the original's scroll bar at (330, 136) is not drawn); the debug mode's Ctrl+Shift+J shows the diagnostic
 window with its Take buttons. PROJECT: a taken item goes to the hero's first free cells, not the cell it was released on.
 
 ARC-UI-072 built the body's doll view and its toggles (the loot and steal windows of a critter: the worn items on 349 `Loot_PD` at (0, 134), toggles 338 / 339 at
@@ -133,7 +133,7 @@ wheel as its scroll (PROJECT: the scroll bar at (330, 168) is not drawn), the he
 the round view; a merchant's item released on the hero's grid is bought and a hero's item released on the merchant's grid sold through the
 session (PROJECT: into the hero's first free cells, a stack whole), and a right release on an item moves it to the other side the same
 way (IW36); the quote line shows a PROJECT quote text (`Buy NAME: N`) on a resting
-pointer and the trade messages; the debug-only "Diagnostic view" switch shows the diagnostic window. Since ARC-UI-069 the opening shop shows this
+pointer and the trade messages; the debug mode's Ctrl+Shift+J shows the diagnostic window. Since ARC-UI-069 the opening shop shows this
 look too, docked at the screen's (0, 41) over window 15's strips, without the round view and its release (the main menu is up, IW33,
 IW34; [menu windows plan](#menu-windows-plan-arc-ui-058) item 5).
 

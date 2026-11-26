@@ -87,6 +87,7 @@ public partial class TerrainViewerApp
         // The bottom line of every open window, else the plain play line; the near-target prompt waits for a scheme's target highlight.
         var context = !IsWorld || WorldModal ? PromptContext.Modal : PromptContext.Play;
         var text = controllers.Strip(context);
+        PlacePromptStrip();
         // The fonts are read once a module and only when a strip shows (a start with the mouse in hand reads nothing).
         var fonts = text.Length == 0 ? null : TextFonts();
         if (text == _promptShown && ReferenceEquals(fonts, _promptFonts)) return;
@@ -97,6 +98,26 @@ public partial class TerrainViewerApp
         var (placed, _, _) = AreaTextFontLayout.Block(fonts.Text.Font, fonts.TextLineHeight, text);
         _promptArt!.Set([new(fonts.Text, fonts.TextLineHeight, placed.Lines, 0, 0, PromptColour)]);
         _promptPanel!.Visible = true;
+        PlacePromptStrip();
+    }
+
+    /// <summary>ARC-UI-2615: while the bars show, the line lies inside the bottom strip's message window, along its lower edge (not across the window's frame), and is unseen while the quantity window asks
+    /// there; without the bars it stands at the screen's bottom.</summary>
+    private void PlacePromptStrip()
+    {
+        if (_promptPanel is null) return;
+        var inStrip = _gameBarPanel is { Visible: true };
+        var (shift, bottom) = (0f, -6f);
+        if (inStrip)
+        {
+            var view = GetViewport().GetVisibleRect().Size;
+            var (origin, scale) = _gameBarPanel!.ScreenFrame(view);
+            var (x, y, width, height) = AreaMessageLayout.Window;
+            (shift, bottom) = (origin.X + (x + width / 2f) * scale - view.X / 2, origin.Y + (y + height - 1) * scale - view.Y);
+        }
+        _promptPanel.OffsetLeft = _promptPanel.OffsetRight = shift;
+        _promptPanel.OffsetTop = _promptPanel.OffsetBottom = bottom;
+        _promptPanel.Modulate = inStrip && _inventoryPanel is { Quantity: not null } ? new Color(1, 1, 1, 0) : Colors.White;
     }
 
     private void EnsurePromptStrip()
@@ -107,7 +128,6 @@ public partial class TerrainViewerApp
         _promptPanel.SetAnchorsPreset(Control.LayoutPreset.CenterBottom);
         _promptPanel.GrowHorizontal = Control.GrowDirection.Both;
         _promptPanel.GrowVertical = Control.GrowDirection.Begin;
-        _promptPanel.OffsetBottom = -6;
         _promptPanel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(14 / 255f, 16 / 255f, 22 / 255f, .82f),
