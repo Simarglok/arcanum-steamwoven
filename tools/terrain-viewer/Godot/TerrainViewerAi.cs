@@ -198,6 +198,7 @@ public partial class TerrainViewerApp
             FollowFacts = entity => _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } companion && _conversationHost is { } conversation
                 ? AreaCompanionLoyalty.Facts(session, companion, conversation.State) : null,
             Removed = AreaRemovedObjects,
+            IsRemoved = AreaIsRemoved,
             SwitchedOn = AreaSwitchedOnNpcs,
             LineOfFire = () => AiLineOfFire(host()),
             DropMap = AreaDropMapNow,

@@ -384,6 +384,13 @@ public sealed class SessionCritterCombat
         _stats.Query(StatContext(state))
             .Snapshot!.GetEffective(stat);
 
+    /// <summary>ARC-RENDER-3126: two <see cref="EffectiveStat"/> values from one query of the stats (a critter's hostility facts read perception and intelligence together).</summary>
+    public (int First, int Second) EffectiveStats(CharacterStat first, CharacterStat second, LifeState state)
+    {
+        var snapshot = _stats.Query(StatContext(state)).Snapshot!;
+        return (snapshot.GetEffective(first), snapshot.GetEffective(second));
+    }
+
     /// <summary>
     /// ARC-WORLD-2127: the NPC's max followers (stat 15 through the getter 0x4B0490, ledger AP4) in this life state: its effective charisma / 4, plus one at Persuasion training Expert or Master
     /// (<paramref name="persuasion"/>), then its effects on that stat, clamped to 1..7 (the hero's value is <see cref="GameSessionOwner.QueryHeroPartySide"/>).

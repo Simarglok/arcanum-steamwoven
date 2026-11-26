@@ -906,7 +906,7 @@ public partial class TerrainViewerApp
             return new(checked((int)x), checked((int)y));
         }
         if (row.Key == HeroRow.Key && _worldActor.Session is AreaGridSession heroSession) return HeroCellNow(heroSession);
-        if (ObjectTargets()?.Gone(owner).Contains(row.Key) == true) return null;
+        if (ObjectTargets()?.IsGone(owner, row.Key) == true) return null;
         if (row.Type is 15 or 16 && row.WorldX is not null && row.WorldY is not null) return NpcCell(row);
         return row.WorldX is { } wx && row.WorldY is { } wy ? new(checked((int)wx), checked((int)wy)) : null;
     }

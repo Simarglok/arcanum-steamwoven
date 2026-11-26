@@ -294,7 +294,7 @@ public sealed class AreaInventoryHost
     public GameSessionFailure? AttachReadMap(GameSessionOwner session, int runtimeMap)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (!_resolver.IsRead(runtimeMap) || session.QueryMapInventory(new(runtimeMap)) is not null || _resolver.Held(runtimeMap) is not { } read) return null;
+        if (!_resolver.IsRead(runtimeMap) || session.HasMapInventory(new(runtimeMap)) || _resolver.Held(runtimeMap) is not { } read) return null;
         return session.AttachMapInventory(new(runtimeMap), read.Seed) is { Disposition: GameSessionDisposition.Rejected } refused ? refused.Failure : null;
     }
 

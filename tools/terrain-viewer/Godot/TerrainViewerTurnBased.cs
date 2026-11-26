@@ -265,7 +265,7 @@ public partial class TerrainViewerApp
         if (host.Build(entity).Combat is not { } built || host.Fields(entity) is not { } fields) return null;
         var combat = owner.WithNpcEffects(built); // ARC-MAGIC-027: the round's speed under the NPC's effects (Congeal Time, Hasten)
         if (_inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is { } map && map.TryGetRow(entity, out var row)
-            && AreaRemovedObjects().Contains(row.Key)) return null;
+            && AreaIsRemoved(row.Key)) return null;
         var state = owner.QueryLife(combat.Target).View?.Record.State ?? combat.Loaded;
         return AreaCombatWorld.Facts(combat, fields, state);
     }
