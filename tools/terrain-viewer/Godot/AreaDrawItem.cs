@@ -180,7 +180,14 @@ public partial class AreaDrawItem : Node2D
     {
         if (ReferenceEquals(_s, state)) return;
         _s = state;
-        if (!ReferenceEquals(Material, state.Material)) Material = state.Material;
+        Wear(state.Material);
+    }
+    // ARC-RENDER-3416: the material this node was last given. Only Wear sets it, so no submission asks the engine for it.
+    private ShaderMaterial? _worn;
+    private void Wear(ShaderMaterial? material)
+    {
+        if (ReferenceEquals(_worn, material)) return;
+        Material = material; _worn = material;
     }
 
     internal static Transform2D RasterTransform(Viewport viewport)
@@ -238,7 +245,7 @@ public partial class AreaDrawItem : Node2D
             command.Additive, command.Multiply, command.Alpha, command.WadeRows, Ambient, AmbientRight, WeightAmbient, Lattice, Carried?.Lighter, Carried?.Darker,
             RelightKind, RoofCorners, WallFade, relit, transform, size);
         var s = _s;
-        if (s.Prepared is { } last && s.Key is { } held && ReferenceEquals(Material, s.Material)
+        if (s.Prepared is { } last && s.Key is { } held && ReferenceEquals(_worn, s.Material)
             && (last == prepared || (last with { Transform = transform }) == prepared && Panned(s, last.Transform, transform, command.Destination, size)))
         {
             s.Prepared = prepared;
@@ -259,13 +266,13 @@ public partial class AreaDrawItem : Node2D
             throw new InvalidOperationException("AREA_NEAREST_SOURCE_CROP_DOMAIN");
         var state = (transform, source, command.Destination, command.FlipX, command.FlipY, size);
         var material = s.Material ??= new ShaderMaterial();
-        if (s.MaterialState != (command.Additive, command.Multiply, command.Alpha, command.WadeRows) || !ReferenceEquals(Material, material) || s.RelitState?.Relit != relit)
+        if (s.MaterialState != (command.Additive, command.Multiply, command.Alpha, command.WadeRows) || !ReferenceEquals(_worn, material) || s.RelitState?.Relit != relit)
         {
             material.Shader = command.Multiply ? MultiplyShader.Value
                 : relit ? (command.Additive ? RelitAddShader.Value : RelitNormalShader.Value)
                 : command.Additive ? AddShader.Value : NormalShader.Value;
             s.RelitState = (relit, -1, -1);
-            Material = material;
+            Wear(material);
             material.SetShaderParameter(Uniform.ViewState, view.Texture);
             material.SetShaderParameter(Uniform.BodyAlpha, command.Alpha / 255f);
             material.SetShaderParameter(Uniform.WadeRows, command.WadeRows);
@@ -448,7 +455,7 @@ public partial class AreaDrawItem : Node2D
 
     public override void _ExitTree()
     {
-        ReleaseMapping(); Material = null; _s.Material?.Dispose(); _s = new();
+        ReleaseMapping(); Wear(null); _s.Material?.Dispose(); _s = new();
         _ownMappings?.Dispose(); _ownMappings = null;
         _ownView?.Dispose(); _ownView = null;
     }
