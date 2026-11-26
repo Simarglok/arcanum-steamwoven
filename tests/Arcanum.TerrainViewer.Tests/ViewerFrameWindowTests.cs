@@ -130,6 +130,10 @@ public sealed class ViewerFrameWindowTests
         var window = new ViewerFrameWindow();
         long t = 0;
         for (var i = 0; i < 20_000; i++) { t += 16_000; window.Record(t, 0, 0, 0); } // warm up and wrap the ring
+        // ARC-DEV-3426: a background collection that ends inside the measured loop can raise this counter by the unused rest of the thread's
+        // allocation context (up to about 8 KB) although nothing was allocated (dotnet/runtime#134724, open). A blocking collection leaves the
+        // thread without a context and the loop takes none, so the exact zero below holds. Nothing that allocates may go between these lines.
+        GC.Collect();
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < 100_000; i++) { t += 16_000; window.Record(t, i / 1000, 0, 0); }
         Assert.AreEqual(before, GC.GetAllocatedBytesForCurrentThread(), "Record allocates nothing per frame");
