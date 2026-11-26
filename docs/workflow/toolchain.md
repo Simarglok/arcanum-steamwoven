@@ -1538,6 +1538,20 @@ Tests: `python3 -B -m unittest tools.steamwoven_ui.test_school_kit` (in the batc
 
 Viewer (ARC-UI-3320): the kit smoke (`./arcanum smoke pr --stages bar --env ARC_AREA_BAR_STEAMWOVEN=1 --env ARC_HD_PACK=<pack> --env ARC_STEAMWOVEN_VARIANTS=kit --env ARC_STEAMWOVEN_SIZES=2560x1440`) writes the 28 plates, their two overlays and the empty glyphs flat into its synthetic kit, reads back the idle and pressed face on the three pages' round buttons and the circle cut, and repeats the pages with a set that has no round plate (the art's own frames through the layer). A look capture adds `--env ARC_AREA_BAR_CAPTURE=<prefix> --env ARC_STEAMWOVEN_KIT_LOOK=<folder with plate.<name>[_hover|_pressed].png masters>` (the page colour reads of the three pages stay; the plate colour reads are skipped); the pages' captures are `<prefix>-hud-steamwoven-kit-2560x1440-sheet-<page>.png` (kit parts), `...-roundless.png` (kit sheet, the art's own buttons) and `...-own.png` (no kit sheet).
 
+## Steamwoven small brass-ringed buttons, batch B-BUTTONS slice 3c (ARC-UI-3270)
+
+The kit parts of the 16 small round buttons in a thin brass ring: arts 23, 24 (19 x 19 units), 770, 771 (21 x 21), 145 to 148, 299, 757, 758 (23 x 23), 338 to 340 (28 x 27), 823 and 824 (28 x 29): the player's own HD-pack frames as they are, cut to the ring's circle by an analytic round alpha (pack-first rule P, [TRD](../ui/steamwoven-interface-trd.md), the 3270 paragraph).
+Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for `sheet`, no Godot and no `dotnet`, so no launch queue. The pack is `local/hd-packs/interface-redraw-4x` (read only).
+
+```sh
+python3 -B tools/steamwoven_ui/ring_kit.py check [--only NAME,...]                           # a pack frame for every state, circles inside the arts
+python3 -B tools/steamwoven_ui/ring_kit.py build [--only NAME,...] [--out DIR] [--dry-run]   # the 57 parts -> masters/ and provenance/rule/
+python3 -B tools/steamwoven_ui/ring_kit.py sheet --out FILE [--only NAME,...] [--zoom N]     # original | HD pack | kit cut | kit with the run-time shadow (English labels)
+```
+
+`plate.<name>` is the pack's idle frame, `plate.<name>_pressed` and `_hover` the pressed and hover frames in full (the two-frame arts have no hover look), `glyph.<name>` an empty layer; the empty fourth frame of the plus and minus arts is never drawn by the original and has no part. The pack's transparent pixels first take the colour next to them, so only the analytic circle decides the edge; no shadow is baked. The circles are the tool's own table (`RINGS`); the viewer does not draw these arts from the kit yet.
+Tests: `python3 -B -m unittest tools.steamwoven_ui.test_ring_kit` (in the batched `tools/local_dev/run_tests.py`).
+
 ## Controller test evidence summariser (ARC-GPAD-1376)
 
 [`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the
