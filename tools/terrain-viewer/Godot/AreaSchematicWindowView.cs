@@ -84,6 +84,11 @@ public partial class AreaSchematicWindowView : Control
     /// <summary>ARC-UI-3341: the kit faces the window's page arrows show now (the native smoke).</summary>
     internal IReadOnlyList<AreaKitFaceLayer.Item> KitFacesForSelfTest => _kitFaces.ShownForSelfTest;
 
+    private readonly List<int> _ownFaceArts = [];
+
+    /// <summary>ARC-UI-3341: the page arrows the last draw painted from their arts' own frames (the native smoke).</summary>
+    internal IReadOnlyList<int> OwnFaceArtsForSelfTest => _ownFaceArts;
+
     public override void _EnterTree()
     {
         AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
@@ -245,7 +250,11 @@ public partial class AreaSchematicWindowView : Control
     {
         var frame = Frame(art, hit);
         if (KitBackgroundShown && AreaKitSheets.Face(art, frame) is { } face && Art(art, frame) is { } own) faces.Add(new(art, face, new Rect2(place.X, place.Y, own.GetWidth(), own.GetHeight())));
-        else DrawArt(art, place, frame);
+        else
+        {
+            DrawArt(art, place, frame);
+            if (Art(art, frame) is not null) _ownFaceArts.Add(art);
+        }
     }
 
     private void DrawText(AreaArtFontFace face, string text, int x, int y)
@@ -267,6 +276,7 @@ public partial class AreaSchematicWindowView : Control
             DrawArt(AreaSchematicWindowLayout.ListTabArt, AreaSchematicWindowLayout.ListTab(found), Frame(AreaSchematicWindowLayout.ListTabArt, new(Kind.ListTab, found ? 1 : 0)));
         }
         var faces = new List<AreaKitFaceLayer.Item>();
+        _ownFaceArts.Clear();
         if (PreviousShown) DrawPageArrow(AreaSchematicWindowLayout.PreviousArt, AreaSchematicWindowLayout.Previous, new(Kind.Previous, 0), faces);
         if (NextShown) DrawPageArrow(AreaSchematicWindowLayout.NextArt, AreaSchematicWindowLayout.Next, new(Kind.Next, 0), faces);
         _kitFaces.Show(faces);

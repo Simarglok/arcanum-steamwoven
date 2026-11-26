@@ -738,10 +738,11 @@ public partial class TerrainViewerApp
             await frames(3);
         }
         // One control in one look: the face the layer holds for the art (or none), and the pixel in the control's middle.
-        void Check(string what, IReadOnlyList<AreaKitFaceLayer.Item> shown, int art, int frame, Vector2 middle, Color colour)
+        void Check(string what, IReadOnlyList<AreaKitFaceLayer.Item> shown, IReadOnlyList<int> own, int art, int frame, Vector2 middle, Color colour)
         {
             var item = shown.Where(face => face.Art == art).ToList();
-            require(kitFaces ? item.Count == 1 && ReferenceEquals(item[0].Texture, AreaKitSheets.Face(art, frame)) : item.Count == 0, $"[{tag}] {what} {(kitFaces ? "draws the kit's face of frame " + frame : "draws the art's own frame")}");
+            require(kitFaces ? item.Count == 1 && ReferenceEquals(item[0].Texture, AreaKitSheets.Face(art, frame)) && !own.Contains(art) : item.Count == 0 && own.Contains(art),
+                $"[{tag}] {what} {(kitFaces ? "draws the kit's face of frame " + frame : "draws the art's own frame")}");
             if (look) return;
             using var shot = GetViewport().GetTexture().GetImage();
             var ratio = new Vector2(shot.GetWidth(), shot.GetHeight()) / GetViewport().GetVisibleRect().Size;
@@ -757,18 +758,18 @@ public partial class TerrainViewerApp
         var tabMiddle = sheet.GetGlobalTransform() * new Vector2(tab.X + 16, tab.Y + 16);
         var beside = sheet.GetGlobalTransform() * new Vector2(300, 200);
         await Pointer(beside);
-        Check("the schematics tab at rest", sheet.KitFacesForSelfTest, tab.Art, 0, tabMiddle, KitFace);
+        Check("the schematics tab at rest", sheet.KitFacesForSelfTest, sheet.OwnFaceArtsForSelfTest, tab.Art, 0, tabMiddle, KitFace);
         await CaptureHudAsync("steamwoven-" + tag + "-faces-tab-idle" + variant, frames);
         await Pointer(tabMiddle);
-        Check("the hovered schematics tab", sheet.KitFacesForSelfTest, tab.Art, 2, tabMiddle, KitFaceHover);
+        Check("the hovered schematics tab", sheet.KitFacesForSelfTest, sheet.OwnFaceArtsForSelfTest, tab.Art, 2, tabMiddle, KitFaceHover);
         await CaptureHudAsync("steamwoven-" + tag + "-faces-tab-hover" + variant, frames);
         await Press(tabMiddle, true);
-        Check("the pressed schematics tab", sheet.KitFacesForSelfTest, tab.Art, 1, tabMiddle, KitFacePressed);
+        Check("the pressed schematics tab", sheet.KitFacesForSelfTest, sheet.OwnFaceArtsForSelfTest, tab.Art, 1, tabMiddle, KitFacePressed);
         await CaptureHudAsync("steamwoven-" + tag + "-faces-tab-pressed" + variant, frames);
         await Pointer(beside);
         await Press(beside, false);
         _sheetPanel.SelectTabForSelfTest(AreaSheetTab.Schemes); await frames(4);
-        Check("the shown schematics tab", sheet.KitFacesForSelfTest, tab.Art, 1, tabMiddle, KitFacePressed);
+        Check("the shown schematics tab", sheet.KitFacesForSelfTest, sheet.OwnFaceArtsForSelfTest, tab.Art, 1, tabMiddle, KitFacePressed);
         EndSheet(); await frames(4);
         require(!SheetOpen && AreaKitSheets.FacesShownForSelfTest.Count == 0, $"[{tag}] the tab's kit face goes with the sheet");
 
@@ -784,13 +785,13 @@ public partial class TerrainViewerApp
             // The middle of the arrow's ink: the arrows are 18 x 22 units.
             var middle = window.PointForSelfTest(place.X + 9, place.Y + 11);
             await Pointer(away);
-            Check($"the {name} arrow at rest", window.KitFacesForSelfTest, art, 0, middle, KitFace);
+            Check($"the {name} arrow at rest", window.KitFacesForSelfTest, window.OwnFaceArtsForSelfTest, art, 0, middle, KitFace);
             await CaptureHudAsync("steamwoven-" + tag + "-faces-" + name + "-idle" + variant, frames);
             await Pointer(middle);
-            Check($"the hovered {name} arrow", window.KitFacesForSelfTest, art, 2, middle, KitFaceHover);
+            Check($"the hovered {name} arrow", window.KitFacesForSelfTest, window.OwnFaceArtsForSelfTest, art, 2, middle, KitFaceHover);
             await CaptureHudAsync("steamwoven-" + tag + "-faces-" + name + "-hover" + variant, frames);
             await Press(middle, true);
-            Check($"the pressed {name} arrow", window.KitFacesForSelfTest, art, 1, middle, KitFacePressed);
+            Check($"the pressed {name} arrow", window.KitFacesForSelfTest, window.OwnFaceArtsForSelfTest, art, 1, middle, KitFacePressed);
             await CaptureHudAsync("steamwoven-" + tag + "-faces-" + name + "-pressed" + variant, frames);
             await Pointer(away);
             await Press(away, false);

@@ -50,6 +50,11 @@ public partial class AreaCharacterSheetArtView : Control
 
     /// <summary>ARC-UI-3341: the kit faces the sheet's own buttons show now (the native smoke).</summary>
     internal IReadOnlyList<AreaKitFaceLayer.Item> KitFacesForSelfTest => _kitFaces.ShownForSelfTest;
+
+    private readonly List<int> _ownFaceArts = [];
+
+    /// <summary>ARC-UI-3341: the arts the kit could draw a face for (<see cref="SteamwovenKitTable.WindowFaces"/>) that the last draw painted from their own frames (the native smoke).</summary>
+    internal IReadOnlyList<int> OwnFaceArtsForSelfTest => _ownFaceArts;
     private AreaCharacterSheetFonts? _fonts;
     private AreaCharacterSheetTexts _texts = AreaCharacterSheetTexts.Project("not set");
     private (int X, int Y)[] _alignmentHot = [];
@@ -368,6 +373,7 @@ public partial class AreaCharacterSheetArtView : Control
                 AreaCharacterSheetArtLayout.Rgb(text.Colour));
         }
         var faces = new List<AreaKitFaceLayer.Item>();
+        _ownFaceArts.Clear();
         foreach (var hit in Hits)
         {
             if (ReadOnly && hit.Kind != Kind.Tab) continue;
@@ -379,7 +385,11 @@ public partial class AreaCharacterSheetArtView : Control
             var place = new Rect2(x, y, texture.GetWidth(), texture.GetHeight());
             // ARC-UI-3341: over the kit's background a tab the kit holds a face for (the schematics tab) draws that face in the art's place.
             if (KitBackgroundShown && AreaKitSheets.Face(number, shown) is { } face) faces.Add(new(number, face, place));
-            else DrawTextureRect(texture, place, false);
+            else
+            {
+                DrawTextureRect(texture, place, false);
+                if (SteamwovenKitTable.WindowFaces.ContainsKey(number)) _ownFaceArts.Add(number);
+            }
         }
         _kitFaces.Show(faces);
     }
