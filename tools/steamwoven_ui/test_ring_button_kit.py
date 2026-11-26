@@ -242,6 +242,20 @@ class CellTests(unittest.TestCase):
             self.assertLess(light(-1, -1), light(1, -1))
             self.assertLess(light(1, -1), light(1, 1))
 
+    def test_the_lamp_is_the_originals_floor_in_the_same_wall_by_rule(self):
+        b = rk.INDICATORS[0]
+        original = discs(b, 1, (200, 20, 10))
+        master = rk.master_of(b)
+        out = rk.lamp_well(original, b, master)
+        for c in b.circles:
+            across, down = master[0] / c.width, master[1] / c.height
+            self.assertEqual(at(out, int(c.cx * across), int(c.cy * down)), (200, 20, 10, 255))
+            wall = (rk.WELL_FLOOR + c.cut) / 2 / 2 ** 0.5
+            light = lambda s: sum(at(out, int((c.cx + s * wall) * across), int((c.cy + s * wall) * down))[:3])
+            self.assertLess(light(-1), 100)
+            self.assertGreater(light(1), 300)
+        self.assertTrue(rk.provenance_of(rk.ident_of(b, "idle")).startswith("rule:"))
+
     def test_the_inside_of_a_sign_is_full_and_its_outline_stays_soft(self):
         mask = {(x, y): 0.6 for x in range(3) for y in range(3)}
         out = rk.solid(mask)

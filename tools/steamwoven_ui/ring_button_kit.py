@@ -5,8 +5,9 @@ Two sources (`--source`), by size:
 
 * Parts UNDER ABOUT 40 UNITS (the three ringed buttons, 36 to 38 units, and the wells, 22 units): `codex` (owner rule of 2026-11-26, #3272): each state generated large by Codex from the original (and the pack frame as a hint of the
   materials) on a square canvas of flat grey, registered onto the original's circle (`codex-place`), reduced once to the master; a ringed button's brass takes the tone of the accepted strip brass (#3259, #3260). A BURNING SIGN (the yellow and
-  green arrows of the wells, the arrows of 9 and 10 on hover and press) keeps Codex's outline only: inside lie the original's cells as even squares (rule E, owner 2026-11-26), a well's outline brought onto the original's smaller share; the red lamp
-  takes the original's fine lattice. Idle signs stay solid. `pack` keeps the pack cut for comparison.
+  green arrows of the wells, the arrows of 9 and 10 on hover and press) keeps Codex's outline only: inside lie the original's cells as even squares (rule E, owner 2026-11-26), a well's outline brought onto the original's smaller share. The three
+  WELLS are recesses countersunk into the brass, made by rule (flat floor in the original's colours, wall shadowed at the top left and lit at the lower right, no gloss); the red lamp is wholly by rule, its floor the original's fine lattice. Idle
+  signs stay solid. `pack` keeps the pack cut for comparison.
 * The wide button's dome (art 357, 51 units), `--dome`: `pack` is pack-first (rule P): the player's own HD-pack frame of each state; `olive` is the accepted olive plate of #3202 (`masters/plate.combat_button.png`), enlarged to the dome's
   circle, its pressed look the darkening of art 357's own pressed frame (rule E, `button_kit.render_crisp`).
 
@@ -119,9 +120,9 @@ def coverage() -> dict[str, Button]:
 
 
 def provenance_of(ident: str) -> str:
-    """The manifest's provenance of a part with the default look (`SOURCES[0]`, `DOMES[0]`): `codex:` for what a generation made, `rule:` for the pack cut, the olive dome and the empty glyphs."""
+    """The manifest's provenance of a part with the default look (`SOURCES[0]`, `DOMES[0]`): `codex:` for what holds something a generation drew, `rule:` for the red lamp, the pack cut, the olive dome and the empty glyphs."""
     b = coverage()[ident]
-    generated = b != DOME and SOURCES[0] == "codex" and not ident.startswith("glyph.")
+    generated = b != DOME and b.name != LAMP and SOURCES[0] == "codex" and not ident.startswith("glyph.")
     return f"{'codex' if generated else 'rule'}:ring_button_kit:{ident}"
 
 
@@ -510,17 +511,17 @@ def celled_well(frame: Image, original: Image, b: Button, master: tuple[int, int
     return countersink(out, b)
 
 
-def latticed(frame: Image, original: Image, b: Button) -> Image:
-    """The red lamp: the original's cells over the whole floor of each well (the wall round them is laid on the cut part)."""
-    out = Image(frame.w, frame.h, bytearray(frame.data))
+def lamp_well(original: Image, b: Button, master: tuple[int, int]) -> Image:
+    """The red lamp's part, wholly by rule: the original's cells over the floor of each well, laid at `CODEX_FRAME_PX` and reduced once, and the countersunk wall round them."""
+    width, height = b.circles[0].width, b.circles[0].height
+    frame = Image(width * CODEX_FRAME_PX, height * CODEX_FRAME_PX, bytearray((0, 0, 0, 255)) * (width * height * CODEX_FRAME_PX ** 2))
     for circle in b.circles:
-        scale = frame.h / circle.height
         for y in range(frame.h):
-            for x in range(max(0, int((circle.cx - circle.radius) * scale)), min(frame.w, int((circle.cx + circle.radius) * scale) + 1)):
-                k = (int(y // scale) * original.w + int(x // scale)) * 4
-                if math.hypot((x + 0.5) / scale - circle.cx, (y + 0.5) / scale - circle.cy) <= WELL_FLOOR + 0.5 and original.data[k + 3]:
-                    blend(out, x, y, tuple(original.data[k:k + 3]), 1.0)
-    return out
+            for x in range(max(0, int((circle.cx - circle.radius) * CODEX_FRAME_PX)), min(frame.w, int((circle.cx + circle.radius) * CODEX_FRAME_PX) + 1)):
+                k = (y // CODEX_FRAME_PX * original.w + x // CODEX_FRAME_PX) * 4
+                if math.hypot((x + 0.5) / CODEX_FRAME_PX - circle.cx, (y + 0.5) / CODEX_FRAME_PX - circle.cy) <= WELL_FLOOR + 0.5 and original.data[k + 3]:
+                    blend(frame, x, y, tuple(original.data[k:k + 3]), 1.0)
+    return countersink(cut(frame, b.circles, master), b)
 
 
 def uses_cells(b: Button, state: str) -> bool:
@@ -642,8 +643,8 @@ def cmd_codex_inbox(args: argparse.Namespace) -> int:
 
 
 def placed_art(generated: Image, b: Button) -> Image:
-    """A generated picture as a frame of the whole art at `CODEX_FRAME_PX`: registered onto the geometry of what was sent; an indicator's two wells are the one disc, the right one mirrored when it holds an arrow (as the original's; its glass
-    gloss is mirrored with it, so the pair is lit symmetrically)."""
+    """A generated picture as a frame of the whole art at `CODEX_FRAME_PX`: registered onto the geometry of what was sent; an indicator's two wells are the one disc, the right one mirrored when it holds an arrow (as the original's; of a
+    well's drawing the build uses only the arrow's outline)."""
     circle = codex_circle(b)
     square = school_kit.placed_frame(generated, circle, (circle.width * CODEX_FRAME_PX, circle.height * CODEX_FRAME_PX))
     _, left, top = (v * CODEX_FRAME_PX for v in codex_pad(b))
@@ -712,17 +713,17 @@ def button_parts(local_root: Path, frames: Path, b: Button, dome: str, source: s
     def frame_of(state: str) -> Image:
         if b != DOME and source == "codex":
             frame = pngio.read(codex_frame(local_root, b, state))
-            if uses_cells(b, state) and (b.kind == "plate" or b.name == LAMP):    # a well's arrows are laid on the cut part
-                original = original_frame(frames, b, b.frames[state])
-                frame = latticed(frame, original, b) if b.name == LAMP else celled(frame, original, b)
+            if uses_cells(b, state) and b.kind == "plate":    # a well's arrows are laid on the cut part
+                frame = celled(frame, original_frame(frames, b, b.frames[state]), b)
             return toned(frame, b.circles[0], *tone) if tone else frame
         return pack_frame(local, b, state)[0]
 
     def part_of(state: str) -> Image:
-        if b.kind == "picture" and source == "codex" and uses_cells(b, state) and b.name != LAMP:
+        if b.name == LAMP and source == "codex":
+            return lamp_well(original_frame(frames, b, b.frames[state]), b, master)
+        if b.kind == "picture" and source == "codex":
             return celled_well(frame_of(state), original_frame(frames, b, b.frames[state]), b, master)
-        part = cut(frame_of(state), b.circles, master)
-        return countersink(part, b) if b.name == LAMP and source == "codex" else part
+        return cut(frame_of(state), b.circles, master)
 
     parts = {ident_of(b, state): part_of(state) for state in b.frames}
     if b.kind == "plate":
@@ -744,6 +745,9 @@ def record_of(local_root: Path, frames: Path, b: Button, ident: str, dome: str, 
         if state == "pressed":
             for number in sorted(b.frames.values()):
                 sources[f"census/{b.folder}/f{number}"] = {"sha256": button_kit.sha256_file(frames / b.folder / f"f{number}.png")}
+    elif state is not None and b.name == LAMP and source_choice == "codex":
+        source = "the original's frame (the floor's lattice, rule E); the wall by rule"
+        sources[f"census/{b.folder}/f{b.frames[state]}"] = {"sha256": button_kit.sha256_file(frames / b.folder / f"f{b.frames[state]}.png"), "use": "the floor's lattice (rule E)"}
     elif state is not None and b != DOME and source_choice == "codex":
         source = "codex"
         _, outbox, _placed = codex_dirs(local_root)
@@ -753,7 +757,7 @@ def record_of(local_root: Path, frames: Path, b: Button, ident: str, dome: str, 
                                                       "generation_sha256": button_kit.sha256_file(generation) if generation.is_file() else None}
         sources[f"work/{CODEX_BATCH}/placed/{b.name}-f{b.frames[state]}"] = {"sha256": button_kit.sha256_file(codex_frame(local_root, b, state))}
         if uses_cells(b, state):
-            sources[f"census/{b.folder}/f{b.frames[state]}"] = {"sha256": button_kit.sha256_file(frames / b.folder / f"f{b.frames[state]}.png"), "use": "the sign's cells (rule E)"}
+            sources[f"census/{b.folder}/f{b.frames[state]}"] = {"sha256": button_kit.sha256_file(frames / b.folder / f"f{b.frames[state]}.png"), "use": "the sign's cells (rule E)" + (" and the floor's colours" if b.kind == "picture" else "")}
         if b in RINGED:
             if state != "idle":   # the idle frame sets the ring's tone change for every state
                 sources[f"work/{CODEX_BATCH}/placed/{b.name}-f{b.frames['idle']}"] = {"sha256": button_kit.sha256_file(codex_frame(local_root, b, "idle")), "use": "brass tone of the ring"}
