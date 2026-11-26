@@ -26,7 +26,8 @@ public partial class TerrainViewerApp
         KitSaveTop = new(0.85f, 0.45f, 0.65f), KitSaveBody = new(0.35f, 0.65f, 0.25f), KitSaveBottom = new(0.25f, 0.35f, 0.75f), KitPremadeBody = new(0.6f, 0.25f, 0.55f), KitNewCharBody = new(0.25f, 0.6f, 0.6f),
         KitFixture = new(0.95f, 0.95f, 0.2f), KitSheetButton = new(0.1f, 0.85f, 0.9f), KitHardware = new(0.5f, 0.45f, 0.3f),
         KitRound = new(0.1f, 0.9f, 0.6f), KitRoundPressed = new(0.9f, 0.1f, 0.9f), KitRoundHover = new(0.6f, 0.95f, 0.9f),
-        KitRing = new(0.95f, 0.55f, 0.05f), KitRingPressed = new(0.05f, 0.55f, 0.95f), KitRingHover = new(0.55f, 0.05f, 0.95f);
+        KitFace = new(0.05f, 0.55f, 0.95f), KitFacePressed = new(0.95f, 0.35f, 0.05f), KitFaceHover = new(0.55f, 0.05f, 0.65f),
+        KitRing = new(0.4f, 0.95f, 0.05f), KitRingPressed = new(0.95f, 0.05f, 0.2f), KitRingHover = new(0.05f, 0.95f, 0.3f);
 
     /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's provisional 150 and 570 px; the caps are 120 px wide.</summary>
     private static IReadOnlyList<(string Id, int Width, int Height, Color Colour)> SyntheticKitParts { get; } =
@@ -82,6 +83,9 @@ public partial class TerrainViewerApp
             var (width, height) = (6 * (int)Math.Round(part.Width * 3.5 / 6), 6 * (int)Math.Round(part.Height * 3.5 / 6));
             return new (string Id, int Width, int Height, Color Colour)[] { (pair.Value, width, height, KitRing), (pair.Value + "_pressed", width, height, KitRingPressed), (pair.Value + "_hover", width, height, KitRingHover) };
         }),
+        // ARC-UI-3341: the schematics tab and the schematic window's page arrows: idle, pressed and hover face, flat, at the table's master sizes.
+        .. SteamwovenKitTable.WindowFaces.Values.SelectMany(spec => new (string Id, int Width, int Height, Color Colour)[]
+            { (spec.Part, spec.MasterWidth, spec.MasterHeight, KitFace), (spec.Part + "_pressed", spec.MasterWidth, spec.MasterHeight, KitFacePressed), (spec.Part + "_hover", spec.MasterWidth, spec.MasterHeight, KitFaceHover) }),
     ];
 
     /// <summary>Writes the synthetic set of <paramref name="step"/> under <paramref name="root"/> (parts named in <paramref name="without"/> left out, their records too).</summary>
@@ -821,6 +825,84 @@ public partial class TerrainViewerApp
         await frames(3);
     }
 
+    /// <summary>
+    /// ARC-UI-3341: the sheet's schematics tab and the schematic window's two page arrows draw the kit's face of their state (idle, hover, pressed; the shown tab the pressed face) in the art's place while the set holds the faces
+    /// (<paramref name="kitFaces"/>), and the art's own frame otherwise. The arrows show only with more than one page, so the window is given a middle page of three to draw; the pointer is moved and pressed over each control and released
+    /// beside it (no page is turned). The captures are the look pictures of the task (with ARC_STEAMWOVEN_KIT_LOOK the real masters; the colour reads are then skipped).
+    /// </summary>
+    private async Task CheckKitWindowFacesAsync(string tag, Func<int, Task> frames, Action<bool, string> require, bool kitFaces)
+    {
+        var look = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_LOOK") is { Length: > 0 };
+        var variant = kitFaces ? "-kit" : "-own";
+        async Task Pointer(Vector2 at) { GetViewport().PushInput(new InputEventMouseMotion { Position = at, GlobalPosition = at }); await frames(3); }
+        async Task Press(Vector2 at, bool pressed)
+        {
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0 });
+            await frames(3);
+        }
+        // One control in one look: the face the layer holds for the art (or none), and the pixel in the control's middle.
+        void Check(string what, IReadOnlyList<AreaKitFaceLayer.Item> shown, IReadOnlyList<int> own, int art, int frame, Vector2 middle, Color colour)
+        {
+            var item = shown.Where(face => face.Art == art).ToList();
+            require(kitFaces ? item.Count == 1 && ReferenceEquals(item[0].Texture, AreaKitSheets.Face(art, frame)) && !own.Contains(art) : item.Count == 0 && own.Contains(art),
+                $"[{tag}] {what} {(kitFaces ? "draws the kit's face of frame " + frame : "draws the art's own frame")}");
+            if (look) return;
+            using var shot = GetViewport().GetTexture().GetImage();
+            var ratio = new Vector2(shot.GetWidth(), shot.GetHeight()) / GetViewport().GetVisibleRect().Size;
+            var pixel = shot.GetPixel(Math.Clamp((int)(middle.X * ratio.X), 0, shot.GetWidth() - 1), Math.Clamp((int)(middle.Y * ratio.Y), 0, shot.GetHeight() - 1));
+            require(Near(pixel, colour) == kitFaces, $"[{tag}] {what} is {(kitFaces ? "" : "not ")}the kit part's colour (got {pixel})");
+        }
+
+        OpenSheet(); await frames(6);
+        int[] sheetFaces = kitFaces ? [568] : [];
+        require(SheetOpen && AreaKitSheets.FacesShownForSelfTest.SequenceEqual(sheetFaces), $"[{tag}] the open sheet publishes {(kitFaces ? "the schematics tab's kit face" : "no kit face")} (got {string.Join(",", AreaKitSheets.FacesShownForSelfTest)})");
+        var sheet = _sheetPanel!.ArtViewForSelfTest!;
+        var tab = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Schemes);
+        var tabMiddle = sheet.GetGlobalTransform() * new Vector2(tab.X + 16, tab.Y + 16);
+        var beside = sheet.GetGlobalTransform() * new Vector2(300, 200);
+        await Pointer(beside);
+        Check("the schematics tab at rest", sheet.KitFacesForSelfTest, sheet.OwnFaceArtsForSelfTest, tab.Art, 0, tabMiddle, KitFace);
+        await CaptureHudAsync("steamwoven-" + tag + "-faces-tab-idle" + variant, frames);
+        await Pointer(tabMiddle);
+        Check("the hovered schematics tab", sheet.KitFacesForSelfTest, sheet.OwnFaceArtsForSelfTest, tab.Art, 2, tabMiddle, KitFaceHover);
+        await CaptureHudAsync("steamwoven-" + tag + "-faces-tab-hover" + variant, frames);
+        await Press(tabMiddle, true);
+        Check("the pressed schematics tab", sheet.KitFacesForSelfTest, sheet.OwnFaceArtsForSelfTest, tab.Art, 1, tabMiddle, KitFacePressed);
+        await CaptureHudAsync("steamwoven-" + tag + "-faces-tab-pressed" + variant, frames);
+        await Pointer(beside);
+        await Press(beside, false);
+        _sheetPanel.SelectTabForSelfTest(AreaSheetTab.Schemes); await frames(4);
+        Check("the shown schematics tab", sheet.KitFacesForSelfTest, sheet.OwnFaceArtsForSelfTest, tab.Art, 1, tabMiddle, KitFacePressed);
+        EndSheet(); await frames(4);
+        require(!SheetOpen && AreaKitSheets.FacesShownForSelfTest.Count == 0, $"[{tag}] the tab's kit face goes with the sheet");
+
+        OpenSchematics(); await frames(6);
+        int[] windowFaces = kitFaces ? [AreaSchematicWindowLayout.PreviousArt, AreaSchematicWindowLayout.NextArt] : [];
+        require(SchematicsOpen && AreaKitSheets.FacesShownForSelfTest.SequenceEqual(windowFaces), $"[{tag}] the open schematic window publishes {(kitFaces ? "its arrows' kit faces" : "no kit face")} (got {string.Join(",", AreaKitSheets.FacesShownForSelfTest)})");
+        var window = _schematicsPanel!.ArtViewForSelfTest;
+        window.Render(_schematicsPanel.View! with { Page = 1, Pages = 3 });
+        await frames(4);
+        var away = window.PointForSelfTest(300, 200);
+        foreach (var (name, art, place) in new[] { ("previous", AreaSchematicWindowLayout.PreviousArt, AreaSchematicWindowLayout.Previous), ("next", AreaSchematicWindowLayout.NextArt, AreaSchematicWindowLayout.Next) })
+        {
+            // The middle of the arrow's ink: the arrows are 18 x 22 units.
+            var middle = window.PointForSelfTest(place.X + 9, place.Y + 11);
+            await Pointer(away);
+            Check($"the {name} arrow at rest", window.KitFacesForSelfTest, window.OwnFaceArtsForSelfTest, art, 0, middle, KitFace);
+            await CaptureHudAsync("steamwoven-" + tag + "-faces-" + name + "-idle" + variant, frames);
+            await Pointer(middle);
+            Check($"the hovered {name} arrow", window.KitFacesForSelfTest, window.OwnFaceArtsForSelfTest, art, 2, middle, KitFaceHover);
+            await CaptureHudAsync("steamwoven-" + tag + "-faces-" + name + "-hover" + variant, frames);
+            await Press(middle, true);
+            Check($"the pressed {name} arrow", window.KitFacesForSelfTest, window.OwnFaceArtsForSelfTest, art, 1, middle, KitFacePressed);
+            await CaptureHudAsync("steamwoven-" + tag + "-faces-" + name + "-pressed" + variant, frames);
+            await Pointer(away);
+            await Press(away, false);
+        }
+        CloseSchematicsByPlayer(); await frames(4);
+        require(!SchematicsOpen && AreaKitSheets.FacesShownForSelfTest.Count == 0, $"[{tag}] the arrows' kit faces go with the window");
+    }
+
     private async Task CaptureSteamwovenKitAsync(AreaGameBarPanel panel, Window window, Func<int, Task> frames, Action<bool, string> require)
     {
         var root = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-").FullName;
@@ -829,6 +911,7 @@ public partial class TerrainViewerApp
         var backdroplessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-backdropless-").FullName;
         var noMapRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-nomap-").FullName;
         var fixturelessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-fixtureless-").FullName;
+        var facelessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-faceless-").FullName;
         var noGlyphRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-noglyph-").FullName;
         var ringlessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-ringless-").FullName;
         var roundlessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-roundless-").FullName;
@@ -1034,6 +1117,19 @@ public partial class TerrainViewerApp
                 SteamwovenKitStore.UseRoot(root);
                 panel.Relayout();
                 await frames(4);
+                // ARC-UI-3341: the schematics tab and the schematic window's arrows from the kit in every state; a set without their faces keeps the arts.
+                SteamwovenKitStore.UseRoot(root);
+                panel.Relayout();
+                await frames(4);
+                await CheckKitWindowFacesAsync(tag, frames, require, kitFaces: true);
+                Ensure("faceless", facelessRoot, step, [.. SteamwovenKitTable.WindowFaces.Values.SelectMany(spec => new[] { spec.Part, spec.Part + "_pressed", spec.Part + "_hover" })]);
+                SteamwovenKitStore.UseRoot(facelessRoot);
+                panel.Relayout();
+                await frames(4);
+                await CheckKitWindowFacesAsync(tag, frames, require, kitFaces: false);
+                SteamwovenKitStore.UseRoot(root);
+                panel.Relayout();
+                await frames(4);
                 Ensure("backdropless", backdroplessRoot, step, "backdrop.pdoll", "backdrop.char_maint", "backdrop.book_main", "backdrop.schematic_base");
                 SteamwovenKitStore.UseRoot(backdroplessRoot);
                 panel.Relayout();
@@ -1096,7 +1192,7 @@ public partial class TerrainViewerApp
             SyncInterfaceHd();
             panel.Relayout();
             await frames(3);
-            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, roundlessRoot, noMapRoot, backdroplessRoot, noGlyphRoot, fixturelessRoot, socketlessRoot, ringlessRoot })
+            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, roundlessRoot, noMapRoot, backdroplessRoot, noGlyphRoot, fixturelessRoot, socketlessRoot, ringlessRoot, facelessRoot })
                 try { System.IO.Directory.Delete(folder, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-2461 synthetic kit not removed: " + folder); }
         }
     }

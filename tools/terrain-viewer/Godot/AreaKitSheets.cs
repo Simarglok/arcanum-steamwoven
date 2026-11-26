@@ -32,17 +32,32 @@ internal static class AreaKitSheets
     /// <summary>The arts whose round button draws from the kit now, for the self-test.</summary>
     internal static IReadOnlyCollection<int> RoundShownForSelfTest => [.. HeldRound.Keys.Order()];
 
-    /// <summary>Publishes the sheets and, with them, the round buttons' faces (three textures each, idle, pressed, hover); null clears them.</summary>
-    internal static void Publish(IReadOnlyDictionary<int, Texture2D>? sheets, IReadOnlyDictionary<int, Texture2D[]>? rounds = null)
+    private static readonly Dictionary<int, Texture2D[]> HeldFaces = [];
+
+    /// <summary>
+    /// ARC-UI-3341: the kit face of the flat control the window shows with <paramref name="art"/> (<see cref="SteamwovenKitTable.WindowFaces"/>) in the look of <paramref name="frame"/> (as <see cref="RoundFace"/>), or null (the window draws the art's own
+    /// frame). The faces are straight-alpha textures of the master's size, drawn through an <see cref="AreaKitFaceLayer"/> over the art's rectangle.
+    /// </summary>
+    internal static Texture2D? Face(int art, int frame) => HeldFaces.TryGetValue(art, out var faces) ? faces[Math.Clamp(frame, 0, faces.Length - 1)] : null;
+
+    /// <summary>The arts whose flat control draws from the kit now, for the self-test.</summary>
+    internal static IReadOnlyCollection<int> FacesShownForSelfTest => [.. HeldFaces.Keys.Order()];
+
+    /// <summary>Publishes the sheets and, with them, the round buttons' and the flat controls' faces (three textures each, idle, pressed, hover); null clears them.</summary>
+    internal static void Publish(IReadOnlyDictionary<int, Texture2D>? sheets, IReadOnlyDictionary<int, Texture2D[]>? rounds = null, IReadOnlyDictionary<int, Texture2D[]>? faces = null)
     {
         var same = Held.Count == (sheets?.Count ?? 0) && (sheets is null || sheets.All(pair => Held.TryGetValue(pair.Key, out var held) && ReferenceEquals(held, pair.Value)))
-            && HeldRound.Count == (rounds?.Count ?? 0) && (rounds is null || rounds.All(pair => HeldRound.TryGetValue(pair.Key, out var held) && held.SequenceEqual(pair.Value)));
+            && SameFaces(HeldRound, rounds) && SameFaces(HeldFaces, faces);
         if (same) return;
-        Held.Clear(); HeldRound.Clear();
+        Held.Clear(); HeldRound.Clear(); HeldFaces.Clear();
         if (sheets is not null) foreach (var pair in sheets) Held[pair.Key] = pair.Value;
         if (rounds is not null) foreach (var pair in rounds) HeldRound[pair.Key] = pair.Value;
+        if (faces is not null) foreach (var pair in faces) HeldFaces[pair.Key] = pair.Value;
         Changed?.Invoke();
     }
+
+    private static bool SameFaces(Dictionary<int, Texture2D[]> held, IReadOnlyDictionary<int, Texture2D[]>? next) =>
+        held.Count == (next?.Count ?? 0) && (next is null || next.All(pair => held.TryGetValue(pair.Key, out var known) && known.SequenceEqual(pair.Value)));
 }
 
 /// <summary>
