@@ -384,7 +384,8 @@ RIM_MIN = 30
 RIM_LEAN = 40      # (a mauve of the art such as 90 59 89 leans 30 and is art)
 
 
-OWN_MAGENTA = frozenset({"plate.s_phantasm_hover", "plate.s_phantasm_pressed"})   # ARC-UI-3204: the college of Phantasm is magenta in the original and in the pack: so are its hover and pressed frames (its idle plate is purple; no generation ground is involved, the parts are the pack's frames)
+OWN_MAGENTA = frozenset({"plate.s_phantasm_hover", "plate.s_phantasm_pressed",    # ARC-UI-3204: the college of Phantasm is magenta in the original and in the pack: so are its hover and pressed frames (its idle plate is purple; no generation ground is involved, the parts are the pack's frames)
+                         "glyph.mm_loc"})   # ARC-UI-3207: the place marker's ring is the original's own violet and reaches the master's rim; it is drawn by rule, no generation ground
 
 
 def ground_pixels(data: bytes | bytearray, width: int | None = None) -> list[int]:
