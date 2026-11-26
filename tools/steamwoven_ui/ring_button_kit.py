@@ -8,16 +8,17 @@ Two sources (`--source`), by size:
   green arrows of the wells, the arrows of 9 and 10 on hover and press) keeps Codex's outline only: inside lie the original's cells as even squares (rule E, owner 2026-11-26), a well's outline brought onto the original's smaller share. The three
   WELLS are recesses countersunk into the brass, made by rule (flat floor in the original's colours, wall shadowed at the top left and lit at the lower right, no gloss); the red lamp is wholly by rule, its floor the original's fine lattice. Idle
   signs stay solid. `pack` keeps the pack cut for comparison.
-* The wide button's dome (art 357, 51 units), `--dome`: `pack` is pack-first (rule P): the player's own HD-pack frame of each state; `olive` is the accepted olive plate of #3202 (`masters/plate.combat_button.png`), enlarged to the dome's
-  circle, its pressed look the darkening of art 357's own pressed frame (rule E, `button_kit.render_crisp`).
+* The wide button's dome (art 357, 51 units), `--dome`: `smooth` is pack-first (rule P), the player's own HD-pack frame of each state, with the fine grain of the pack's upscale (the dot grid, thin scratches and a thin ring that the
+  original's smooth olive has not) smoothed off the dome's face by rule (owner 2026-11-26, #3365; the large soft spots, the highlight and the rim stay); `pack` keeps the frame as it is; `olive` is the accepted olive plate of #3202
+  (`masters/plate.combat_button.png`), enlarged to the dome's circle, its pressed look the darkening of art 357's own pressed frame (rule E, `button_kit.render_crisp`).
 
 Every part is cut by an ANALYTIC round alpha (an even smoothed edge, the colour outside it carried outwards so nothing of an old background is mixed in). The soft shadow under a round button is the run-time layer's (`AreaKitRoundParts`, #3249 and
 #3288) and is not baked.
 
     python3 -B tools/steamwoven_ui/ring_button_kit.py codex-inbox --stage idle|states [--only NAME,...]                     (inbox/B-BUTTONS-3269: prompts and references; run it with codex_batch.py)
     python3 -B tools/steamwoven_ui/ring_button_kit.py codex-place [--only NAME,...]                                         (the generated pictures -> work/B-BUTTONS-3269/placed)
-    python3 -B tools/steamwoven_ui/ring_button_kit.py build [--source codex|pack] [--dome pack|olive] [--only NAME,...] [--out DIR] [--dry-run]   (the parts -> masters/ and provenance/rule/)
-    python3 -B tools/steamwoven_ui/ring_button_kit.py check [--source codex|pack] [--dome pack|olive] [--only NAME,...]     (every input is there and has the right size)
+    python3 -B tools/steamwoven_ui/ring_button_kit.py build [--source codex|pack] [--dome smooth|pack|olive] [--only NAME,...] [--out DIR] [--dry-run]   (the parts -> masters/ and provenance/rule/)
+    python3 -B tools/steamwoven_ui/ring_button_kit.py check [--source codex|pack] [--dome smooth|pack|olive] [--only NAME,...]     (every input is there and has the right size)
     python3 -B tools/steamwoven_ui/ring_button_kit.py sheet --out FILE [--only NAME,...] [--zoom N] [--across]              (rows original | old pack frame | after, columns the states, English labels)
     python3 -B tools/steamwoven_ui/ring_button_kit.py self-test
 
@@ -57,7 +58,12 @@ TOOL_VERSION = 1
 MANIFEST = HERE / "kit.json"
 OLIVE_PLATE = "plate.combat_button"     # the accepted olive round face of #3202 (glossy arc baked in), 138 x 138 px
 OLIVE_EXTRUDE_PX = 1.5                  # px of the olive master: the colour inside this far from its edge is carried outwards
-DOMES = ("pack", "olive")               # the dome of the wide button (51 units): the pack's frames (pack-first); `olive` is the variant built from the #3202 plate
+DOMES = ("smooth", "pack", "olive")     # the dome of the wide button (51 units): the pack's frames with the face's grain smoothed off (#3365); `pack` the frames as they are; `olive` the variant built from the #3202 plate
+# The smoothing of the dome's face, in original units: a median takes out the thin scratches and the thin ring of the pack's upscale, a Gaussian its dot grain; the large soft spots stay. It fades out from the first radius of SMOOTH_FACE
+# to the second; the highlight arc's crest, the dark rim and everything farther out are the pack's own pixels.
+SMOOTH_MEDIAN = 0.75
+SMOOTH_SIGMA = 0.5
+SMOOTH_FACE = (20.8, 22.0)
 SOURCES = ("codex", "pack")             # the source of the parts under ~40 units (the ringed buttons and the wells): owner rule of 2026-11-26 (#3272): Codex by default, generated large and reduced; the pack frame kept for comparison
 CODEX_BATCH = "B-BUTTONS-3269"
 CODEX_FRAME_PX = 8                      # px per art unit of a placed Codex frame (twice the pack's), reduced once to the master by `cut`
@@ -141,6 +147,8 @@ def note_of(ident: str) -> str:
             what = f"art {b.art}: the original's lattice on a flat floor in a countersunk brass well, by rule"
         elif b.kind == "picture":
             what = f"art {b.art}: the original's cells in the outline of Codex's arrow, on a flat floor in a countersunk brass well"
+    elif b == DOME and DOMES[0] == "smooth":
+        return f"the old HD pack's {state} frame of art {b.art}, the fine grain smoothed off the dome's face, round alpha (pack-first); ring_button_kit.py, ARC-UI-3365"
     else:
         what = f"the old HD pack's {state} frame of art {b.art}, round alpha (pack-first)"
     return f"{what}; ring_button_kit.py, ARC-UI-3269"
@@ -198,6 +206,41 @@ def cut(frame: Image, circles: tuple[Circle, ...], master: tuple[int, int]) -> I
         row = y * master[0] * 4
         out.data[row:row + middle * 4] = halves[0].data[row:row + middle * 4]
         out.data[row + middle * 4:row + master[0] * 4] = halves[1].data[row + middle * 4:row + master[0] * 4]
+    return out
+
+
+# --- the smoothed dome ------------------------------------------------------------------------------------------------------------
+
+def smoothed(frame: Image, circle: Circle) -> Image:
+    """The dome's frame without the fine detail on its face: a median, then a Gaussian that takes the face's pixels only (the dark rim is never mixed in), fading out between the two radii of SMOOTH_FACE. The alpha and every pixel from
+    the second radius out are the frame's own."""
+    scale = frame.w / circle.width
+    cx, cy = circle.cx * scale, circle.cy * scale
+    full, edge = (radius * scale for radius in SMOOTH_FACE)
+    median, sigma = round(SMOOTH_MEDIAN * scale), SMOOTH_SIGMA * scale
+    reach = round(3 * sigma)
+    weights = [(i, math.exp(-i * i / (2 * sigma * sigma))) for i in range(-reach, reach + 1)] if reach else [(0, 1.0)]
+    window = [(dx, dy) for dy in range(-median, median + 1) for dx in range(-median, median + 1) if dx * dx + dy * dy <= median * median + median]
+    distance = {(x, y): math.hypot(x + 0.5 - cx, y + 0.5 - cy) for y in range(frame.h) for x in range(frame.w)}
+    face = [point for point, d in distance.items() if d < edge]
+    out = Image(frame.w, frame.h, bytearray(frame.data))
+    for channel in range(3):
+        value = {(x, y): frame.data[(y * frame.w + x) * 4 + channel] for x, y in face}
+        flat = {}
+        for x, y in face:
+            near = sorted(value[x + dx, y + dy] for dx, dy in window if (x + dx, y + dy) in value)
+            flat[x, y] = near[len(near) // 2]
+        rows: dict[tuple[int, int], tuple[float, float]] = {}
+        for x, y in distance:
+            near = [(w, flat[x + i, y]) for i, w in weights if (x + i, y) in flat]
+            if near:
+                rows[x, y] = sum(w * v for w, v in near), sum(w for w, _ in near)
+        for x, y in face:
+            near = [(w, rows[x, y + i]) for i, w in weights if (x, y + i) in rows]
+            mean = sum(w * total for w, (total, _) in near) / sum(w * weight for w, (_, weight) in near)
+            t = min(1.0, (edge - distance[x, y]) / (edge - full))
+            o = (y * frame.w + x) * 4 + channel
+            out.data[o] = int(round(out.data[o] + (mean - out.data[o]) * t * t * (3.0 - 2.0 * t)))
     return out
 
 
@@ -716,7 +759,8 @@ def button_parts(local_root: Path, frames: Path, b: Button, dome: str, source: s
             if uses_cells(b, state) and b.kind == "plate":    # a well's arrows are laid on the cut part
                 frame = celled(frame, original_frame(frames, b, b.frames[state]), b)
             return toned(frame, b.circles[0], *tone) if tone else frame
-        return pack_frame(local, b, state)[0]
+        frame = pack_frame(local, b, state)[0]
+        return smoothed(frame, b.circles[0]) if b == DOME and dome == "smooth" else frame
 
     def part_of(state: str) -> Image:
         if b.name == LAMP and source == "codex":
@@ -770,6 +814,8 @@ def record_of(local_root: Path, frames: Path, b: Button, ident: str, dome: str, 
     parameters = {"circles_units": [{"cx": c.cx, "cy": c.cy, "radius": c.radius, "trim": c.trim, "art_size": [c.width, c.height]} for c in b.circles], "master": [image.w, image.h]}
     if b == DOME:
         parameters["dome"] = dome
+        if dome == "smooth":
+            parameters["smoothing_units"] = {"median": SMOOTH_MEDIAN, "sigma": SMOOTH_SIGMA, "face": list(SMOOTH_FACE)}
     return {"part": ident, "rule": "ring_button_kit", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "source": source, "sources": sources, "empty": not any(image.data[3::4]),
             "parameters": parameters, "image_sha256": hashlib.sha256(image_path.read_bytes()).hexdigest(), "image_size": [image.w, image.h], "run_by": "agent"}
 
@@ -888,13 +934,13 @@ def cmd_sheet(args: argparse.Namespace) -> int:
         for b in buttons:
             master, size = master_of(b), sizes[b.name]
             if b == DOME:
-                parts = {d: button_parts(local_root, frames, b, d) for d in DOMES}
+                parts = {d: button_parts(local_root, frames, b, d) for d in ("smooth", "pack")}
             else:
                 parts = {s: button_parts(local_root, frames, b, DOMES[0], s) for s in SOURCES}
             rows = [("original", lambda s: plain(school_kit.upscaled(original_frame(frames, b, b.frames[s]), master), size)),
                     ("old pack frame", lambda s: plain(school_kit.resampled(pack_frame(local, b, s)[0], *master), size))]
             if b == DOME:
-                rows += [("after: olive plate", lambda s: shadowed(composed(parts["olive"], b, s), b, master)), ("after: pack cut", lambda s: shadowed(composed(parts["pack"], b, s), b, master))]
+                rows += [("after: smoothed", lambda s: shadowed(composed(parts["smooth"], b, s), b, master)), ("after: pack cut", lambda s: shadowed(composed(parts["pack"], b, s), b, master))]
             else:
                 rows += [("after: Codex", lambda s: shadowed(composed(parts["codex"], b, s), b, master)), ("after: pack cut", lambda s: shadowed(composed(parts["pack"], b, s), b, master))]
             lines = []
