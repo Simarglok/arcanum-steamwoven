@@ -1167,9 +1167,11 @@ public partial class TerrainViewerApp : Node
 
     public override void _Process(double delta)
     {
-        // ARC-DEV-3389: only the shown performance overlay times the viewer's update; hidden, this is one null test.
+        // ARC-DEV-3389: only the shown performance panel times the viewer's update; hidden, this is a null test (and, while the Metal
+        // HUD is up, a look at the window's size).
         if (_perfMeter is null) ProcessViewerFrame(delta);
         else ProcessTimedViewerFrame(delta);
+        if (_perfMode == PerfOverlayMode.MetalHud) FollowMetalHud();
     }
 
     private void ProcessViewerFrame(double delta)

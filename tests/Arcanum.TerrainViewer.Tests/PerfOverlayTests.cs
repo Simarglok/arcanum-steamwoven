@@ -66,10 +66,23 @@ public sealed class PerfOverlayTests
     }
 
     [TestMethod]
-    public void TheHudToolIsAskedAboutOneProcess()
+    public void TheHudIsLoadedForOneProcessAndThenSetOnTheLayer()
     {
-        CollectionAssert.AreEqual(new[] { "setup", "--enable", "hud", "--pid", "42" }, PerfOverlayCycle.HudArguments(true, 42));
-        CollectionAssert.AreEqual(new[] { "setup", "--disable", "hud", "--pid", "42" }, PerfOverlayCycle.HudArguments(false, 42));
+        CollectionAssert.AreEqual(new[] { "setup", "--enable", "hud", "--pid", "42" }, PerfOverlayCycle.HudLoadArguments(42));
+        CollectionAssert.AreEqual(new[] { ("mode", "default"), ("MTL_HUD_POSITION_X", "960"), ("MTL_HUD_POSITION_Y", "48") },
+            PerfOverlayCycle.HudProperties(true, 960, 48));
+        CollectionAssert.AreEqual(new[] { ("mode", "disabled") }, PerfOverlayCycle.HudProperties(false, 960, 48));
+    }
+
+    [TestMethod]
+    public void TheHudSitsAtTheRightEdgeUnderTheTopBar()
+    {
+        // A narrow window: the HUD keeps its 300 px.
+        Assert.AreEqual((972, 49), PerfOverlayCycle.HudPosition(1280, 41, 1));
+        // A wide one: a fifth of the width; on a Retina screen the places are in points.
+        Assert.AreEqual((1016, 52), PerfOverlayCycle.HudPosition(2560, 88, 2));
+        // No bar, a window narrower than the HUD, an unreadable scale.
+        Assert.AreEqual((0, 8), PerfOverlayCycle.HudPosition(200, 0, 0));
     }
 
     [TestMethod]

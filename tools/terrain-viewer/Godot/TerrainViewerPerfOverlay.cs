@@ -18,16 +18,37 @@ public partial class TerrainViewerApp
     private PerfOverlayMeter? _perfMeter;
     private PerfRate _perfAllocated, _perfProcessor;
     private PerfOverlayMode _perfMode;
-    /// <summary>This run can switch the Metal HUD (a window on a macOS that has the tool).</summary>
-    private bool _metalHud;
-    /// <summary>Why the latest request to the HUD's tool failed, null when it was accepted.</summary>
+    /// <summary>The Metal HUD of this run, null where there is none to switch (headless, another OS, a macOS without the tool).</summary>
+    private MetalHudSwitch? _metalHud;
+    /// <summary>Why the latest step to the HUD could not load it, null otherwise.</summary>
     private string? _metalHudProblem;
+    /// <summary>The window size and top bar height the shown HUD was last placed for.</summary>
+    private (Vector2I Window, float TopInset) _metalHudPlace;
 
     /// <summary>Once, at the start: whether the HUD joins the cycle, and whether the start's environment already shows it.</summary>
     private void StartPerfOverlay()
     {
-        _metalHud = DisplayServer.GetName() != "headless" && MetalHudSwitch.Available;
-        _perfMode = PerfOverlayCycle.Start(System.Environment.GetEnvironmentVariable, _metalHud);
+        _metalHud = DisplayServer.GetName() == "headless" ? null
+            : MetalHudSwitch.Find(DisplayServer.WindowGetNativeHandle(DisplayServer.HandleType.WindowView));
+        // A start that already shows the HUD is placed by its first frame (no window has this size).
+        _perfMode = PerfOverlayCycle.Start(System.Environment.GetEnvironmentVariable, _metalHud is not null);
+    }
+
+    /// <summary>Puts the HUD where the panel sits (right edge, under the top bar) for the window as it is now.</summary>
+    private void PlaceMetalHud()
+    {
+        var window = DisplayServer.WindowGetSize();
+        _metalHudPlace = (window, AreaGameBarPanel.TopInset);
+        // The bar's height is in the viewport's units; the HUD is placed in the window's.
+        var perUnit = window.Y / Math.Max(1.0, GetViewport().GetVisibleRect().Size.Y);
+        var (x, y) = PerfOverlayCycle.HudPosition(window.X, AreaGameBarPanel.TopInset * perUnit, _metalHud!.Scale);
+        _metalHudProblem = _metalHud.Show(x, y);
+    }
+
+    /// <summary>Per frame while the HUD is shown: it is placed again when the window or the top bar changed.</summary>
+    private void FollowMetalHud()
+    {
+        if (_metalHudPlace != (DisplayServer.WindowGetSize(), AreaGameBarPanel.TopInset)) PlaceMetalHud();
     }
 
     /// <summary>After the bug report and the owner checks in the WORLD input route (their windows own every key). True when the event is
@@ -39,7 +60,7 @@ public partial class TerrainViewerApp
             key.CtrlPressed, key.ShiftPressed, key.AltPressed, key.MetaPressed);
         if (route == PerfOverlayRoute.PassThrough) return false;
         GetViewport().SetInputAsHandled();
-        if (route == PerfOverlayRoute.Toggle) ShowPerf(PerfOverlayCycle.Next(_perfMode, _metalHud));
+        if (route == PerfOverlayRoute.Toggle) ShowPerf(PerfOverlayCycle.Next(_perfMode, _metalHud is not null));
         return true;
     }
 
@@ -56,8 +77,9 @@ public partial class TerrainViewerApp
             if (_perfPanel is null) { _perfPanel = new PerfOverlayPanel(); AddChild(_perfPanel); }
             _perfPanel.Set(show ? "Measuring..." : null, AreaGameBarPanel.TopInset);
         }
-        var hud = mode == PerfOverlayMode.MetalHud;
-        if (hud != (previous == PerfOverlayMode.MetalHud)) _metalHudProblem = MetalHudSwitch.Set(hud);
+        _metalHudProblem = null;
+        if (mode == PerfOverlayMode.MetalHud) PlaceMetalHud();
+        else if (previous == PerfOverlayMode.MetalHud) _metalHud!.Hide();
         GD.Print($"ARC-DEV-3389 performance overlay mode={mode}" + (_metalHudProblem is null ? "" : $" metal-hud-problem={_metalHudProblem}"));
     }
 
@@ -105,7 +127,7 @@ public partial class TerrainViewerApp
             size.X, size.Y,
             // The pacing's target, not Engine.MaxFps: that is the target with the measured correction on it.
             PacingAutomated || _pacingTarget <= 0 ? null : _pacingTarget,
-            _metalHud);
+            _metalHud is not null);
     }
 }
 

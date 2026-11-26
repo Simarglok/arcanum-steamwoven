@@ -29,9 +29,24 @@ public static class PerfOverlayCycle
     public static PerfOverlayMode Start(Func<string, string?> variable, bool metalHud)
         => metalHud && variable(LoadVariable) == "1" ? PerfOverlayMode.MetalHud : PerfOverlayMode.Off;
 
-    /// <summary>The tool's arguments that show or hide the HUD of process <paramref name="processId"/>.</summary>
-    public static string[] HudArguments(bool shown, int processId)
-        => ["setup", shown ? "--enable" : "--disable", "hud", "--pid", processId.ToString(CultureInfo.InvariantCulture)];
+    /// <summary>The tool's arguments that load the HUD into process <paramref name="processId"/>.</summary>
+    public static string[] HudLoadArguments(int processId) => ["setup", "--enable", "hud", "--pid", processId.ToString(CultureInfo.InvariantCulture)];
+
+    /// <summary>The layer's HUD settings: hidden, or shown with its top left corner at a point of the window.</summary>
+    public static (string Key, string Value)[] HudProperties(bool shown, int x, int y) => shown
+        ? [("mode", "default"), ("MTL_HUD_POSITION_X", x.ToString(CultureInfo.InvariantCulture)), ("MTL_HUD_POSITION_Y", y.ToString(CultureInfo.InvariantCulture))]
+        : [("mode", "disabled")];
+
+    /// <summary>Where the HUD's top left corner goes, in points, so it sits where the game's panel does: at the right edge, a margin
+    /// under the top bar. The HUD gives no size of its own; measured on macOS 27.2 it is a fifth of the drawable's width and at least
+    /// 300 pixels wide.</summary>
+    public static (int X, int Y) HudPosition(int windowWidthPixels, double topInsetPixels, double pixelsPerPoint)
+    {
+        const int Margin = 8, MinimumWidthPixels = 300;
+        var scale = pixelsPerPoint > 0 ? pixelsPerPoint : 1;
+        var width = Math.Max(MinimumWidthPixels, windowWidthPixels * 0.2);
+        return ((int)Math.Max(0, Math.Round((windowWidthPixels - width) / scale) - Margin), (int)Math.Round(Math.Max(0, topInsetPixels) / scale) + Margin);
+    }
 }
 
 /// <summary>ARC-DEV-3389: Ctrl+F shows or hides the performance overlay (no key of the original: F under Ctrl is a control code the

@@ -16,14 +16,14 @@ public partial class TerrainViewerApp
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true;
         var panelPutAway = false; var simulatedBars = _gameBarForSelfTest;
-        var startMode = _perfMode; var metalHud = _metalHud;
+        var startMode = _perfMode; var metalHud = _metalHud is not null;
         try
         {
             _worldFocused = true;
             if (WorldModal && PaletteOpen) ToggleWorldSettings();
-            Require(!WorldModal && _perfMeter is null, "the overlay is hidden at the start and no window is open: " + BugReportWindows());
-            Require(metalHud == (DisplayServer.GetName() != "headless" && MetalHudSwitch.Available), "a window run with the tool offers the HUD");
-            if (_perfMode != PerfOverlayMode.Off) ShowPerf(PerfOverlayMode.Off);
+            Require(!WorldModal && _perfMeter is null, "the panel is hidden at the start and no window is open: " + BugReportWindows());
+            Require(metalHud == (DisplayServer.GetName() != "headless" && OperatingSystem.IsMacOS() && System.IO.File.Exists(PerfOverlayCycle.HudTool)),
+                "a window run on a Mac with the tool offers the HUD");
             void Send(bool pressed, bool ctrl, bool echo = false)
                 => InputWorld(new InputEventKey { Keycode = Key.F, PhysicalKeycode = Key.F, CtrlPressed = ctrl, Pressed = pressed, Echo = echo });
             void Chord() { Send(true, ctrl: true); Send(false, ctrl: true); }
@@ -71,6 +71,9 @@ public partial class TerrainViewerApp
                 await Frames(30);
                 GD.Print($"ARC-DEV-3389 perf overlay capture bars={GameBarActive} diagnostic={_hud?.PanelShown}");
             }
+            // A start with MTL_HUD_ENABLED=1 already shows the HUD: its picture first, then everything off for the cycle.
+            if (_perfMode == PerfOverlayMode.MetalHud) await WindowShot("window-start");
+            if (_perfMode != PerfOverlayMode.Off) ShowPerf(PerfOverlayMode.Off);
             await Frames(3);
             await Shot("before");
             await WindowShot("window-off");
@@ -97,7 +100,7 @@ public partial class TerrainViewerApp
             var afterPanel = metalHud ? PerfOverlayMode.MetalHud : PerfOverlayMode.Off;
             Send(true, ctrl: true); Send(true, ctrl: true, echo: true); Send(true, ctrl: true, echo: true); Send(false, ctrl: false);
             Require(_perfMode == afterPanel && _perfMeter is null && !panel.IsShown, "a held Ctrl+F left the panel by one step");
-            Require(_metalHudProblem is null, "the system tool accepts the request: " + _metalHudProblem);
+            Require(_metalHudProblem is null, "the HUD was asked for without a refusal: " + _metalHudProblem);
             if (metalHud)
             {
                 await WindowShot("window-hud");
