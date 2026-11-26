@@ -10,7 +10,7 @@ namespace Arcanum.Scripting.Tests.Scr;
 public sealed class ScrAmmoUseTests
 {
     private const int Use = 1;
-    private const byte Triggerer = 0, Attachee = 1, Extra = 12;
+    private const byte Triggerer = 0, Attachee = 1;
     // The commands these programs use (S3: control flow, arithmetic, the single-object focus kinds) with use ammunition units; S32 itself also holds
     // the commands that need the world, so its host would have to answer more.
     private static readonly ScrAdmissionSet Set = new("ammo-use", ScrAdmissionSet.S3.Conditions, ScrAdmissionSet.S3.Actions.Append(ScrCatalogue.Action.UseAmmoUnits),

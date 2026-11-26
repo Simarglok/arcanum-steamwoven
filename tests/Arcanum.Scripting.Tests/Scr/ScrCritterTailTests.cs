@@ -12,7 +12,7 @@ namespace Arcanum.Scripting.Tests.Scr;
 [TestClass]
 public sealed class ScrCritterTailTests
 {
-    private const byte Attachee = 1, Extra = 12;
+    private const byte Extra = 12;
     private static readonly ScrObjectRef Sword = new(1, "kit:3"), Victim = new(1, "kit:4");
 
     private sealed class Host(FakeHost inner) : IScrHost, IScrCritterStateQueries, IScrWorldQueries

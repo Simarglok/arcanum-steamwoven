@@ -12,7 +12,6 @@ SHORT_LANES short lanes; an export runs alone, and ARCANUM_QUEUE_LANES=0 returns
 place of its own beside the Godot slot, as a dotnet run does. There is no daemon. Each ticket is a file in the queue folder whose flock its wrapper (and,
 for Godot kinds, the command it started) holds for its whole life, so the kernel frees the place of a run that crashed
 or was killed; a waiter checks the queue every POLL_SECONDS, so the next run starts within that of the last one ending.
-While lanes still use the retired `lockf /tmp/arcanum-godot-window.lock` rule, a Godot holder takes that lock too.
 """
 from __future__ import annotations
 
@@ -71,18 +70,12 @@ STOPPED_EXITS = frozenset({128 + signal.SIGHUP, 128 + signal.SIGINT, 128 + signa
 KILL_GRACE_SECONDS = 10.0
 TIMEOUT_EXIT = 124
 FRONT, NORMAL, LOW = 0, 1, 2  # ticket priority: FRONT for the owner's ./arcanum area|world|map launches and ./arcanum package (ARC-DEV-400); LOW for ./arcanum main-smoke (ARC-DEV-2226): every ordinary run goes first
-LEGACY_WINDOW_LOCK = Path("/tmp/arcanum-godot-window.lock")
 TICKET_ENV, KIND_ENV = "ARCANUM_QUEUE_TICKET", "ARCANUM_QUEUE_KIND"
 MAX_LABEL, MAX_COMMAND = 120, 400
 
 
 def folder() -> Path:
     return config.home() / "run-queue"
-
-
-def legacy_lock() -> Path:
-    override = os.environ.get("ARCANUM_QUEUE_LEGACY_LOCK")  # tests only: never touch the shared lock from a test
-    return Path(override) if override else LEGACY_WINDOW_LOCK
 
 
 def say(message: str) -> None:
@@ -983,34 +976,6 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
         sleep(POLL_SECONDS)
 
 
-def _legacy_hold() -> int:
-    """Take the retired lockf lock so a lane still on the lockf rule cannot open a window over this run. Like
-    lockf, retry when the file was replaced while waiting (lockf removes its file when its command ends). Shared
-    (ARC-DEV-400): the runs of the queue's own Godot lanes hold it side by side, a lockf user (exclusive) still waits for
-    all of them and they wait for it."""
-    path = legacy_lock()
-    announced = False
-    while True:
-        try:
-            fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o666)
-        except OSError as error:
-            raise ValueError(f"cannot open the lockf lock {path}: {error.strerror}") from error
-        try:
-            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
-        except OSError:
-            if not announced:
-                say(f"waiting for a lane still on the lockf rule ({path})")
-                announced = True
-            fcntl.flock(fd, fcntl.LOCK_SH)
-        try:
-            same = os.path.samestat(os.fstat(fd), os.stat(path))
-        except FileNotFoundError:
-            same = False
-        if same:
-            return fd
-        os.close(fd)
-
-
 # Which nested kinds a running parent's place already covers: an export covers everything, a Godot run covers Godot
 # runs, quick runs and dotnet runs (no export can drain while it holds the slot), a quick run covers quick runs, a dotnet
 # run covers dotnet runs.
@@ -1128,7 +1093,6 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         if log_sink is not None:
             log_sink(log)
     child: subprocess.Popen[bytes] | None = None
-    legacy = None
     stopped: list[int] = []
     critical = [False]  # while starting or stopping the command a signal is only recorded, never raised
 
@@ -1144,15 +1108,12 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
     environment: dict[str, str] = {}
     try:
         _wait_turn(fd, ticket, sleep)
-        if kind in GODOT_KINDS:
-            legacy = _legacy_hold()
         waited = ticket["startedAt"] - ticket["enqueuedAt"]
         say(f"start ticket={ticket['seq']} kind={kind} waited={waited:.0f}s")
         environment = command_environment(kind, ticket["seq"])
         # Godot kinds hand the ticket's lock to the command, so a run whose wrapper was killed keeps its place while
         # its command still runs (until its limit, see _expired); dotnet runs do not (their build servers would
-        # inherit it). The lockf lock stays with the wrapper: a leftover descendant holding it would block lockf
-        # lanes and the next Godot run with no way to tell it from a live run.
+        # inherit it).
         critical[0] = True
         if log is None:
             child = subprocess.Popen(list(command), env=environment, start_new_session=True,
@@ -1203,8 +1164,6 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         except FileNotFoundError:
             pass
         os.close(fd)
-        if legacy is not None:
-            os.close(legacy)
     if log is not None and ticket.get("startedAt"):
         lines = run_log.summary(log, exit_code, ended - ticket["startedAt"])
         if reason:  # ARC-DEV-059: why the start check failed the run, right under the FAIL line

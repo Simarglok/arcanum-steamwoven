@@ -254,11 +254,4 @@ public partial class TerrainViewerApp
     {
         if ((intent.Confirm || intent.Cancel) && _moviePlayback is { } playback) playback.Skip();
     }
-
-    /// <summary>The caller of a new game's start (movies 1 and 7, the request's flags 0x45): plays them first and then runs
-    /// <paramref name="start"/>, or runs it at once when they cannot play.</summary>
-    private void WithNewGameMovies(Action start)
-    {
-        if (!PlayMovies([1, 7], 0, start, "new game")) start();
-    }
 }

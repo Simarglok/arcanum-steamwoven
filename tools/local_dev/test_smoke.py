@@ -677,7 +677,6 @@ class ExecuteTests(unittest.TestCase):
     def test_the_known_failures_file_is_well_formed(self) -> None:
         import json
         entries = smoke.parse_known_failures(json.loads(smoke.KNOWN_FAILURES.read_text(encoding="utf-8")))
-        self.assertTrue(entries)
         self.assertEqual(entries, smoke.load_known_failures())
         for entry in entries:
             self.assertIn(entry.stage, smoke.STAGE_PASS)

@@ -17,7 +17,7 @@ public sealed class SectorFoldTests
     private const long T0 = 54_000_000; // 15:00 on day 0, the fixture's start hour.
     private const string Guard = "oid:guard", Watch = "oid:watch", Smith = "oid:smith", Ghost = "oid:ghost", Sleeper = "oid:sleeper", Chest = "oid:chest";
     private static readonly SectorMapExtent Extent = new(16, 16);
-    private static readonly CellCoord InZero = new(10, 20), InOne = new(70, 20);
+    private static readonly CellCoord InZero = new(10, 20);
 
     private static SessionResidentRow[] Rows() =>
     [

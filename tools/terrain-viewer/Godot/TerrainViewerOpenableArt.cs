@@ -41,9 +41,6 @@ public partial class TerrainViewerApp
         return rows;
     }
 
-    /// <summary>The art id a script wrote for the object of the shown map (AN8, AD1), null while it has the art its data gives.</summary>
-    private uint? WrittenArt(string entity) => _areaSession is { } session && _readyArea is { } area ? session.QueryObjectArt(new SessionMapId(area.Snapshot.RuntimeMap), entity) : null;
-
     /// <summary>
     /// The containers off their T0 draw: the art id (the session's written one, else the map's own) with the session's frame, when it differs from the id the T0 body draws, as a body placed where the T0 body stood.
     /// An art id that does not read leaves the T0 body (said once).

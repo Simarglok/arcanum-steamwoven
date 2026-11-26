@@ -216,7 +216,6 @@ public sealed partial class GameSessionOwner
         private string _npc = string.Empty;
         private HashSet<string> _blocked = [];
         private (int DamageBonus, int Aptitude, bool ExtraordinaryIntelligence) _chooserStart;
-        private string? _lastRun;
         private string? _culprit;
         private readonly GlobalFlagVersion _flags = owner._flags.Version;
 
@@ -238,7 +237,6 @@ public sealed partial class GameSessionOwner
         {
             _runs!.Run(point, entity, _npc, null);
             Fresh();
-            _lastRun = entity;
             if (_runs.Failure != GameSessionFailure.None) throw new ScriptBlocked(entity);
             // The first run that moves what the choice reads is the one to give up when a choice follows.
             if (_culprit is null && _runs.NpcEffectChanges > 0 && (_runs.NpcSkillEffects || _runs.ChooserReads() != _chooserStart)) _culprit = entity;

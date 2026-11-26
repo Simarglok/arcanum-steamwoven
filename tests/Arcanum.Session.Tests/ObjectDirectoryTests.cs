@@ -31,9 +31,6 @@ public sealed class ObjectDirectoryTests
         return owner;
     }
 
-    private static void Advance(GameSessionOwner owner, long ms) => Assert.AreEqual(ClockMutationDisposition.Changed,
-        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, ms, ClockAdvanceReason.OrdinaryAdvance).Disposition);
-
     [TestMethod]
     public void AnEntityNamesItsOrigin()
     {

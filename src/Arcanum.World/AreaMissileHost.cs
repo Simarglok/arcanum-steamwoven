@@ -113,9 +113,6 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
     /// <summary>Whether <paramref name="entity"/> is a missile of this host.</summary>
     public bool Owns(string entity) => _missiles.ContainsKey(entity);
 
-    /// <summary>The missile of a spell run, or null.</summary>
-    public SpellMissile? OfRun(int run) => _order.Select(e => _missiles[e]).FirstOrDefault(m => m.Run == run);
-
     /// <summary>
     /// The launch after the casting release (0x429C40, 0x4248A0): the missile object is created at <paramref name="start"/> and its run, goal 28 for <paramref name="destination"/>, starts (the starter 0x4246E0: no
     /// gate; its first step comes 5 animation milliseconds later). A missile of an earlier run in the same slot (freed meanwhile) is dropped first. False, with the cast's run freed unpaid (MG44), when the object or

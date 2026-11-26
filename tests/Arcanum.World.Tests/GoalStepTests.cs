@@ -16,8 +16,6 @@ namespace Arcanum.World.Tests;
 [TestClass]
 public sealed class GoalStepTests
 {
-    private const long Start = 54_000_000;
-
     private static GameSessionOwner Create()
     {
         var profile = new ProfileBinding(1, "steamwoven-normalized-clock-v1", "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",

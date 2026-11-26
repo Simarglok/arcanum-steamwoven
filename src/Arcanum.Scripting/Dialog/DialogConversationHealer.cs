@@ -12,8 +12,8 @@ namespace Arcanum.Scripting.Dialog;
 /// </summary>
 public sealed partial class DialogConversation
 {
-    // The NPC lines of the talk (0x419830: 14000; 0x419CB0 and 0x419D50: 15000), the healing college (0x4B1AB0 index 12) and the skill the service uses (0x419830: 10).
-    private const int HealerMenuGroup = 14000, HealerDoneGroup = 15000, HealingCollege = 12, HealingSkill = 10;
+    // The NPC lines of the talk (0x419830: 14000; 0x419CB0 and 0x419D50: 15000) and the skill the service uses (0x419830: 10); the healing college is 0x4B1AB0 index 12.
+    private const int HealerMenuGroup = 14000, HealerDoneGroup = 15000, HealingSkill = 10;
 
     // The spells of the college 12 the menus offer (0x419830: 0x3C, 0x3D, 0x3E, 0x40) and the rank each needs (more than 0, 1, 2; exactly 5).
     private const int FirstHealingSpell = 60, SecondHealingSpell = 61, ThirdHealingSpell = 62, FifthHealingSpell = 64, FullHealingRank = 5;

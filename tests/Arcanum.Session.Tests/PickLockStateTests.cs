@@ -16,7 +16,6 @@ public sealed class PickLockStateTests
     private const string Picks = "kit:4";
     private static readonly SessionOpenable Door = new(Exterior, "door:1");
     private static readonly SessionOpenableBaseline LockedDoor = new(OpenableKind.Portal, LockRules.LockedBit, 0, 0);
-    private static readonly SessionOpenableBaseline OpenDoor = new(OpenableKind.Portal, 0, 0, 0);
     private static readonly ItemCondition Sound = new(10, 0, 0, false);
 
     private static SessionLockpick Lockpick(int bonus = 0, uint flags = SessionLockpick.LockpickFlag, int[]? scripts = null) =>

@@ -176,24 +176,6 @@ internal static class AreaLoadOperation
             throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Publication));
     }
 
-    // Bind the separately authenticated traversal to this AREA generation and
-    // input identities. Full exterior visuals never enlarge its proven zone.
-    internal static void VerifyTraversal(long generation, AreaInputIdentity module, AreaInputIdentity resource,
-        CardinalTraversalSnapshot traversal)
-    {
-        var sector = traversal.InputIdentity.Sector;
-        if (traversal.EvidenceEpoch != generation || traversal.AdmissionPolicy != CardinalTraversalAdmissionPolicy.BoundedAdjacent ||
-            traversal.InputIdentity.Kind != CardinalTraversalInputKind.AuthenticatedOriginal ||
-            traversal.InputIdentity.OriginalIdentity is not { } original ||
-            module.Key != new AreaInputKey(AreaSourceRole.Module) || resource.Key != new AreaInputKey(AreaSourceRole.Resource2) ||
-            original.Module.Length != module.Length || original.Module.Sha256 != module.Sha256 ||
-            original.Resource.Length != resource.Length || original.Resource.Sha256 != resource.Sha256 ||
-            sector.SectorX != 1452 || sector.SectorY != 1290 || sector.PackedId != 86570436012 ||
-            sector.OriginX != AreaScenePlan.CameraOriginX || sector.OriginY != AreaScenePlan.CameraOriginY ||
-            sector.Width != 64 || sector.Height != 64)
-            throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Publication));
-    }
-
     // Complete strict AREA repository phase, shared by ordinary Execute and
     // structural coordinator tests. The caller owns and disposes the Data owner;
     // actor/traversal authentication stays in Execute, never in this test seam.

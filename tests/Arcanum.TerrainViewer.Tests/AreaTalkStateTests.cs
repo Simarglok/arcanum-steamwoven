@@ -18,7 +18,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaTalkStateTests
 {
-    private const byte Triggerer = 0, Attachee = 1, Local = 2, Number = 3, GlobalFlag = 4;
+    private const byte Triggerer = 0, Attachee = 1, Number = 3;
     private const int Map = 1, AreaFlag = 100;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
@@ -34,7 +34,6 @@ public sealed class AreaTalkStateTests
 
     private readonly record struct Clause(int Type, params (byte Kind, int Value)[] Operands);
     private static (byte, int) N(int value) => (Number, value);
-    private static (Clause, Clause, Clause) If(Clause condition, Clause onTrue, Clause onFalse) => (condition, onTrue, onFalse);
     private static (Clause, Clause, Clause) Do(Clause action) => (new(0), action, new(0));
 
     private static byte[] Program(params (Clause Condition, Clause OnTrue, Clause OnFalse)[] lines)

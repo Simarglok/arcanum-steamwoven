@@ -45,12 +45,6 @@ public sealed class SessionSpellCasterTravelTests
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
     }
 
-    private sealed class NoCombat : ISessionCombatWorld
-    {
-        public IReadOnlyList<SessionCombatCandidate> ScanCombatants(SessionMapId map) => [];
-        public SessionCombatantFacts? CombatantFacts(SessionMapId map, string entity) => null;
-    }
-
     private static SpellCastCritter TargetCritter(int critterFlags2 = 0)
     {
         var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(willpower: 9), critterFlags: 0);

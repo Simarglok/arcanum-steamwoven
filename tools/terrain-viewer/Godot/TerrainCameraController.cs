@@ -9,7 +9,6 @@ public sealed class TerrainCameraController
 {
     private readonly Camera2D _camera;
     private CameraState _state;
-    private TerrainScenePlan? _plan;
     private Arcanum.Data.Terrain.TerrainRect? _bounds;
     private readonly CameraFollowEngine _follow = new();
     private CameraFollowState _followState = new();
@@ -32,7 +31,7 @@ public sealed class TerrainCameraController
 
     public void SetPlan(TerrainScenePlan plan, Vector2 viewport)
     {
-        _plan = plan; WindowFloored = false;
+        WindowFloored = false;
         _bounds = plan.WorldBounds;
         Fit(viewport);
     }
@@ -40,7 +39,6 @@ public sealed class TerrainCameraController
     public void SetPlan(DiagnosticScenePlan plan, Vector2 viewport)
     {
         _world = plan.IsWorldDiagnostic; WindowFloored = false;
-        _plan = plan.Terrain;
         _bounds = plan.WorldBounds;
         Fit(viewport);
     }
@@ -50,7 +48,7 @@ public sealed class TerrainCameraController
     /// overview and the floor is the ordinary 1/8.</summary>
     public void SetAreaPlan(AreaScenePlan plan, Vector2 viewport, bool window, AreaTerrainOverview? overview = null)
     {
-        _world = true; _plan = null; _overview = overview; _bounds = overview?.Bounds ?? plan.WorldBounds; WindowFloored = window && overview is null;
+        _world = true; _overview = overview; _bounds = overview?.Bounds ?? plan.WorldBounds; WindowFloored = window && overview is null;
         Fit(viewport);
     }
     private AreaTerrainOverview? _overview;

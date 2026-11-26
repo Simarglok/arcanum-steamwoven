@@ -28,7 +28,6 @@ public partial class TerrainViewerApp
     private LauncherSettings _launcherSettings = LauncherSettings.Defaults;
     private LauncherPanel? _launcherPanel;
     private LauncherScreen? _launcher;
-    private Task? _gameFolderStart;
     /// <summary>ARC-DEV-074: stops the running unpack (Cancel, Quit).</summary>
     private CancellationTokenSource? _installCancel;
     /// <summary>The self-test's stand-in for the unpacker (null result: no tool) instead of this machine's innoextract.</summary>

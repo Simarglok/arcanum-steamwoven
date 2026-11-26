@@ -564,12 +564,9 @@ before it. It replaces the earlier
   estimate) first in line (after the runs holding its lane), with no time limit, and keep it until the viewer window closes; the command stays in the terminal until then.
   Ctrl-C there, or closing the terminal, gives the place up while the viewer stays open. `--no-queue` starts at
   once, and `--dry-run` never queues.
-- **Lanes still on lockf.** While some threads still use the lockf rule, a Godot run also takes
-  `/tmp/arcanum-godot-window.lock` (shared, so the runs of the lanes hold it side by side), and a `lockf` user (exclusive)
-  and the queue's Godot runs never overlap (a queued run then prints that it waits for a lockf user).
 
 Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (arrival and length order, lanes and their accounting, quick runs, gaps, export
-quiet, crashed and killed runs, limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
+quiet, crashed and killed runs, limits, nesting, locales); they use their own `ARCANUM_LOCAL_HOME`.
 
 ### Owner is playing mode (ARC-DEV-2272)
 
@@ -805,8 +802,7 @@ waiting against about 3 hours with a heavy lane and two short lanes. The owner a
   count Godot lanes only: `dotnet` runs (2 places) and `quick` runs (2 places) come on top, so a machine under strain
   takes `--set-lanes 0` or `1` and a guard around 12 to 16.
 - **Same environment.** The lanes need no change to a command: every lane's smoke still has its own settings and saves
-  per process (the system pointer is gated, ARC-DEV-060). `lockf` users keep excluding the queue ([above](#launch-queue-arc-dev-033)); the queue's runs hold that lock shared, so with
-  overlapping lane runs a `lockf` user may wait for as long as the lanes stay busy (a retired rule).
+  per process (the system pointer is gated, ARC-DEV-060).
 - **Red runs per lane.** The history of every Godot run (`history.jsonl`, and `./arcanum queue --history N`) records its
   `lane`, the other Godot runs running at its start and end (`peersStart`, `peersEnd`) and the load average at its start
   and end (`loadStart`, `loadEnd`). `./arcanum queue --lanes [--history N]` counts per lane the runs and the red ones

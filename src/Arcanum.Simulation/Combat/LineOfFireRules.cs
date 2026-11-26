@@ -70,8 +70,6 @@ public static class LineOfFireRules
     /// <summary>The animation's clear-shot limit (AW8): a line with this much cover or more is no clear shot.</summary>
     public const int ClearShotCover = 26;
 
-    private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
-
     /// <summary>0x4B8680 in the normal (isometric) view, without the view origin (the walk's conversions cancel it): a tile's
     /// top-left screen point (registered with the positional sound's port of the same function).</summary>
     public static (long X, long Y) Screen(CellCoord tile) => (((long)tile.Y - tile.X - 1) * HalfWidth, ((long)tile.X + tile.Y) * HalfHeight);

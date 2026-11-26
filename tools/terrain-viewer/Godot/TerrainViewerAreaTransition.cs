@@ -31,7 +31,6 @@ public partial class TerrainViewerApp
     private bool NewSessionThrowsGamblingRoll() => !(SelfTestBootstrap || _nativeSmoke);
     private AreaLoadResult? _exteriorArea;
     private AreaCaveLoad? _caveLoad;
-    private Arcanum.Data.Traversal.AreaStepSnapshot? _exteriorSteps;
     private string _areaUseStatus = "cave: not loaded";
     // A use clicked from too far: the click-to-move route walks within range first (the source use goal's
     // move-near step), then the same use is requested once on arrival.
@@ -50,7 +49,7 @@ public partial class TerrainViewerApp
         using var lap = PerfProbe.Lap("transitions");
         lap.Step("stop");
         StopAreaTransitions();
-        _exteriorArea = result.Area; _exteriorSteps = result.AreaStepSnapshot;
+        _exteriorArea = result.Area;
         if (result.Area is not { } area) return;
         lap.Step("companion-templates");
         // ARC-RENDER-017: a whole interior (--area-map) has its own chart and none of the Crash Site roster.
@@ -171,7 +170,7 @@ public partial class TerrainViewerApp
         }
         _newGameRecipe = null; _heroBodyPrefetch = null;
         _areaTransitions = null; _areaSession = null; _useOpenPending = null; _useTargets.Clear(); _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
-        _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
+        _exteriorArea = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
         // ARC-RENDER-3129: a window move under the same session (the swap callback, `_streamSwapActive`) is no map change; the song and the sector it follows go on (KeepAreaSoundAcrossWindowMove).
         if (!_streamSwapActive || _schemePlayer is null)
         {

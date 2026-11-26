@@ -92,18 +92,6 @@ internal static class DialogText
         return new DialogGeneratedMarker(char.ToLowerInvariant(text[0]));
     }
 
-    internal static bool IsBlank(string text)
-    {
-        foreach (var character in text)
-        {
-            if (character is not (' ' or '\t' or '\n'))
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /// <summary>Validates @pcname@/@npcname@ tokens (ASCII case-insensitive) without substituting.</summary>
     internal static DialogTextFailureKind ValidateTokens(string text)
     {
