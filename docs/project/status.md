@@ -81,8 +81,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Human presentation | [Viewer, rendering, HD and input](status/viewer.md) | — |
 | Input/camera/zoom | [Viewer, rendering, HD and input](status/viewer.md) | ARC-DEV-032, ARC-INPUT-003 |
 | Display UI lab | [Viewer, rendering, HD and input](status/viewer.md) | — |
-| DLG and Direct transition | [Dialog and scripting](status/scripting.md) | ARC-DATA-017 |
-| NPC dialog entry | [Dialog and scripting](status/scripting.md) | — |
+| DLG reader | [Dialog and scripting](status/scripting.md) | ARC-DATA-017 |
 | Global flags | [Dialog and scripting](status/scripting.md) | — |
 | Game session state | [Game session and character](status/session.md) | ARC-SCRIPT-006, ARC-UI-008, ARC-WORLD-010 |
 | Item durability | [Items and inventory](status/items.md) | ARC-WORLD-053, ARC-COMBAT-007, ARC-SKILLS-007 |

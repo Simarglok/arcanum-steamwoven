@@ -102,7 +102,7 @@ review evidence use only approved identifiers, hashes, sizes, counts, and
 status aggregates. Physical grammar evidence is in the sections below and the [dialogue evidence
 record](../research/dialog-evidence.md); this implementation is independently
 authored and does not execute the research probe. The conversation
-runtime lives in the [conversation runtime](../scripting/dialog-conversation-runtime.md) (the earlier bounded subset is the [transition runtime](../scripting/dialog-transition-runtime.md)).
+runtime lives in the [conversation runtime](../scripting/dialog-conversation-runtime.md).
 
 ## Research subset: observed grammar and bounded policy
 

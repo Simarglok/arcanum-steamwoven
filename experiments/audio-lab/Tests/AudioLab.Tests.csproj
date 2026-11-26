@@ -1,7 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType><AssemblyName>AudioLab.Tests</AssemblyName></PropertyGroup>
-  <ItemGroup>
-    <ProjectReference Include="../Core/AudioLab.Core.csproj" />
-    <Compile Include="../Synthetic/SyntheticWave.cs" Link="SyntheticWave.cs" />
-  </ItemGroup>
-</Project>

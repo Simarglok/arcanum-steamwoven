@@ -12,49 +12,6 @@ public sealed record DialogParticipants(
     DialogParticipantId PlayerCharacter,
     DialogParticipantId Npc);
 
-public readonly record struct DialogResponseEligibility(
-    DialogResponseId Response,
-    bool GenderEligible,
-    bool IntelligenceEligible);
-
-public sealed record DialogStartRequest(
-    DialogNodeId Entry,
-    DialogParticipants Participants,
-    IReadOnlyList<DialogResponseEligibility> Eligibility);
-
-public sealed class DialogRuntimeOptions
-{
-    public int MaxResponses { get; init; } = 5;
-    public int MaxOperationFieldBytes { get; init; } = 4096;
-    public int MaxOperationsPerField { get; init; } = 32;
-    public int MaxOperationsPerTransition { get; init; } = 128;
-    public int MaxSemanticInputBytes { get; init; } = 65536;
-
-    internal void Validate()
-    {
-        if (MaxResponses is <= 0 or > 5)
-        {
-            throw new ArgumentOutOfRangeException(nameof(MaxResponses));
-        }
-        if (MaxOperationFieldBytes <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(MaxOperationFieldBytes));
-        }
-        if (MaxOperationsPerField <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(MaxOperationsPerField));
-        }
-        if (MaxOperationsPerTransition <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(MaxOperationsPerTransition));
-        }
-        if (MaxSemanticInputBytes <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(MaxSemanticInputBytes));
-        }
-    }
-}
-
 public enum LocalFlagReadStatus
 {
     Found,
@@ -98,53 +55,6 @@ public readonly record struct DialogOperationSource(
     int OperationLength,
     int OperationOrdinal);
 
-public enum DialogTransitionKind
-{
-    Direct,
-    Exit,
-    Special,
-}
-
-public readonly record struct DialogOfferToken(DialogResponseId Response, int Generation);
-
-public sealed record DialogResponseOffer(
-    DialogResponseId ResponseId,
-    int SerializedIndex,
-    DialogTransitionKind TransitionKind,
-    DialogNodeId? DirectTarget,
-    int? SpecialTag,
-    DialogOfferToken Token);
-
-public enum DialogSessionPhase
-{
-    AwaitingSelection,
-    CompletedAtFrontier,
-    Failed,
-}
-
-public enum DialogStartStatus
-{
-    AwaitingSelection,
-    Failed,
-}
-
-public enum DialogOfferRefreshStatus
-{
-    Updated,
-    WrongPhase,
-    Failed,
-}
-
-public enum DialogSelectionStatus
-{
-    Completed,
-    StaleSelection,
-    NotOffered,
-    UnsupportedTransition,
-    WrongPhase,
-    Failed,
-}
-
 public enum DialogCommandAttemptOutcome
 {
     Applied,
@@ -156,44 +66,8 @@ public enum DialogCommandAttemptOutcome
 
 public enum DialogFailureKind
 {
-    InvalidEntry,
-    WrongEntryRole,
-    InvalidEligibility,
-    ResponseLimitExceeded,
     SemanticInputLimitExceeded,
     OperationLimitExceeded,
     UnsupportedOperation,
     InvalidOperation,
-    MissingTarget,
-    WrongTargetRole,
-    InvalidQueryResult,
-    QueryException,
-    CommandRejected,
-    CommandException,
 }
-
-public sealed record DialogFailure(
-    DialogFailureKind Kind,
-    DialogOperationSource? Source = null,
-    DialogNodeId? RecordId = null,
-    DialogResponseId? ResponseId = null,
-    Exception? Exception = null);
-
-public sealed record DialogCommandAttempt(
-    DialogCommand Command,
-    DialogOperationSource Source,
-    int Ordinal,
-    DialogCommandAttemptOutcome Outcome);
-
-public sealed record DialogStartResult(
-    DialogSession Session,
-    DialogStartStatus Status,
-    DialogFailure? Failure);
-
-public sealed record DialogOfferRefreshResult(
-    DialogOfferRefreshStatus Status,
-    DialogFailure? Failure);
-
-public sealed record DialogSelectionResult(
-    DialogSelectionStatus Status,
-    DialogFailure? Failure);

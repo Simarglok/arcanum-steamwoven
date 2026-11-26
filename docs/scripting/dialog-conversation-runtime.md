@@ -15,8 +15,7 @@ Site NPC whose effective SAP_DIALOG attachment names a script (only Virgil in th
 
 It is **not** a SCR VM, generic expression evaluator, generated-dialog (`gd_*`) text
 loader (the [greeting](dialog-greeting.md) and the [generated phrases](#generated-phrases-arc-script-043) read the loaded files through its port), inventory/party/map/AI simulation, save service, voice/media, or original-runtime
-parity claim. The older [one-edge transition runtime](dialog-transition-runtime.md) is
-unchanged and still rejects GF; the two runtimes do not share admission tables.
+parity claim.
 
 ## Public API
 
@@ -68,8 +67,8 @@ Source references are the function addresses listed under [Provenance](#provenan
 
 1. **Entry** — the caller supplies the checked NPC node (in the viewer: the dialog
    action the [SCR dispatcher](scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3)
-   reached, with its line; ARC-SCRIPT-009 replaced the [entry resolver](npc-dialog-entry-runtime.md)
-   there). A "return to script" end resumes the dialog script through the dispatcher.
+   reached, with its line; ARC-SCRIPT-009 replaced an earlier query-only
+   entry resolver there). A "return to script" end resumes the dialog script through the dispatcher.
 2. **Static step plan before any effect** — NPC action grammar, NPC text, the whole reply
    group (gender selector, condition grammar, text, markers, response targets) are checked
    before the NPC action runs. Unsupported → frontier, malformed → failure, zero effects.

@@ -198,6 +198,6 @@ The full aggregate census uses common descriptors and is not an independent
 source lineage or a second semantic proof. Synthetic fixtures reorder IDs,
 exercise actual production DAT/DLG seams and use literal expected outcomes.
 
-See the [invocation contract](../scripting/npc-dialog-entry-runtime.md) for state
-ownership and future gaps; [prior DLG research](dialog-evidence.md) remains valid
+The invocation contract built on this evidence ([last version](https://github.com/Simarglok/arcanum-steamwoven/blob/b85ea8319b017c999a58b5258f139c859026b6de/docs/scripting/npc-dialog-entry-runtime.md);
+the resolver was removed on 2026-11-26, [#3384](https://github.com/Simarglok/arcanum-steamwoven/issues/3384)) described state ownership and gaps; [prior DLG research](dialog-evidence.md) remains valid
 within its original structural scope, not as a claim of initial gameplay entry.

@@ -52,6 +52,20 @@ The original has no master or separate ambient bar; none is added here.
 (self-test, native smoke) without it has no file at all and never reads or changes the owner's
 setting.
 
+## Findings of the retired audio lab (ARC-UI-002)
+
+The synthetic audio lab (`experiments/audio-lab`) was removed on 2026-11-26, [#3385](https://github.com/Simarglok/arcanum-steamwoven/issues/3385); its code and its
+[page](https://github.com/Simarglok/arcanum-steamwoven/blob/b85ea8319b017c999a58b5258f139c859026b6de/docs/audio/audio-lab.md) (limits, preference file, macOS export recipe) stay in git history.
+The viewer admits payloads by the [sound payload rules](sound-catalog.md#payloads-arc-data-041), wider than the lab's.
+
+- **Lab WAV admission (deliberately narrow, kept as a reference):** a canonical 44-byte RIFF/WAVE header, PCM16, mono or
+  stereo, 8 to 48 kHz, exact sizes, block alignment and byte rate, at least one frame. Ancillary chunks, compressed WAV,
+  extensions and mismatched declared lengths were refused before Godot's decoder, so an untrusted compressed WAV was never
+  expanded; after `AudioStreamWav.LoadFromBuffer` the decoded length and format were checked again.
+- **Lab retention limits:** 8 players, 1 MiB per encoded and per retained stream buffer, 8 MiB charged in total, no cache.
+- **MP3:** the lab never verified MP3 playback (no licensed fixture). In the viewer the native smoke starts the original's
+  MP3 travel music ([checks](#checks)); hearing is not checked.
+
 ## Viewer integration
 
 - At startup the viewer creates the backend and loads the volumes (log line

@@ -289,8 +289,8 @@ returns *skip default* before running (E4).
 
 | Piece | Status | Where |
 | --- | --- | --- |
-| SCR framing (64-byte header, 132-byte lines) and strict SCR name selection | inside the NPC-entry resolver, private | [npc-dialog-entry-runtime](../scripting/npc-dialog-entry-runtime.md), `src/Arcanum.Scripting/NpcDialog` |
-| `SAP_DIALOG` of an NPC: effective whole-array attachment, typed invocation, versioned query ports, TRUE / LF / FOLLOWING / JILTED, advance / GOTO / DIALOG; unknown is a frontier | query-only entry walk, no effects | same |
+| SCR framing (64-byte header, 132-byte lines) | the shared strict reader `ScrProgram.Read` | [program and admission](../scripting/scr-program-admission.md) |
+| `SAP_DIALOG` of an NPC: attachment slot, entry walk and dialog action | the dispatcher (ARC-SCRIPT-009); the earlier query-only entry resolver was removed on 2026-11-26, [#3384](https://github.com/Simarglok/arcanum-steamwoven/issues/3384) | [dispatcher](../scripting/scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3) |
 | DLG conversation with end `ReturnToScript` (0 → caller + 1, −N → N) | delivered; the line is returned, nothing resumes it | [conversation runtime](../scripting/dialog-conversation-runtime.md) |
 | Global flags, quests and rumors in the session; per-NPC LF as the viewer's `dialog.lf` map-change key | delivered (ARC-SCRIPT-006) | [game session](../world/game-session-runtime.md) |
 | Attachment point numbers | `SessionScriptPoint` constants for six points; loot refuses a holder with a Use script; pickup and loot refuse an item with an InsertItem, Get (pickup) or RemoveItem (loot) script | `src/Arcanum.Session/GameSessionInventory.cs` |
