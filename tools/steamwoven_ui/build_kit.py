@@ -31,6 +31,7 @@ from tools.steamwoven_ui import fixtures  # noqa: E402
 from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import hardware_kit  # noqa: E402
+from tools.steamwoven_ui import marker_kit  # noqa: E402
 from tools.steamwoven_ui import popup_kit  # noqa: E402
 from tools.steamwoven_ui import wide_button_kit  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
@@ -277,6 +278,18 @@ def small_parts(plates: dict[str, dict]) -> list[dict]:
     return parts
 
 
+def marker_parts(bases: dict[str, dict]) -> list[dict]:
+    """ARC-UI-3207, slice 7 of B-BUTTONS: the second frame (the highlighted look) of a map marker whose art has one, a part of its own (`marker_kit.py`) at the size of that frame."""
+    parts = []
+    for ident, spec in marker_kit.PARTS.items():
+        base = bases.get(f"glyph.{spec.art.name}")
+        if spec.frame == 0 or base is None:  # a census without the marker (a test's synthetic one)
+            continue
+        note = f"{marker_kit.note_of(ident)}; a {spec.size[0]} x {spec.size[1]} canvas centred on the marker's place, so the size is open"
+        parts.append(new_part(ident, "glyph", base["anchor"], list(base["used_by"]), None, "B-BUTTONS", note, states=[], master=True, provenance=marker_kit.provenance_of(ident)))
+    return parts
+
+
 SMALL_PLATES = {f"plate.{b.name}": b for b in (*small_kit.SMALL, *small_kit.GENERATED)}
 ROUND_HUD_PLATES = {f"plate.{b.name}": b for b in (*round_kit.ROUND_BUTTONS, round_kit.BALL)}
 SKILL_PLATES = {f"plate.{b.name}": b for b in round_kit.SKILL_BUTTONS}
@@ -362,6 +375,9 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
         if ident in POPUP_PARTS:  # ARC-UI-3278: every pop-up panel base is a master once popup_kit.py has made it (a rule record)
             part["status"], part["provenance"] = "master", popup_kit.provenance_of(ident)
             part["note"] = popup_kit.note_of(ident)
+        if ident in marker_kit.PARTS:  # ARC-UI-3207: the map markers and slot covers, the old HD pack's frame or by rule (the picked mix of marker_kit.py)
+            part["status"], part["provenance"] = "master", marker_kit.provenance_of(ident)
+            part["note"] = marker_kit.note_of(ident)
         if ident in HARDWARE_RULE_PARTS:  # ARC-UI-3261 (B-HARDWARE slice 3): lens rings, slot insets, slot wood, plugs and small frames, by rule from the original's frames
             part["status"], part["provenance"] = "master", hardware_kit.provenance_of(ident)
             part["note"] = hardware_kit.note_of(ident)
@@ -372,6 +388,7 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
     parts.extend(new_parts())
     parts.extend(dome_hud_parts({p["id"]: p for p in parts if p["id"] in SKILL_PLATES or p["id"] in DISC_PLATES or p["id"] in SCHOOL_PLATES}))
     parts.extend(small_parts({p["id"]: p for p in parts if p["id"] in SMALL_PLATES}))
+    parts.extend(marker_parts({p["id"]: p for p in parts if p["id"] in marker_kit.PARTS}))
     by_art = {s: p for p in parts for s in p["source_arts"]}
     # Layers over a part (draw order, bottom first): the end caps over a HUD strip, the grid layer over a backdrop that paints it in today.
     for art, layers in (("335", hardware_build.layers_of("board.charcreatebottombar")), ("336", hardware_build.layers_of("board.charcreatetopbar")),
