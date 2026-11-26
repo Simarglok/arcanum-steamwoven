@@ -44,7 +44,7 @@ class FixtureTests(unittest.TestCase):
         self.assertNotEqual(fixtures.draw("fixture.count_pit").data, fixtures.draw("fixture.count_pit", "flat").data)
 
     def test_the_two_looks_differ_in_the_trim_only(self) -> None:
-        flat, brass = fixtures.draw("fixture.pack_pit", "flat"), fixtures.draw("fixture.pack_pit", "brass")
+        flat, brass = fixtures.draw("fixture.name_pit", "flat"), fixtures.draw("fixture.name_pit", "brass")
         self.assertNotEqual(flat.data, brass.data)
         centre = (flat.h // 2 * flat.w + flat.w // 2) * 4
         self.assertEqual(flat.data[centre:centre + 4], brass.data[centre:centre + 4], "the pit's black is the same")
@@ -74,16 +74,19 @@ class FixtureTests(unittest.TestCase):
             self.assertEqual(len(centres), 1, centres)
             self.assertAlmostEqual(centres[0], 31.5, delta=0.1)
         self.assertEqual(cell.pixel(cell.w // 2, cell.h // 2), (0, 0, 0, 255), "the original's black ground")
-        # The grid pits share that ground and draw no line of their own round the grid: nothing of the line's colour past their trim.
-        for ident in ("fixture.pack_pit", "fixture.doll_pit", "fixture.holder_pit_loot", "fixture.holder_pit_barter"):
+        # The grid pits share that ground, draw no line round the grid, and their trim hugs the grid's visible units with nothing outside it.
+        for ident, (x, y, w, h) in fixtures.GRID_PITS.items():
             for variant in fixtures.VARIANTS:
                 pit, part = fixtures.draw(ident, variant), BY(ident)
-                self.assertEqual(pit.pixel(pit.w // 2, pit.h // 2), (0, 0, 0, 255), f"{ident} {variant}: the grid's ground")
-                sx, sy = pit.w / part.width, pit.h / part.height
-                row = _line_centres([pit.pixel(x, pit.h // 2)[:3] for x in range(pit.w)], sx)
-                column = _line_centres([pit.pixel(pit.w // 2, y)[:3] for y in range(pit.h)], sy)
-                for found, size in ((row, part.width), (column, part.height)):
-                    self.assertTrue(all(c < 1 or c > size - 1 for c in found), f"{ident} {variant}: {found}")
+                x0, y0 = round(x * pit.w / part.width), round(y * pit.h / part.height)
+                x1, y1 = round((x + w) * pit.w / part.width), round((y + h) * pit.h / part.height)
+                mx, my = (x0 + x1) // 2, (y0 + y1) // 2
+                ground = (0, 0, 0, 255)
+                self.assertTrue(all(pit.pixel(i, my) == ground for i in range(x0, x1)) and all(pit.pixel(mx, i) == ground for i in range(y0, y1)), f"{ident} {variant}: the ground")
+                for beside in (pit.pixel(x0 - 1, my), pit.pixel(x1, my), pit.pixel(mx, y0 - 1), pit.pixel(mx, y1)):
+                    self.assertTrue(beside[3] == 255 and beside != ground, f"{ident} {variant}: the trim touches the grid ({beside})")
+                self.assertEqual(pit.pixel(0, 0)[3], 0, f"{ident} {variant}: clear outside the trim")
+        self.assertEqual(fixtures.GRID_PITS["fixture.doll_pit"], (5, 7, 319, 287), "the doll's frame stands on its grid's last unit")
 
     def test_every_grid_s_lines_meet_the_original_s(self) -> None:
         """ARC-UI-3342: the cell well laid as the viewer lays it gives the first and last grey line of the original's art, per grid, read from the player's arts 221, 223, 234 and 235 (numbers only)."""

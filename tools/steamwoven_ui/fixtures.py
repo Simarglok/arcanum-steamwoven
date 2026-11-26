@@ -99,6 +99,8 @@ BY_ID = {fixture.ident: fixture for fixture in FIXTURES}
 
 # ARC-UI-3342: the original paints a grid line one unit wide on the last column and row of units of a 32-unit cell, and none before a grid's first cell; the kit's 2 px line is centred there.
 LINE_AT = -0.5
+# The grid pits: the grid's visible units inside each part (x, y, w, h). The paper doll's stops a unit short on the right and below, where the original's frame stands.
+GRID_PITS = {"fixture.pack_pit": (2, 2, 320, 384), "fixture.doll_pit": (5, 7, 319, 287), "fixture.holder_pit_loot": (2, 2, 320, 256), "fixture.holder_pit_barter": (2, 2, 320, 224)}
 Colour = tuple[int, int, int]
 BLACK: Colour = (4, 5, 9)
 GRID_GROUND: Colour = (0, 0, 0)  # the item grids' ground, the original's pure black, as under its empty-slot covers (ARC-UI-3342, owner 2026-11-26)
@@ -231,9 +233,21 @@ def _trim(c: Canvas, x0: float, y0: float, x1: float, y1: float, variant: str) -
         c.frame(x0, y0, x1, y1, 2, EDGE)
 
 
-def _pit(c: Canvas, variant: str, ground: Colour = BLACK) -> None:
-    c.rect(0, 0, c.w, c.h, ground)
+def _pit(c: Canvas, variant: str) -> None:
+    c.rect(0, 0, c.w, c.h, BLACK)
     _trim(c, 0, 0, c.w, c.h, variant)
+
+
+def _grid_pit(c: Canvas, variant: str, x: float, y: float, w: float, h: float) -> None:
+    """An item grid's pit (ARC-UI-3342): the ground under the grid's visible units (x, y, w, h of the part) and the trim round them, hugging the grid as the original's frame does, so the grid's lines reach it; clear outside the trim."""
+    x0, y0, x1, y1 = round(c.X(x)), round(c.Y(y)), round(c.X(x + w)), round(c.Y(y + h))
+    c.rect(x0, y0, x1, y1, GRID_GROUND)
+    if variant == "brass":
+        brass = max(3, round(c.s * 0.9))
+        c.frame(x0 - 1, y0 - 1, x1 + 1, y1 + 1, 1, BRASS_DARK)
+        c.frame(x0 - 1 - brass, y0 - 1 - brass, x1 + 1 + brass, y1 + 1 + brass, brass, BRASS)
+    else:
+        c.frame(x0 - 2, y0 - 2, x1 + 2, y1 + 2, 2, EDGE)
 
 
 def _quarter(c: Canvas, right: bool, fill: Colour, variant: str) -> None:
@@ -376,8 +390,8 @@ def draw(ident: str, variant: str = "brass") -> pngio.Image:
         x, y = c.X(fixture.width + LINE_AT), c.Y(fixture.height + LINE_AT)
         c.rect(x - 1, 0, x + 1, height, EDGE)
         c.rect(0, y - 1, width, y + 1, EDGE)
-    elif ident in ("fixture.pack_pit", "fixture.doll_pit", "fixture.holder_pit_loot", "fixture.holder_pit_barter"):
-        _pit(c, variant, GRID_GROUND)
+    elif ident in GRID_PITS:
+        _grid_pit(c, variant, *GRID_PITS[ident])
     elif ident in ("fixture.name_pit", "fixture.quote_field", "fixture.count_pit", "fixture.sheet_name_box", "fixture.schem_channel"):
         _pit(c, variant)
     elif ident == "fixture.sheet_derived_box":

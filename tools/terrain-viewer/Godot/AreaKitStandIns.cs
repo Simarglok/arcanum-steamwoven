@@ -97,11 +97,10 @@ internal static class AreaKitStandIns
     {
         if (AreaKitFixtures.Has("grid.inventory_cells"))
         {
-            for (var row = 0; row < rows; row++) for (var column = 0; column < columns; column++) AreaKitFixtures.Draw(canvas, scale, "grid.inventory_cells", x + column * 32, y + row * 32);
-            if (farEdges) return;
-            // The well carries its lines on its far edges: the last unit of the grid is covered with the well's black.
-            Field(canvas, scale, x + columns * 32 - 1, y, 1, rows * 32, edge: false);
-            Field(canvas, scale, x, y + rows * 32 - 1, columns * 32, 1, edge: false);
+            // The well carries its lines on its far edges: without them the last column and row are drawn a unit short, and the pit's trim shows there.
+            var cut = farEdges ? 0 : 1;
+            for (var row = 0; row < rows; row++) for (var column = 0; column < columns; column++)
+                AreaKitFixtures.Draw(canvas, scale, "grid.inventory_cells", x + column * 32, y + row * 32, column == columns - 1 ? cut : 0, row == rows - 1 ? cut : 0);
         }
         else Lines(canvas, scale, x - .5f, y - .5f, columns, rows, 32, Edge, farEdges);
     }
