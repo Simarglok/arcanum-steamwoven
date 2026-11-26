@@ -105,6 +105,14 @@ public sealed class PerfOverlayTests
     }
 
     [TestMethod]
+    public void TheFrameCapStandsBesideTheRateWhenTheViewerPacesItself()
+    {
+        var reading = new PerfOverlayReading(new ViewerFrameStats(180, 3, 16.667, 18.2, 33.4, 0, 0, 0), null, null, null, null, null, null,
+            null, null, null, null, null, null, null, 800, 600, 60);
+        StringAssert.StartsWith(reading.Text(), "FPS 60.0  cap 60   (Ctrl+F hides)\n");
+    }
+
+    [TestMethod]
     public void UnreadableMetricsSayNotAvailableNeverZero()
     {
         var text = new PerfOverlayReading(null, null, null, null, null, null, null, null, long.MaxValue, null, null, null, null, null, 800, 600).Text();

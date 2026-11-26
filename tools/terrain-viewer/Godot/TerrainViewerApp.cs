@@ -1166,10 +1166,8 @@ public partial class TerrainViewerApp : Node
     public override void _Process(double delta)
     {
         // ARC-DEV-3389: only the shown performance overlay times the viewer's update; hidden, this is one null test.
-        if (_perfMeter is null) { ProcessViewerFrame(delta); return; }
-        var started = Time.GetTicksUsec();
-        ProcessViewerFrame(delta);
-        TickPerfOverlay((long)started);
+        if (_perfMeter is null) ProcessViewerFrame(delta);
+        else ProcessTimedViewerFrame(delta);
     }
 
     private void ProcessViewerFrame(double delta)

@@ -3281,16 +3281,17 @@ checks that a prepared frame draws the pixels of a lazily resolved one, that ref
 ## Performance overlay (ARC-DEV-3389)
 
 **Ctrl+F** shows and hides a small panel at the right edge, below the top interface bar, in the WORLD and AREA modes, in play, in the main menu and over
-the game's windows (not while the bug report or the owner-checks overlay is open: they own every key). It is off at every start
+the game's windows. It is off at every start
 and is not saved. It is a diagnostic of this project, no part of the original: Ctrl+F has no action there (F under Ctrl is a
-control code the game ignores, ARC-INPUT-004). The pointer passes through it, and it reads only: the session and the save do not
+control code the game ignores, ARC-INPUT-004). It does not toggle while a tool or modal box that takes every key is up (the bug
+report, the owner-checks overlay, the quit question, the HD pack problem box) or on a press while a load is pending. The pointer passes through it, and it reads only: the session and the save do not
 change. Because it is drawn with the game, a bug report taken while it is shown has it on the screenshot.
 
 The text is written twice a second. Frame, update and collection figures cover the last 3 s.
 
 | Row | Meaning |
 | --- | --- |
-| FPS | 1000 divided by the average frame time of the window |
+| FPS, cap | 1000 divided by the average frame time of the window. The viewer paces itself: `cap` is its current target (the screen's rate while there is input or movement, 60 when idle), so a rate near the cap is not slowness; automated runs have no cap |
 | frame ms | time from one frame's start to the next: average, 95th percentile, longest. With vsync it does not go below the screen's refresh interval |
 | update ms | time the viewer's own per-frame update took on the main thread (its `_Process`; input handling and other nodes are not in it): average, longest |
 | main step ms | Godot's process-time monitor: the longest main-loop step of the last second, render submission included (and any wait inside it) |
@@ -3305,7 +3306,7 @@ The text is written twice a second. Frame, update and collection figures cover t
 **Cost.** Hidden, it is one null test per frame. Shown, a frame records its times into a fixed buffer without allocating; twice a
 second the text is built and the process read (a few KiB of allocations, which the allocation row includes), the panel adds its
 own draw calls, and the renderer's time measurement is on. For monitoring from outside the game (Metal HUD, Instruments) see
-issue [#3378](https://github.com/Simarglok/arcanum-steamwoven/issues/3378).
+[Mac performance monitoring](../workflow/mac-performance-monitoring.md).
 
 **Smoke.** Stage `report` (also in the map battery): `ARC-DEV-3389 native-smoke perf-overlay PASS`. With
 `ARC_PERF_OVERLAY_CAPTURE=<folder>` a window run saves `before.png` and `shown.png`.

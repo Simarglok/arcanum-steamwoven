@@ -5,8 +5,8 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     // Native observation (ARC-DEV-3389, ARC_AREA_MAP_SMOKE_ONLY=report): through the production key route Ctrl+F shows the overlay and
-    // hides it again, a bare F stays the game's, a held Ctrl+F does not flicker it, the shown panel reports numbers, takes no pointer,
-    // stays inside the window and records nothing in the session.
+    // hides it again, a held Ctrl+F does not flicker it, over the open logbook it toggles and a bare F does not, the shown panel reports
+    // numbers, takes no pointer, stays inside the window and records nothing in the session.
     private async Task RunAreaPerfOverlaySmokeAsync()
     {
         static void Require(bool value, string why) { if (value) return; GD.Print("ARC-DEV-3389 perf overlay smoke FAIL: " + why); throw new InvalidOperationException("ARC-DEV-3389 perf overlay smoke: " + why); }
@@ -71,6 +71,16 @@ public partial class TerrainViewerApp
             Send(true, ctrl: true); Send(true, ctrl: true, echo: true); Send(true, ctrl: true, echo: true); Send(false, ctrl: false);
             Require(_perfMeter is null && !panel.IsShown, "a held Ctrl+F hid the overlay once");
             Chord(); Require(panel.IsShown, "Ctrl+F shows it again"); Chord(); Require(!panel.IsShown && _perfMeter is null, "Ctrl+F hides it");
+            // Over a window that owns every key (the logbook): the chord still reaches the overlay, a bare F does not.
+            void Logbook(bool pressed) => InputWorld(new InputEventKey { Keycode = Key.L, PhysicalKeycode = Key.L, Pressed = pressed });
+            Logbook(true); Logbook(false); await Frames(1);
+            Require(LogbookOpen, "L opened the logbook");
+            Send(true, ctrl: false); Send(false, ctrl: false);
+            Require(_perfMeter is null, "a bare F does not show the overlay");
+            Chord(); Require(panel.IsShown && LogbookOpen, "Ctrl+F shows the overlay over the logbook");
+            Chord(); Require(!panel.IsShown && LogbookOpen, "Ctrl+F hides it and leaves the logbook open");
+            Logbook(true); Logbook(false); await Frames(1);
+            Require(!LogbookOpen, "L closed the logbook");
             GD.Print("ARC-DEV-3389 native-smoke perf-overlay PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = CurrentAreaMap, Text = text.Split('\n') }));
         }
         finally

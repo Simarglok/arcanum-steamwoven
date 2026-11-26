@@ -82,7 +82,7 @@ public sealed record PerfOverlayReading(
     long? DrawCalls, long? DrawnObjects, long? Primitives,
     long? ResidentBytes, long? VideoBytes, long? ManagedBytes, double? AllocatedBytesPerSecond, double? CpuPercent,
     long? Nodes, long? Objects,
-    int Width, int Height)
+    int Width, int Height, int? FpsCap = null)
 {
     /// <summary>A byte count above this is a broken counter (the Metal texture monitor underflows to 2^63, issue #3333), not memory.</summary>
     public const long ByteCeiling = 1L << 42;
@@ -92,7 +92,10 @@ public sealed record PerfOverlayReading(
     {
         var text = new StringBuilder(640);
         var frames = Frames;
-        text.Append("FPS ").Append(frames is { AverageMs: > 0 } f ? Number(1000 / f.AverageMs, "0.0") : "...").Append("   (Ctrl+F hides)\n");
+        text.Append("FPS ").Append(frames is { AverageMs: > 0 } f ? Number(1000 / f.AverageMs, "0.0") : "...");
+        // The viewer paces itself (the screen's rate while there is activity, lower when idle): a low rate under the cap is not slowness.
+        if (FpsCap is { } cap) text.Append("  cap ").Append(cap.ToString(CultureInfo.InvariantCulture));
+        text.Append("   (Ctrl+F hides)\n");
         text.Append("frame ms   avg ").Append(Number(frames?.AverageMs, "0.0")).Append("  p95 ").Append(Number(frames?.P95Ms, "0.0"))
             .Append("  max ").Append(Number(frames?.MaxMs, "0.0")).Append('\n');
         text.Append("update ms  avg ").Append(Number(frames?.WorkAverageMs, "0.0")).Append("  max ").Append(Number(frames?.WorkMaxMs, "0.0")).Append('\n');

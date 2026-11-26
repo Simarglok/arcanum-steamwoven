@@ -42,9 +42,11 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-DEV-3389 performance overlay {(show ? "shown" : "hidden")}");
     }
 
-    /// <summary>Once per frame while shown, after the viewer's update that began at <paramref name="startedMicros"/>.</summary>
-    private void TickPerfOverlay(long startedMicros)
+    /// <summary>The viewer's frame update while the overlay is shown: timed, recorded and, when due, written to the panel.</summary>
+    private void ProcessTimedViewerFrame(double delta)
     {
+        var startedMicros = (long)Time.GetTicksUsec();
+        ProcessViewerFrame(delta);
         if (_perfMeter is not { } meter) return;
         var now = (long)Time.GetTicksUsec();
         meter.Record(startedMicros, GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2), (now - startedMicros) / 1000f);
@@ -53,7 +55,9 @@ public partial class TerrainViewerApp
 
     private PerfOverlayReading ReadPerfOverlay(PerfOverlayMeter meter, long now)
     {
-        static long? Count(Performance.Monitor monitor) => (long)Performance.GetMonitor(monitor);
+        static long Count(Performance.Monitor monitor) => (long)Performance.GetMonitor(monitor);
+        // With the panel on screen a real frame has draws and the renderer holds memory: 0 is a counter this renderer does not offer.
+        static long? Drawn(Performance.Monitor monitor) => Count(monitor) is var value && value > 0 ? value : null;
         // A time of exactly 0 is a timer the driver does not offer (or no frame yet), not a free frame.
         static double? Milliseconds(double ms) => ms > 0 ? ms : null;
         // Another observer may have switched the measurement off (a smoke stage does): ask again with each reading.
@@ -73,13 +77,15 @@ public partial class TerrainViewerApp
             Milliseconds(Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000),
             Milliseconds(RenderingServer.ViewportGetMeasuredRenderTimeCpu(viewport) + RenderingServer.GetFrameSetupTimeCpu()),
             Milliseconds(RenderingServer.ViewportGetMeasuredRenderTimeGpu(viewport)),
-            Count(Performance.Monitor.RenderTotalDrawCallsInFrame), Count(Performance.Monitor.RenderTotalObjectsInFrame),
-            Count(Performance.Monitor.RenderTotalPrimitivesInFrame),
-            resident, Count(Performance.Monitor.RenderVideoMemUsed) is > 0 and var video ? video : null,
+            Drawn(Performance.Monitor.RenderTotalDrawCallsInFrame), Drawn(Performance.Monitor.RenderTotalObjectsInFrame),
+            Drawn(Performance.Monitor.RenderTotalPrimitivesInFrame),
+            resident, Drawn(Performance.Monitor.RenderVideoMemUsed),
             GC.GetTotalMemory(false), _perfAllocated.Sample(now, GC.GetTotalAllocatedBytes()),
             processor is { } used ? used * 100 : null,
             Count(Performance.Monitor.ObjectNodeCount), Count(Performance.Monitor.ObjectCount),
-            size.X, size.Y);
+            size.X, size.Y,
+            // The pacing's target, not Engine.MaxFps: that is the target with the measured correction on it.
+            PacingAutomated || _pacingTarget <= 0 ? null : _pacingTarget);
     }
 }
 
