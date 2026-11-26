@@ -159,8 +159,8 @@ public partial class TerrainDiagnosticHud : CanvasLayer
         if (_failure is { Visible: true } failure && failure.OffsetLeft != left) failure.OffsetLeft = left;
     }
 
-    /// <summary>Self-test (ARC-UI-1994): the left inset last set by <see cref="SetLeftInset"/>.</summary>
-    internal float LeftInsetForSelfTest => _leftInset;
+    /// <summary>Self-test (ARC-UI-1994): the shown panel's left inset; a hidden panel's is the one last set by <see cref="SetLeftInset"/>.</summary>
+    internal float LeftInsetForSelfTest => _panel is { Visible: true } panel ? panel.OffsetLeft - 16 : _leftInset;
 
     private void ResizeForViewport()
     {

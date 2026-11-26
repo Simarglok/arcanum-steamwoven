@@ -222,30 +222,44 @@ public partial class TerrainViewerApp
     }
 
     // ARC-UI-3419: the first opening of the inventory still built its panel, asked for the first view and made the held items' pictures inside the key press and the
-    // frame after it. With the art ready, no window open and a hero in play, the same work is done ahead, once per session: one frame builds the panel, a later one
-    // asks for the hero's view and makes the pictures (with their HD redraws) of what the grid and the doll show. Nothing is shown, and the opening reads the view anew.
-    private GameSessionOwner? _inventoryOpenWarmed;
+    // frame after it. With the art ready, no window open and a hero in play, the same work is done ahead, once per session: one frame builds the panel, one asks for the
+    // hero's view, and the following ones make the pictures (with their HD redraws) of what the grid and the doll show, a few milliseconds a frame. Nothing is shown,
+    // and the opening reads the view anew. An opening that comes first does all of it as before.
+    private GameSessionOwner? _inventoryOpenWarmSession;
+    // The pictures still to make: null before the view was asked, empty once the session is done.
+    private Queue<string>? _inventoryOpenWarmPictures;
 
     private void TickInventoryOpenWarm()
     {
-        if (!InventoryActive || InventoryOpen || WorldModal || _areaSession is not { } session || ReferenceEquals(session, _inventoryOpenWarmed) || session.QueryHero() is null) return;
+        if (!InventoryActive || InventoryOpen || WorldModal || _areaSession is not { } session) return;
+        if (!ReferenceEquals(session, _inventoryOpenWarmSession)) (_inventoryOpenWarmSession, _inventoryOpenWarmPictures) = (session, null);
+        if (_inventoryOpenWarmPictures is { Count: 0 }) return;
         try
         {
-            if (InventoryArtLook() is not { } look) { _inventoryOpenWarmed = session; return; }
+            if (_inventoryOpenWarmPictures is null && session.QueryHero() is null) return;
+            if (InventoryArtLook() is not { } look) { _inventoryOpenWarmPictures = new(); return; }
             if (_inventoryPanel is null) { EnsureInventoryPanel(); _inventoryPanel.SetArtLook(look); return; }
-            _inventoryOpenWarmed = session;
+            if (_inventoryOpenWarmPictures is null)
+            {
+                var view = InventoryView(null);
+                _inventoryOpenWarmPictures = new(view.Grid.Select(item => item.Entity).Concat(view.Doll.Select(slot => slot.Entity).OfType<string>()));
+                GD.Print($"ARC-UI-3419 inventory opening warm view items={_inventoryOpenWarmPictures.Count}");
+                return;
+            }
             var started = Stopwatch.GetTimestamp();
-            var view = InventoryView(null);
-            var items = view.Grid.Select(item => item.Entity).Concat(view.Doll.Select(slot => slot.Entity).OfType<string>()).ToArray();
-            foreach (var item in items) (look.ItemArt(item) as HdInterfaceTexture)?.Warm();
-            GD.Print($"ARC-UI-3419 inventory opening warmed items={items.Length} ms={Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0}");
+            do (look.ItemArt(_inventoryOpenWarmPictures.Dequeue()) as HdInterfaceTexture)?.Warm();
+            while (_inventoryOpenWarmPictures.Count > 0 && Stopwatch.GetElapsedTime(started).TotalMilliseconds < WarmSliceMilliseconds);
+            if (_inventoryOpenWarmPictures.Count == 0) GD.Print("ARC-UI-3419 inventory opening warmed");
         }
         catch (Exception error) when (error is not OutOfMemoryException)
         {
-            _inventoryOpenWarmed = session;
+            _inventoryOpenWarmPictures = new();
             GD.Print($"ARC-UI-3419 inventory opening not warmed: {error.GetType().Name} {error.Message}");
         }
     }
+
+    // The unbound session is let go.
+    private void DropInventoryOpenWarm() => (_inventoryOpenWarmSession, _inventoryOpenWarmPictures) = (null, null);
 
     private void BuildWarmLook(int step)
     {

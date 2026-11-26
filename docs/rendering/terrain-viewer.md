@@ -3286,9 +3286,10 @@ closing of a window was followed by a frame about 10 ms longer than usual. Three
   opening's 67 ms).
 - **Hidden diagnostic panel.** A window hides the follower frames and its close brings them back, and the diagnostic panel starts right of them. A hidden panel
   and failure line now take that inset when they are shown: moving the hidden panel laid out its long status text again, about 10 ms each time.
-- **Prepared opening.** After the art warm-up, with a hero in play and no window open, one frame builds the inventory panel and a later one asks for the hero's
-  view and makes the pictures of the items the grid and the doll show, with their HD redraws, once per session (`ARC-UI-3419 inventory opening warmed items=N ms=M`).
-  Nothing is shown; the opening reads the view anew. `ARC_WINDOW_ART_WARMUP=0` switches this off too.
+- **Prepared opening.** After the art warm-up, with a hero in play and no window open, one frame builds the inventory panel, a later one asks for the hero's
+  view, and the following ones make the pictures of the items the grid and the doll show, with their HD redraws, in slices of about 3 ms a frame, once per
+  session (`ARC-UI-3419 inventory opening warm view items=N`, then `ARC-UI-3419 inventory opening warmed`). Nothing is shown; the opening reads the view anew.
+  `ARC_WINDOW_ART_WARMUP=0` switches this off too.
 
 Measured in the release package on the owner's Mac (M4 Pro, 2560×1440, HD, a walked-in busy map with followers, three alternating runs before and after, median
 main-thread CPU of the key press's frame and of the frame after it): first opening 67 + 26 → 31 + 13 ms, a repeated opening 14 + 17 → 15 + 9 ms, a close

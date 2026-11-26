@@ -151,6 +151,7 @@ public partial class TerrainViewerApp
             _unreadCarriedLeft = _areaSession is { } asking ? leaving.UnreadCarried(asking) : [];
         }
         EndInventory();
+        DropInventoryOpenWarm();
         // ARC-DEV-323: the window no longer clears a theft in progress, so a replaced session drops its "trying" note here.
         _pickPocketTrying = false;
         UnbindAreaCombat();
