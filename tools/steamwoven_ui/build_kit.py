@@ -334,7 +334,7 @@ RING_METHOD_TEXT = {  # method of `ring_kit.py` -> (provenance prefix, what the 
 
 
 def ring_parts(plates: dict[str, dict]) -> list[dict]:
-    """ARC-UI-3270, slice 3c of B-BUTTONS: the glyph and the pressed and hover plate of every small brass-ringed button (`ring_kit.py`)."""
+    """ARC-UI-3270, slice 3c of B-BUTTONS: the glyph and the pressed and hover plate of every small brass-ringed button and socket dome (`ring_kit.py`)."""
     parts = []
     for ring in ring_kit.RINGS:
         plate = plates.get(f"plate.{ring.name}")

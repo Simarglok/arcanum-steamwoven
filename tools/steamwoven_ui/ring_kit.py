@@ -285,7 +285,7 @@ def without_bar(frame: Image, circle: school_kit.Circle) -> Image:
 
 
 def empty_plate(local_root: Path, ring: Ring) -> Image:
-    """The plate of the buttons that carry a drawn or cut symbol: the SAME ring and glossy dome as the plus and minus (the idle Minus of the generated set, its bar taken out), brought to the accepted brass and cut to this circle."""
+    """The ringed plate under a drawn sign or arrow (`codex_face`, `arrow_face`; a socket dome takes `dome_plate`): the SAME ring and glossy dome as the plus and minus (the idle Minus of the generated set, its bar taken out), brought to the accepted brass and cut to this circle."""
     placed = placed_minus(local_root, ring.circle)
     frame = without_bar(centred(placed, ring.circle, symbol_offset(placed, ring.circle)), ring.circle)
     return toned(part_of(ring, frame), ring.circle, INNER["codex"])
