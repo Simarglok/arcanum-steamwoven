@@ -57,6 +57,17 @@ recomputed only when both origins are integral and the envelope moved by exactly
 same integer. Keys are
 compared exactly, never by tolerance.
 
+What moves with the camera is not an input of an item (ARC-RENDER-3416). All items of
+a canvas read one small float texture, the view state, written once per submission: the
+raster (canvas origin and zoom), the whole pixel at or before that origin and the place
+of the carried lights' lattice. An item's screen start is counted from that whole pixel,
+so across the whole-pixel translation above an item whose other inputs are unchanged
+sends nothing to the engine and is not redrawn; the pixels it samples are the same. The
+canvas also keeps each command's engine state (material, index row, world rectangle) with
+the command: when the draw list shifts, the state moves to the node that draws the command
+next, so only commands that enter the view are prepared from nothing. A standalone item
+keeps and writes its own view state.
+
 Rows live in one canvas-owned cache. Rows used by the current submission are never
 evicted; rows of earlier views are reused or evicted least recently used first, down
 to three quarters of the limits, when the row payload would exceed 16 MiB or the
