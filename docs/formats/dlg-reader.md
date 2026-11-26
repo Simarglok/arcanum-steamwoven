@@ -102,7 +102,7 @@ review evidence use only approved identifiers, hashes, sizes, counts, and
 status aggregates. Physical grammar evidence is in the sections below and the [dialogue evidence
 record](../research/dialog-evidence.md); this implementation is independently
 authored and does not execute the research probe. The conversation
-runtime lives in the [conversation runtime](../scripting/dialog-conversation-runtime.md) (the earlier bounded subset is the [transition runtime](../scripting/dialog-transition-runtime.md)).
+runtime lives in the [conversation runtime](../scripting/dialog-conversation-runtime.md).
 
 ## Research subset: observed grammar and bounded policy
 
@@ -179,7 +179,7 @@ default `Strict` mode above is unchanged. Since ARC-SCRIPT-012 the universal scr
 and dialog loader ([script content](../scripting/script-content.md)) reads game data
 in this mode, as the game does, and the conversation runtime receives those
 documents; the strict mode stays a data-quality check, the reader for project
-fixtures and what the research probes and the superseded NPC entry resolver use.
+fixtures and what the research probes use.
 
 - Fields flow: each field is found by skipping to the next `{`, whatever lies
   between (white space, line breaks, stray text); a `//` pair outside a field

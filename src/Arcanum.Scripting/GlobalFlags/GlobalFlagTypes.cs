@@ -14,8 +14,6 @@ public readonly record struct GlobalFlagEntry(FlagId Flag, bool? Value);
 public static class GlobalFlagLimits
 {
     public const int MaxFlags = 4096;
-    public const int MaxOperandCharacters = 32;
-    public const int DescriptorSchema = 1;
     public const long MaxRevision = long.MaxValue;
 }
 
@@ -71,8 +69,6 @@ public sealed record GlobalFlagReadResult(
     GlobalFlagVersion? ResultVersion,
     GlobalFlagReason Reason);
 
-public sealed record GlobalFlagConditionResult(GlobalFlagReadResult Read, bool? Matches);
-
 public sealed record GlobalFlagWriteReceipt(
     GlobalFlagRequestId RequestId,
     GlobalFlagOperation Operation,
@@ -92,9 +88,6 @@ public sealed record GlobalFlagOwnerDescriptor(
     IReadOnlyList<GlobalFlagBootstrapValue> Bootstrap);
 
 public sealed record GlobalFlagCreationResult(GlobalFlagOwner? Owner, GlobalFlagReason Reason);
-
-/// <summary>Single operation transport, not a DLG expression, parser plan or session.</summary>
-public sealed record GlobalFlagOperationDescriptor(int Schema, string Opcode, IReadOnlyList<string> Operands);
 
 /// <summary>Immutable owner metadata. Construction is restricted to validated bootstrap.</summary>
 public sealed class GlobalFlagBinding

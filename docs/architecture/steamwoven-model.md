@@ -120,7 +120,7 @@ otherwise.
 | R4 | `Simulation/Travel/WorldJourney` | World-map journey | — | `World/AreaWorldMap.cs` | Run-local (as the original's) | — |
 | R5 | `Simulation/Clock/GameTimeFlow` | Host-time to game-time admission | — | `AreaAmbientDriver` | Run-local | H5+ |
 | R6 | `Simulation/Ai/AiListCache` | AI spell and item lists | — | `AreaAiHost` | Run-local, rebuilt with the host | — |
-| R7 | `Scripting/Dialog` `DialogSession`, `DialogConversation` | One open conversation | Speaker | `AreaConversationHost` | Run-local (no save while a dialog is open) | — |
+| R7 | `Scripting/Dialog` `DialogConversation` | One open conversation | Speaker | `AreaConversationHost` | Run-local (no save while a dialog is open) | — |
 
 ## 5. Viewer per-map hosts (`tools/terrain-viewer/Core`)
 
