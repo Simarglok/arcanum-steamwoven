@@ -19,7 +19,9 @@ public sealed class CharacterStatsOwner
     private long nextEffectId = 1;
     // ARC-RENDER-3362: the last snapshots, by context, while the revision stands. A frame asks for the same few contexts many thousands of times, and a
     // snapshot is immutable and made from nothing but this state and the context; every accepted change moves the revision.
-    private const int SnapshotsKept = 4;
+    // ARC-RENDER-3418: one more context than the places, asked in turn, would rebuild every one of them each time, so the
+    // places are more than the poison, leg and speed contexts a frame asks for.
+    private const int SnapshotsKept = 16;
     private readonly CharacterStatsSnapshot?[] snapshots = new CharacterStatsSnapshot?[SnapshotsKept];
     private int nextSnapshot;
 
@@ -161,22 +163,24 @@ public sealed class CharacterStatsOwner
     private CharacterStatsSnapshot BuildSnapshot(CharacterStatContext context)
     {
         var applied = effects.ToImmutableArray();
+        IReadOnlyList<AppliedEffect> listed = applied;
         var baseValues = new int[stored.Length];
         var effective = new int[stored.Length];
+        Func<CharacterStat, int> read = input => effective[(int)input];
         // Stored stats first: derived formulas read only effective primary and point stats.
         for (var index = 0; index < stored.Length; index++)
         {
             var stat = (CharacterStat)index;
             if (CharacterStatRules.IsDerived(stat)) continue;
             baseValues[index] = stored[index];
-            effective[index] = Effective(stat, stored[index] + CharacterStatRules.Situational(stat, context), applied);
+            effective[index] = Effective(stat, stored[index] + CharacterStatRules.Situational(stat, context), listed);
         }
         for (var index = 0; index < stored.Length; index++)
         {
             var stat = (CharacterStat)index;
             if (!CharacterStatRules.IsDerived(stat)) continue;
-            baseValues[index] = CharacterStatRules.DerivedBase(stat, input => effective[(int)input], context);
-            effective[index] = Effective(stat, baseValues[index] + CharacterStatRules.Situational(stat, context), applied);
+            baseValues[index] = CharacterStatRules.DerivedBase(stat, read, context);
+            effective[index] = Effective(stat, baseValues[index] + CharacterStatRules.Situational(stat, context), listed);
         }
         return new(revision, race, gender, context, applied, baseValues.ToImmutableArray(), effective.ToImmutableArray());
     }

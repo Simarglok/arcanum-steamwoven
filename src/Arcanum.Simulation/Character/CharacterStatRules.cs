@@ -180,6 +180,14 @@ internal static class CharacterStatRules
     /// Applies every modifier for <paramref name="stat"/> with the source's aggregation (<see cref="EffectModifiers.Apply"/>,
     /// ARC-WORLD-029). The caller clamps the result to the range.
     /// </summary>
-    public static int ApplyModifiers(CharacterStat stat, int value, IReadOnlyList<AppliedEffect> effects) => EffectModifiers.Apply(value,
-        effects.SelectMany(effect => effect.Definition.Modifiers).Where(m => m.Stat == stat).Select(m => new EffectModifier(m.Operator, m.Value)).ToArray());
+    public static int ApplyModifiers(CharacterStat stat, int value, IReadOnlyList<AppliedEffect> effects)
+    {
+        ArgumentNullException.ThrowIfNull(effects);
+        // ARC-RENDER-3418: every stat of every snapshot comes through here, so the changes are folded in place.
+        var changes = new EffectModifiers.Fold();
+        for (var index = 0; index < effects.Count; index++)
+            foreach (var modifier in effects[index].Definition.Modifiers)
+                if (modifier.Stat == stat) changes.Add(new(modifier.Operator, modifier.Value));
+        return changes.Result(value);
+    }
 }

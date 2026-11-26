@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Arcanum.Simulation.Character;
 
 namespace Arcanum.Simulation.Combat;
@@ -349,14 +350,28 @@ public static class LifeRules
         facts.Level is >= 0 and <= LifeLimits.MaxLevel && Stat(facts.Strength) && Stat(facts.Constitution) && Stat(facts.Willpower) &&
         Stat(facts.HealRate) && Stat(facts.PoisonRecovery) && Math.Abs((long)facts.NormalResistance) <= LifeLimits.MaxResistance &&
         (facts.Traits & ~AllTraits) == 0 &&
-        (facts.PoisonedStrength.IsDefaultOrEmpty || facts.PoisonedStrength.Length == 3 && facts.PoisonedStrength.All(Stat)) &&
+        (facts.PoisonedStrength.IsDefaultOrEmpty || facts.PoisonedStrength.Length == 3 && Stats(facts.PoisonedStrength)) &&
         !facts.MaxHitPointEffects.IsDefault && !facts.MaxFatigueEffects.IsDefault &&
         EffectModifiers.IsValid(facts.MaxHitPointEffects, LifeLimits.MaxMaximumEffects, LifeLimits.MaxMaximumEffectMagnitude) &&
         EffectModifiers.IsValid(facts.MaxFatigueEffects, LifeLimits.MaxMaximumEffects, LifeLimits.MaxMaximumEffectMagnitude) &&
-        Math.Abs((long)MaxFatigue(facts)) < LifeLimits.DeathHitPointDamage &&
-        Enumerable.Range(0, 4).All(penalty => Math.Abs((long)MaxHitPoints(facts, penalty * 100)) < LifeLimits.DeathHitPointDamage);
+        Math.Abs((long)MaxFatigue(facts)) < LifeLimits.DeathHitPointDamage && PoisonedPoolsBounded(facts);
 
     private static bool Stat(int value) => value is >= 0 and <= LifeLimits.MaxStat;
+
+    // ARC-RENDER-3418: loops, not queries: every read of a critter's life checks its facts.
+    private static bool Stats(ImmutableArray<int> values)
+    {
+        foreach (var value in values)
+            if (!Stat(value)) return false;
+        return true;
+    }
+
+    private static bool PoisonedPoolsBounded(LifeFacts facts)
+    {
+        for (var penalty = 0; penalty < 4; penalty++)
+            if (Math.Abs((long)MaxHitPoints(facts, penalty * 100)) >= LifeLimits.DeathHitPointDamage) return false;
+        return true;
+    }
 
     private static void Check(LifeState state, LifeFacts facts)
     {

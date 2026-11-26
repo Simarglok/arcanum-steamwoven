@@ -33,6 +33,24 @@ public sealed class ObjectArtStateTests
     }
 
     [TestMethod]
+    public void The_arts_of_a_map_follow_every_art_write_and_clear_between_reads()
+    {
+        using var owner = Create();
+        void Same(SessionMapId map) => CollectionAssert.AreEqual(owner.QueryMapChanges(map)
+            .Where(change => change.Key.Property == SessionObjectArt.Property).Select(change => (change.Key.Entity!, (uint)change.Value)).ToArray(), owner.QueryObjectArts(map).ToArray());
+        Same(Exterior);
+        owner.SetObjectArt(owner.Version, Exterior, Other, 0x40A0_0040, baseline: 1); Same(Exterior);
+        owner.SetObjectArt(owner.Version, Exterior, Npc, 0xD050_0000, baseline: 1); Same(Exterior); Same(Cave); Same(Exterior);
+        owner.SetObjectArt(owner.Version, Exterior, Statue, 0x4090_0040, baseline: 1); Same(Exterior);
+        // A mobile record moves with a write that names another map, and an unrelated record changes nothing here.
+        owner.SetObjectArt(owner.Version, Cave, Npc, 0xD060_0000, baseline: 1); Same(Exterior); Same(Cave);
+        owner.SetMapChange(owner.Version, Exterior, MapChangeKey.ForEntity(Statue, "obj.off"), 1); Same(Exterior);
+        owner.SetObjectArt(owner.Version, Exterior, Statue, 0x4090_0041, baseline: 1); Same(Exterior);
+        owner.SetObjectArt(owner.Version, Exterior, Other, 1, baseline: 1); Same(Exterior);
+        CollectionAssert.AreEqual(new[] { (Statue, 0x4090_0041u) }, owner.QueryObjectArts(Exterior).ToArray());
+    }
+
+    [TestMethod]
     public void The_art_is_saved_with_the_session_and_a_mobile_objects_record_is_one_whatever_map_it_names()
     {
         using var owner = Create();

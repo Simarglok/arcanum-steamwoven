@@ -49,6 +49,8 @@ public partial class TerrainViewerApp : Node
     {
         // ARC-DEV-051: the bug report's 120 s log is filled from the first line on.
         BugReportLogger.Install();
+        // ARC-RENDER-3418: the old generation is collected in the background; a blocking collection of it stopped the game for 40-50 ms.
+        System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
         // ARC-DEV-047: the packaged commit (or a source run) and the user:// folder this build reads and writes.
         GD.Print($"ARC-DEV-047 build {ViewerBuild.Current.Text} user={OS.GetUserDataDir()}");
         // ARC-DEV-392: a map's transitions are kept on the device for the next process (a smoke run is one process); not in user://, which a smoke replaces.

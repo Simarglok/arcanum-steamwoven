@@ -81,6 +81,28 @@ public sealed class AreaCritterPassTests
     }
 
     [TestMethod]
+    public void The_passing_verdict_is_the_ordinary_verdict_under_the_passing_overlay()
+    {
+        var steps = Steps();
+        var held = new AreaOccupancy([], [Companion]);
+        AreaOccupancy?[] overlays = [null, AreaOccupancy.None, held, held.WithRemoved(new HashSet<AreaObjectKey> { Chest }), new AreaOccupancy([Npc], [new(12, 11)])];
+        var open = 0; var blocked = 0;
+        for (var x = 8; x <= 20; x++) for (var y = 8; y <= 32; y++)
+            foreach (var direction in Enum.GetValues<NeighborDirection>())
+            {
+                var from = new CellCoord(x, y); var to = RoutePlanner.Neighbor(from, direction);
+                var step = steps.Assess(steps.Request(new(x, y), new(to.X, to.Y), GridReplay.MapDirection(direction)));
+                foreach (var overlay in overlays)
+                {
+                    var verdict = AreaOccupancyRules.ApplyPassingCritters(step, from, direction, overlay);
+                    Assert.AreEqual(AreaOccupancyRules.Apply(step, from, direction, AreaOccupancyRules.PassingCritters(step, overlay)), verdict, $"({x},{y}) {direction}");
+                    _ = verdict.Disposition == CardinalTraversalDisposition.Blocked ? blocked++ : open++;
+                }
+            }
+        Assert.IsTrue(open > 0 && blocked > 0);
+    }
+
+    [TestMethod]
     public void In_combat_the_PC_is_blocked()
     {
         // The admission refuses the step onto the NPC and the companion's cell; a plan that passes them ends with a typed reason.
