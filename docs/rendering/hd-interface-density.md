@@ -5,7 +5,7 @@
 > **2026-11-16, superseded in part** ([Steamwoven interface ADR](../ui/steamwoven-interface-adr.md), ARC-UI-2447): the Steamwoven look uses a scale proportional to the screen with four baked steps, not the density scale of concept 1, and the generated chrome is not the final look. The generated chrome stays as the placeholder, the proportions prototype ([#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452)) and the fallback for parts the kit lacks.
 
 Status: **concept approved by the owner on 2026-11-11 (all recommended options; Linux narrowed to SteamOS, docs and code
-only); demo lab [`experiments/hd-ui-density-lab`](../../experiments/hd-ui-density-lab/README.md) built and checked
+only); demo lab `experiments/hd-ui-density-lab` built, checked and later removed
 ([Demo](#demo)); the viewer is unchanged.**
 Work item ARC-RES-122, docs-only. Requirements: [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007) (adaptive
 layout, high-DPI, chosen scale; status unchanged), [FR-UI-002](../requirements/ui-media-lifecycle.md#fr-ui-002) (HUD).
@@ -284,7 +284,12 @@ window (inventory); then the rest window by window, each behind the existing HD 
 
 ## Demo
 
-Built in [`experiments/hd-ui-density-lab`](../../experiments/hd-ui-density-lab/README.md) (2026-11-11): `Core/` (Godot-free)
+> **The lab was removed on 2026-11-26, [#3385](https://github.com/Simarglok/arcanum-steamwoven/issues/3385)** ([last version](https://github.com/Simarglok/arcanum-steamwoven/blob/b85ea8319b017c999a58b5258f139c859026b6de/experiments/hd-ui-density-lab/README.md)); the steps and results below
+> are historical. The rounding it proved: `round(v)` is `floor(v + 0.5)` (halves go up, never to even); an edge at `x`
+> units is `round(x × s)` px and a width is the difference of two rounded edges, so neighbours share edges; a line of
+> `w` units is `max(1, round(w × s))` px; the bands of a frame stack by their rounded widths; hit tests stay in UI units.
+
+Built in `experiments/hd-ui-density-lab` (2026-11-11): `Core/` (Godot-free)
 holds the scale rule (`DensityScale`: `k` per host, `B = 1.5`, the player's scale, the fit clamp, the SteamOS fit rule),
 the grid rule (`DeviceGrid`), the components (`Chrome`: frames of bands stacked by rounded widths, fills, sunk and raised
 bevels) and the mock screen (`MockScreen`: both strips at 0..41 and 441..600 units, centred with generated side fill,

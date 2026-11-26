@@ -64,7 +64,6 @@ Pages are grouped below by kind: project (status, plans, decisions), development
 - [Gamepad prototype evidence](input/gamepad-prototype.md)
 - [Synthetic movement study](input/gamepad-movement-study.md)
 - [Bounded local-pathfinding study](input/arcanum-pathfinding-study.md)
-- [Bounded dialog transition runtime](scripting/dialog-transition-runtime.md)
 
 ## Research evidence
 

@@ -13,8 +13,8 @@ tasks at the end implement it.
 ## Scope
 
 Steamwoven plays no sound yet: `src` reads no sound table, the SCR admission refuses the three
-sound actions, and the only audio code is the synthetic [audio lab](../audio/audio-lab.md)
-(ARC-UI-002). ARC-RES-022 described the original's audio from an earlier reading alone, without the executable, and proposed reading
+sound actions, and the only audio code was the synthetic audio lab (ARC-UI-002, removed on 2026-11-26, [#3385](https://github.com/Simarglok/arcanum-steamwoven/issues/3385); the viewer's sound is
+[viewer sound output](../audio/viewer-audio.md)). ARC-RES-022 described the original's audio from an earlier reading alone, without the executable, and proposed reading
 it from one explicitly selected archive. This study:
 
 - re-states the audio requirements as testable items for the whole game (AU1–AU14);

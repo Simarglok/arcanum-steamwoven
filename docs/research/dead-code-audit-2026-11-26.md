@@ -2,6 +2,18 @@
 
 Research for epic #3377 (issue #3381, 2026-11-26). Nothing was deleted or changed except this page. Scope: `src/`, `tests/`, `tools/`, `experiments/`, `docs/`, `.github/` and the root files. Out of scope and untouched: `local/`, `research-private/`, `artifacts/`, `.worktrees/`, `t_<id>-arc-*` branches, `toolkit/`, the owner's HD pack.
 
+## Owner decisions and outcome (#3384, #3385)
+
+Decided on 2026-11-26 after a second read-only pass (comments on the two issues); the findings below are as first reported.
+
+- **Removed:** the dialog transition runtime (`DialogSession`, `DialogTransitionRuntime`) with its operation parser, options and start/offer types
+  (no other user was left); the NPC dialog entry resolver and its types; `GlobalFlagAdapter` with its descriptor and condition records;
+  `experiments/hd-ui-density-lab`; `experiments/audio-lab`. Three parser tests moved to the live conversation grammar tests and the Virgil
+  entry check to `ScrVirgilEntryRealDataTests`; the lab's WAV rules are in [viewer sound output](../audio/viewer-audio.md#findings-of-the-retired-audio-lab-arc-ui-002).
+- **Kept:** `src/Arcanum.Godot`: the "superseded by terrain-viewer" verdict below did not hold, because it is the only per-frame HD
+  approve/reject UI and `tools/arcanum-local launch art` starts it. Also `TechDeviceCatalogue` (census evidence), `HdPackImport` and
+  `DlgReferenceValidator`.
+
 ## Method and limits
 
 1. **Where it ran.** A cloud clone of `main` (27d9c28) with `rg`, `git`, `python3` and no .NET SDK. Compiler analyzers (IDE0051, IDE0052, CA1811 and similar) could not run, so every symbol-level verdict is "no reference by name", and the analyzer pass is filed as #3387.
@@ -55,7 +67,7 @@ Kept on purpose, verified: the "superseded" banners of `gamepad-prototype.md`, `
 
 | Item | Evidence | Depends on it | Size | Conf. | Risk |
 |---|---|---|---|---|---|
-| `Scripting/Dialog/DialogSession.cs` (`DialogTransitionRuntime`, `DialogSession`) and start/offer types in `DialogRuntimeTypes.cs` | `git grep -lw DialogSession -- src` lists only these 2 files; `DialogTransitionRuntime` 0 non-test hits; production path is `DialogConversation` via `World/AreaConversation.cs` | ~51 test refs, `docs/scripting/dialog-transition-runtime.md` | 435 lines + part of 199 | probably | medium |
+| `Scripting/Dialog/DialogSession.cs` (`DialogTransitionRuntime`, `DialogSession`) and start/offer types in `DialogRuntimeTypes.cs` | `git grep -lw DialogSession -- src` lists only these 2 files; `DialogTransitionRuntime` 0 non-test hits; production path is `DialogConversation` via `World/AreaConversation.cs` | ~51 test refs, the dialog transition runtime page | 435 lines + part of 199 | probably | medium |
 | `Scripting/NpcDialog/NpcDialogEntryResolver.cs`, `NpcDialogEntryTypes.cs` | 0 non-test hits; `AreaConversation.cs` uses `NpcDialogStateVersion` only; doc banner "superseded in the AREA viewer by the SCR dispatcher" | 46 test hits, doc | ~515 lines | probably | medium |
 | `Scripting/GlobalFlags/GlobalFlagAdapter.cs` | 2 src hits, both in its own file | 14 test hits, `global-flag-state-runtime.md` | 145 lines | probably | low |
 | `Data/Technology/TechDeviceCatalogue.cs` | 0 non-test refs | tests, `status/technology.md` | 111 lines | probably | low |
@@ -69,7 +81,7 @@ Question: are these planned script-lane work (not yet wired) or replaced runtime
 |---|---|---|---|---|---|
 | `src/Arcanum.Godot` (HD review viewer, ARC-RENDER-001/015) | no `ProjectReference` to it; in the solution; no launcher; named in README.md:39, CLAUDE.md:140, THIRD-PARTY-NOTICES.md:13, `docs/workflow/toolchain.md:1179`, `docs/formats/hd-pack.md:233`, `docs/architecture/steamwoven-model.md`, `status/data.md`, `status/viewer.md` and `experiments/display-ui-lab/tools/validation_support.py:42`; `smoke_zones.py:103` "its own project, no smoke"; superseded by `tools/terrain-viewer`; `SyntheticFixture`, `HdReviewSelfTest` unused outside the folder | solution, `docs/project/components/Arcanum.Godot.md`, `test_smoke_zones.py:114,135` | 3938 lines, 19 files | probably; Mac check (scene, self-test) | owner: keep or retire |
 | `experiments/hd-ui-density-lab` (ARC-RES-122) | concept rejected (`steamwoven-interface-adr.md:94-95`; `hd-interface-density.md:3`, #3143); `DensityScale\|DeviceGrid\|UiMetrics` outside the lab = 0 | docs only | 1339 lines, 25 files | probably | archive or delete after OK |
-| `experiments/audio-lab` (ARC-UI-002) | production audio in `src/Arcanum.Presentation/Audio/*` and `ViewerAudioBackend.cs`; no lab type is used | `docs/audio/audio-lab.md`, `audio-evidence.md:16`, `build-retention.md:26` | 1244 lines, 26 files | probably | archive or delete after OK; keep for decoder policy? |
+| `experiments/audio-lab` (ARC-UI-002) | production audio in `src/Arcanum.Presentation/Audio/*` and `ViewerAudioBackend.cs`; no lab type is used | the audio lab page, `audio-evidence.md:16`, `build-retention.md:26` | 1244 lines, 26 files | probably | archive or delete after OK; keep for decoder policy? |
 
 Not dead (kept, with reason): `experiments/relight-lab` (`NormalMapGenerator.cs` is compiled into `tools/terrain-viewer/Godot/Arcanum.TerrainViewer.csproj:11`), `experiments/gamepad-lab` (`src/Arcanum.Input` imports its `ExportLocks.targets`; 8 files in `src/Arcanum.Input` still carry `namespace GamepadLab.Core`; gate scripts in `tools/local_dev`), `experiments/display-ui-lab` (UI-scale/DPI findings not absorbed, FR-UI-007). `Arcanum.Input`, `TerrainViewer.Tests` and the 8 `tools/research/*Probe` projects are outside the solution but referenced or documented. No orphan project exists.
 
