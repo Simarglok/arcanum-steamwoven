@@ -25,7 +25,7 @@ The owner asked for a plan that keeps what is needed in use and stops keeping wh
 These decide every verdict below and are proposed as standing rules for later clean-ups.
 
 1. **A member is dead only by compiler-level evidence.** A name scan does not see a call through an interface, a
-   virtual override or a method group; the 237-method list below proves how far off it is (43 % false positives).
+   virtual override or a method group; the 237-method list below shows how far off it is (101 of the 237 are called through an interface).
    Removal lists come from the analyzers or from find-references, never from a name scan alone.
 2. **Production API has a production caller.** A `public` member of `src/` is called by `src/` or `tools/`, or an
    open issue names the work that will call it. Otherwise it is a test seam.
@@ -111,8 +111,9 @@ in a [comment on #3404](https://github.com/Simarglok/arcanum-steamwoven/issues/3
 | E dead everywhere | 2 | no hit, tests included | `HdRgbImage.FromRgba`, `AutoLevelRules.SkillCap` | **delete** |
 
 So 116 of the 237 (F1, F2, S1, X, T) need nothing, and about 121 methods (roughly 750 lines of production code) get the verdicts
-above. The codecs `ControlSchemeSettingsCodec` and `RuleModeSettingCodec`, which the audit also named, are live (the
-launcher settings use them). The 54 unused parameters (IDE0060) stay with
+above. The codecs `ControlSchemeSettingsCodec` and `RuleModeSettingCodec`, which the audit also named, are test-only as
+well (`LauncherSettings` only mentions the second in a comment): #3408 checks whether the launcher settings replaced
+them (delete, principle 4) or they wait for wiring (keep with a named issue). The 54 unused parameters (IDE0060) stay with
 [#3397](https://github.com/Simarglok/arcanum-steamwoven/issues/3397).
 
 To keep it from coming back (principle 2): the analyzer configuration of #3387 is kept as a documented, uncommitted
