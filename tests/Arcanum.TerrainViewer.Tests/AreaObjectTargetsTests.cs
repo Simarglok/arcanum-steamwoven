@@ -144,6 +144,35 @@ public sealed class AreaObjectTargetsTests
     }
 
     [TestMethod]
+    public void TheOneObjectQuestionAgreesWithTheWholeSet()
+    {
+        // ARC-RENDER-3126: the AI asks about one object on every heartbeat, so IsGone must answer as Gone lists it without making the set.
+        using var session = ConversationSessionFixture.Create();
+        var door = Row(0, 1);
+        var barrel = Row(4, 3, flags: 0x20, respawn: 10);
+        var hidden = Row(5, 3, objectFlags: 0x2);
+        var chest = Row(2, 2, flags: 0x11);
+        var npc = AreaHeartbeatScriptTests.Row(1, 16, 781);
+        var targets = Targets(door, barrel, hidden, chest, npc);
+        var entity = AreaHeartbeatScriptTests.Entity(1);
+        void Change(MapChangeKey key, long? value) => Assert.AreEqual(GameSessionDisposition.Changed,
+            session.ApplyChanges(session.Version, null, [new(new(1), key, value)]).Disposition);
+        void Agree(string step, params AreaObjectKey[] expected)
+        {
+            foreach (var key in new[] { door.Key, barrel.Key, hidden.Key, chest.Key, npc.Key, Key(9) })
+                Assert.AreEqual(expected.Contains(key), targets.IsGone(session, key), $"{step}: {key.SourceIndex}");
+            CollectionAssert.AreEquivalent(expected, targets.Gone(session).ToArray(), step);
+        }
+        Agree("the data stores the scenery off", hidden.Key);
+        Change(SessionItemOff.Key(AreaUseScriptHost.EntityId(hidden)), 0);
+        Agree("a script turned it on");
+        Change(SessionItemOff.Key(AreaUseScriptHost.EntityId(barrel)), 1);
+        Change(MapChangeKey.ForEntity("sector:1:0", GameSessionOwner.ObjectConditionProperty), (long)SessionObjectCondition.Destroyed);
+        Change(AreaCompanionPlacement.MapKey(entity), 9);
+        Agree("off, destroyed and away", barrel.Key, door.Key, npc.Key);
+    }
+
+    [TestMethod]
     public void TheSceneriesAScriptToggledAreListedWithTheirStateForTheirLights()
     {
         // ARC-SCRIPT-2585 (ledger OT10): only a scenery with a record of a toggle is listed (true off, false on over a data that stores it off); a scenery nobody toggled keeps the lights the map data loaded.
