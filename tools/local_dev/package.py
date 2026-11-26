@@ -8,6 +8,11 @@ the launcher and the main menu on the exported app (macOS; the Windows build can
 and is zipped). Only a build that passed every step replaces
 `artifacts/packages/<platform>/` in the main checkout; the build before it is kept in `previous/`. The developer build
 registry (artifacts/world-builds) and the checkout's own files are not touched. Docs: docs/workflow/packaging.md.
+
+ARC-DEV-3379: `package mac --profiling` builds the profiling package for the owner's own measurements, never distributed:
+the same commit and the same precompiled game code, exported with the debug template (so the Godot editor's remote
+debugger can attach) and the get-task-allow entitlement (so Instruments needs no password), under its own app name,
+bundle id and user folder, into `artifacts/packages/macos-profiling/`. The player package is not touched.
 """
 from __future__ import annotations
 
@@ -34,6 +39,10 @@ FEATURE = "steamwoven_package"
 PLAYER_NAME = "Arcanum Steamwoven"
 USER_FOLDER = "Arcanum Steamwoven Game"
 INSTRUCTION = Path("docs/player/alpha-build.md")
+# ARC-DEV-3379: the profiling package's own app name and user folder (the same words) and the page installed beside it.
+PROFILING_NAME = "Arcanum Steamwoven Profiling"
+PROFILING_INSTRUCTION = Path("docs/workflow/mac-performance-monitoring.md")
+DEBUG_ENTITLEMENT = "com.apple.security.get-task-allow"
 SMOKE_PASS = ("ARC-UI-014 native-smoke launcher PASS", "ARC-UI-011 native-smoke main menu PASS")
 SMOKE_MINUTES = 10.0
 DROPPED_PREFIXES = ("ARC_", "ARCANUM_", "DAT_ROOT", "LAUNCHER_SETTINGS_", "WORLD_DIAGNOSTIC_")
@@ -52,9 +61,13 @@ class Platform:
     product: str  # what the export writes: the .app bundle, or the folder of the .exe
     executable: str  # inside the product
     installed: str  # what lands in artifacts/packages/<folder>: the bundle itself, or the zip of the folder
+    export: str = "--export-release"
+    user_folder: str = USER_FOLDER
+    instruction: Path = INSTRUCTION
+    profiling: bool = False
 
     def export_target(self, product: Path) -> Path:
-        """The path given to --export-release: the bundle on macOS, the .exe (beside it the .pck and data folder) on Windows."""
+        """The path given to the export: the bundle on macOS, the .exe (beside it the .pck and data folder) on Windows."""
         return product if self.key == "mac" else product / self.executable
 
 
@@ -62,6 +75,10 @@ PLATFORMS = {
     "mac": Platform("mac", "macOS package", "macos", f"{PLAYER_NAME}.app", f"Contents/MacOS/{PLAYER_NAME}", f"{PLAYER_NAME}.app"),
     "win": Platform("win", "Windows package", "windows", PLAYER_NAME, f"{PLAYER_NAME}.exe", f"{PLAYER_NAME} Windows x64.zip"),
 }
+# Not in PLATFORMS: it is not a platform of the command (`mac --profiling` selects it), and `daily` never builds it.
+PROFILING = Platform("mac", "macOS profiling", "macos-profiling", f"{PROFILING_NAME}.app", f"Contents/MacOS/{PROFILING_NAME}",
+                     f"{PROFILING_NAME}.app", export="--export-debug", user_folder=PROFILING_NAME,
+                     instruction=PROFILING_INSTRUCTION, profiling=True)
 WINDOWS_ASSEMBLIES = ("Arcanum.TerrainViewer.dll", "GodotSharp.dll", "coreclr.dll", "hostfxr.dll")
 
 
@@ -92,7 +109,7 @@ def dotnet_root(environment: dict[str, str]) -> Path:
     return Path(environment.get("DOTNET_ROOT") or Path.home() / ".local" / "share" / "dotnet")
 
 
-def build_environment(base: dict[str, str], commit: str, date: str) -> dict[str, str]:
+def build_environment(base: dict[str, str], commit: str, date: str, profiling: bool = False) -> dict[str, str]:
     """The canonical toolchain (docs/workflow/toolchain.md: the pinned SDK first, the Godot shell sentinel) and the
     commit stamp the viewer project reads as MSBuild properties (ViewerBuildInfo)."""
     sdk = dotnet_root(base)
@@ -102,6 +119,11 @@ def build_environment(base: dict[str, str], commit: str, date: str) -> dict[str,
                    if key in KEPT_VARIABLES or not key.startswith(DROPPED_PREFIXES)}
     environment.update({"DOTNET_ROOT": str(sdk), "PATH": os.pathsep.join([str(sdk), "/usr/bin", "/bin", "/usr/sbin", "/sbin"]),
                         "__GODOT_SHELL_ENV_SET": "1", "ArcanumPackageCommit": commit, "ArcanumPackageDate": date})
+    # MSBuild reads it as a property: the debug export of the profiling package compiles the game as the release export does
+    # (Directory.Build.props, the viewer project). Never taken from the caller's shell.
+    environment.pop("ArcanumProfiling", None)
+    if profiling:
+        environment["ArcanumProfiling"] = "true"
     return environment
 
 
@@ -114,7 +136,7 @@ def steps(platform: Platform, source: Path, product: Path, environment: dict[str
         ("restore", [dotnet, "restore", str(source / SOLUTION), "--locked-mode"]),
         ("build", [dotnet, "build", str(source / SOLUTION), "--no-restore"]),
         ("import", [str(GODOT), "--headless", "--path", project, "--import"]),
-        ("export", [str(GODOT), "--verbose", "--headless", "--path", project, "--export-release", platform.preset, str(target)]),
+        ("export", [str(GODOT), "--verbose", "--headless", "--path", project, platform.export, platform.preset, str(target)]),
     ]
 
 
@@ -131,15 +153,31 @@ def check_export_log(text: str, environment: dict[str, str]) -> None:
         raise PackageError(f"the export did not use the pinned SDK {SDK_VERSION} at {dotnet_root(environment)}")
 
 
-def check_smoke_log(text: str, commit: str) -> None:
-    """The exported app started as the packaged build of `commit`, in the player's own user folder, and passed the menu."""
+def rename_for_profiling(source: Path) -> None:
+    """The profiling package's own app name and user folder, written into the extracted project.godot (not the checkout's):
+    both presets share the package feature, so the game behaves as the player's; only these two settings differ."""
+    project = source / PROJECT / "project.godot"
+    try:
+        text = project.read_text(encoding="utf-8")
+    except OSError as error:
+        raise PackageError(f"the commit has no readable {PROJECT / 'project.godot'}") from error
+    for setting, name in (("config/name", PLAYER_NAME), ("config/custom_user_dir_name", USER_FOLDER)):
+        line = f'{setting}.{FEATURE}="{name}"\n'
+        if text.count(line) != 1:
+            raise PackageError(f"project.godot does not set {line.strip()} exactly once: the profiling package cannot take its own name")
+        text = text.replace(line, f'{setting}.{FEATURE}="{PROFILING_NAME}"\n')
+    project.write_text(text, encoding="utf-8")
+
+
+def check_smoke_log(text: str, commit: str, user_folder: str = USER_FOLDER) -> None:
+    """The exported app started as the packaged build of `commit`, in its own user folder, and passed the menu."""
     marker = f"ARC-DEV-047 build {PLAYER_NAME} alpha · main {commit[:10]}"
     if marker not in text:
         raise PackageError(f"the app did not report itself as the package of {commit[:10]}")
     line = next(line for line in text.splitlines() if marker in line)
     folder = line.split(" user=", 1)[1].rstrip("/\\") if " user=" in line else ""
-    if Path(folder).name != USER_FOLDER:
-        raise PackageError(f"the app's user folder is {folder!r}, not its own {USER_FOLDER!r}")
+    if Path(folder).name != user_folder:
+        raise PackageError(f"the app's user folder is {folder!r}, not its own {user_folder!r}")
     for needed in SMOKE_PASS:
         if needed not in text:
             raise PackageError(f"the native smoke did not print {needed!r}")
@@ -247,7 +285,7 @@ def remove(path: Path) -> None:
 
 
 def install(built: Path, destination: Path, commit: str, date: str, smoke: str, instruction: Path,
-            map_smoke: str = MAP_SMOKE_NOT_RUN) -> Path:
+            map_smoke: str = MAP_SMOKE_NOT_RUN, notes: Sequence[str] = ()) -> Path:
     """Replace destination/<product> (a bundle or a zip) by `built`; the build it replaces moves to destination/previous/ with its BUILD.txt and
     README.md. The new build is first moved next to its place (the copy across volumes, the step that can fail on a full
     disk), so the current build is rotated only once the new one is complete on the same volume."""
@@ -268,7 +306,7 @@ def install(built: Path, destination: Path, commit: str, date: str, smoke: str, 
                 (destination / name).rename(previous / name)
     incoming.rename(current)
     (destination / "BUILD.txt").write_text(f"commit {commit}\ndate {date}\nproduct {built.name}\nsmoke {smoke}\n"
-                                           f"map-smoke {map_smoke}\n", encoding="utf-8")
+                                           f"map-smoke {map_smoke}\n" + "".join(f"{note}\n" for note in notes), encoding="utf-8")
     if instruction.is_file():
         shutil.copyfile(instruction, destination / "README.md")
     return current
@@ -283,7 +321,7 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
         git(root, "fetch", "origin", "main")
     commit, date = resolve(root, ref)
     say(f"commit {commit} ({date}) from {ref}")
-    environment = build_environment(dict(os.environ if base is None else base), commit, date)
+    environment = build_environment(dict(os.environ if base is None else base), commit, date, platform.profiling)
     if runner is run_logged:
         check_tools(environment)
     output.mkdir(parents=True, exist_ok=True)
@@ -298,6 +336,12 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
     try:
         source = work / "source"
         extract(root, commit, source)
+        if platform.profiling:
+            # A commit from before the profiling package has no preset for it, and its debug export would be unoptimized.
+            presets = source / PROJECT / "export_presets.cfg"
+            if not presets.is_file() or f'name="{platform.preset}"' not in presets.read_text(encoding="utf-8"):
+                raise PackageError(f"{commit[:10]} has no export preset {platform.preset!r}: it is older than the profiling package")
+            rename_for_profiling(source)
         product = work / "out" / platform.product
         platform.export_target(product).parent.mkdir(parents=True)  # Godot refuses a Windows export path whose folder is missing
         for name, command in steps(platform, source, product, environment):
@@ -315,6 +359,11 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
             details = step("codesign-details", ["/usr/bin/codesign", "-d", "--verbose=2", str(product)], source, environment, logs, runner)
             if "Signature=adhoc" not in details:
                 raise PackageError("the bundle is not ad-hoc signed")
+            if platform.profiling:
+                entitlements = step("codesign-entitlements", ["/usr/bin/codesign", "-d", "--entitlements", "-", "--xml", str(product)],
+                                    source, environment, logs, runner)
+                if not re.search(f"<key>{re.escape(DEBUG_ENTITLEMENT)}</key>\\s*<true/>", entitlements):
+                    raise PackageError(f"the bundle lacks the entitlement {DEBUG_ENTITLEMENT}")
         folder = game_folder() if smoke and platform.key == "mac" else None
         if platform.key == "win":
             smoked = "NOT RUN (a Windows build cannot start on the Mac: file checks only)"
@@ -327,8 +376,8 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
             # a fresh one, so the launcher detects the game folder as a player's first start would.
             smoke_environment = dict(environment, LAUNCHER_SETTINGS_TEST_PATH=str(work / "launcher.cfg"), ARC_AREA_MAP_SMOKE_ONLY="menu")
             text = step("smoke-menu", [str(executable), "--", "--native-smoke"], source, smoke_environment, logs, runner, SMOKE_MINUTES)
-            check_smoke_log(text, commit)
-            smoked = f"PASS (launcher and main menu, own user folder {USER_FOLDER})"
+            check_smoke_log(text, commit, platform.user_folder)
+            smoked = f"PASS (launcher and main menu, own user folder {platform.user_folder})"
             say(f"smoke {smoked}")
         if platform.installed != platform.product:
             say(f"zip {platform.installed}")
@@ -336,7 +385,9 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
             zip_folder(product, built)
             product = built
         try:
-            installed = install(product, output / platform.folder, commit, date, smoked, source / INSTRUCTION, map_smoke)
+            notes = (["profiling debug export with get-task-allow: for this Mac's own measurements, never distributed"]
+                     if platform.profiling else [])
+            installed = install(product, output / platform.folder, commit, date, smoked, source / platform.instruction, map_smoke, notes)
         except OSError as error:
             raise PackageError(f"could not install into {output / platform.folder}: {error}") from error
         say(f"PASS {installed} (main {commit[:10]}, {date}, smoke {smoked.split(' (', 1)[0]})")
@@ -352,9 +403,14 @@ def main_checkout(root: Path = ROOT) -> Path:
     return Path(git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")).parent
 
 
+PROFILING_HELP = ("mac only (ARC-DEV-3379): the profiling package for Instruments and the Godot remote debugger, a debug export "
+                  "with get-task-allow under its own name and user folder, into packages/macos-profiling; never distribute it")
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(prog="package", description="Build the packaged alpha from a commit of origin/main.")
     result.add_argument("platform", choices=sorted(PLATFORMS))
+    result.add_argument("--profiling", action="store_true", help=PROFILING_HELP)
     result.add_argument("--ref", default="origin/main", help="the commit to package (default origin/main, after a fetch)")
     result.add_argument("--no-fetch", action="store_true", help="do not fetch origin main first")
     result.add_argument("--no-smoke", action="store_true", help="skip the launcher and main menu smoke on the exported app")
@@ -366,7 +422,10 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = parser().parse_args(argv)
+    command = parser()
+    args = command.parse_args(argv)
+    if args.profiling and args.platform != "mac":
+        command.error("--profiling is for mac only")
 
     def stopped(number: int, _frame: object) -> None:
         raise PackageError(f"stopped by signal {number}")
@@ -376,7 +435,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         root = main_checkout()
         output = args.output or root / "artifacts" / "packages"
-        package(PLATFORMS[args.platform], root=root, output=output, ref=args.ref, fetch=not args.no_fetch,
+        package(PROFILING if args.profiling else PLATFORMS[args.platform], root=root, output=output, ref=args.ref, fetch=not args.no_fetch,
                 smoke=not args.no_smoke, keep_work=args.keep_work, map_smoke=args.map_smoke)
     except PackageError as error:
         print(f"package: FAIL {error}", file=sys.stderr)

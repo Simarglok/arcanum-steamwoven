@@ -167,7 +167,8 @@ def playing_file() -> Path:
 
 
 # ARC-DEV-2291: the automatic mode. While a process of the packaged game runs (its executable under a game root: by default
-# `artifacts/packages/macos` of the main checkout, the folder `./arcanum package mac` installs into), the queue treats the mode as
+# `artifacts/packages/macos` and, ARC-DEV-3379, `artifacts/packages/macos-profiling` of the main checkout, the folders
+# `./arcanum package mac [--profiling]` installs into), the queue treats the mode as
 # on and releases it when the game quits. It is the same synthetic playing ticket as the manual one, made in memory by tickets()
 # (no file, no holder process: the game's own process is the state), so every reader (the wait loop, the status, the smoke, `daily`,
 # `main-smoke`) sees one rule. The check reads the process table through libproc (proc_listpids, proc_pidpath), spawns nothing, and
@@ -208,8 +209,11 @@ def game_roots(environment: dict[str, str] | None = None) -> list[str]:
     named = environment.get(GAME_ROOTS_ENV)
     if named is None and environment.get("ARCANUM_LOCAL_HOME"):
         return []
-    folders = [Path(part) for part in named.split(os.pathsep) if part] if named is not None else \
-        [_main_checkout(Path(__file__).resolve().parents[2]) / "artifacts" / "packages" / "macos"]
+    if named is not None:
+        folders = [Path(part) for part in named.split(os.pathsep) if part]
+    else:
+        packages = _main_checkout(Path(__file__).resolve().parents[2]) / "artifacts" / "packages"
+        folders = [packages / "macos", packages / "macos-profiling"]
     return [str(Path(os.path.realpath(item))).rstrip("/") for item in folders]
 
 
