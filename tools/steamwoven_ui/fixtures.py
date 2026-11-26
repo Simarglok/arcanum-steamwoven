@@ -103,7 +103,7 @@ LINE_AT = -0.5
 GRID_PITS = {"fixture.pack_pit": (2, 2, 320, 384), "fixture.doll_pit": (5, 7, 319, 287), "fixture.holder_pit_loot": (2, 2, 320, 256), "fixture.holder_pit_barter": (2, 2, 320, 224)}
 Colour = tuple[int, int, int]
 BLACK: Colour = (4, 5, 9)
-GRID_GROUND: Colour = (0, 0, 0)  # the item grids' ground, the original's pure black, as under its empty-slot covers (ARC-UI-3342, owner 2026-11-26)
+GRID_GROUND: Colour = (0, 0, 0)  # the item grids' ground, the original's pure black, as under its empty-slot covers (ARC-UI-3342, owner 2026-11-26) and under the weapon and shield pictures (ARC-UI-3360)
 EDGE: Colour = (62, 74, 98)
 BRASS: Colour = (184, 146, 62)
 BRASS_DARK: Colour = (104, 76, 28)
@@ -248,15 +248,16 @@ def _grid_pit(c: Canvas, variant: str, x: float, y: float, w: float, h: float) -
         c.frame(x0 - 2, y0 - 2, x1 + 2, y1 + 2, 2, EDGE)
 
 
-def _quarter(c: Canvas, right: bool, fill: Colour, variant: str) -> None:
-    """A quarter disc whose corner is the part's bottom-left (right) or bottom-right (left) corner, with a brass arc."""
+def _quarter(c: Canvas, right: bool) -> None:
+    """A quarter disc whose corner is the part's bottom-left (right) or bottom-right (left) corner, with a brass arc. Its ground is the
+    original's pure black: the picture drawn over it (arts 676, 677) carries its own red or blue shade, which fades to near-black (ARC-UI-3360)."""
     r = c.Y(97)
     cx, cy = (0.0 if right else c.w), c.h
 
     def distance(x: float, y: float) -> float:
         inside = y <= cy and (x >= cx if right else x <= cx)
         return math.hypot(x - cx, y - cy) - r if inside else 1e3
-    c.shape((min(cx, cx + r if right else cx - r), cy - r, max(cx, cx + r if right else cx - r), cy), distance, fill)
+    c.shape((min(cx, cx + r if right else cx - r), cy - r, max(cx, cx + r if right else cx - r), cy), distance, GRID_GROUND)
     arc = max(5.0, c.s * 2.2)
     c.shape((min(cx, cx + r if right else cx - r), cy - r, max(cx, cx + r if right else cx - r), cy),
             lambda x, y: abs(math.hypot(x - cx, y - cy) - (r - arc / 2)) - arc / 2 if (y <= cy and (x >= cx if right else x <= cx)) else 1e3, BRASS)
@@ -346,9 +347,9 @@ def draw(ident: str, variant: str = "brass") -> pngio.Image:
     elif ident == "fixture.count_icons":
         _icons(c)
     elif ident == "fixture.weapon_frame":
-        _quarter(c, True, (52, 12, 12), variant)
+        _quarter(c, True)
     elif ident == "fixture.shield_frame":
-        _quarter(c, False, (10, 14, 54), variant)
+        _quarter(c, False)
     elif ident == "fixture.arrange_legend":
         _legend(c)
     elif ident == "fixture.schem_page":

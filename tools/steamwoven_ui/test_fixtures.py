@@ -53,6 +53,10 @@ class FixtureTests(unittest.TestCase):
     def test_shapes_sit_where_the_original_has_them(self) -> None:
         corner = fixtures.draw("fixture.weapon_frame")
         self.assertEqual(corner.pixel(corner.w - 1, 2)[3], 0, "the quarter frame leaves its far top corner clear")
+        for ident, across in (("fixture.weapon_frame", 0.35), ("fixture.shield_frame", 0.65)):
+            frame = fixtures.draw(ident)
+            ground = frame.pixel(round(frame.w * across), round(frame.h * 0.65))
+            self.assertEqual(tuple(ground), (0, 0, 0, 255), f"{ident}: the ground under the picture is the original's black")
         sheet = fixtures.draw("grid.schematic")
         self.assertEqual(sheet.pixel(5, 5)[3], 0, "the ruling leaves the paper clear between its lines")
 

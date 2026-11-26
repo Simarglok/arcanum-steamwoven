@@ -69,8 +69,8 @@ internal static class AreaKitStandIns
         Disc(canvas, scale, x, y, r * .35f, DarkWood);
     }
 
-    /// <summary>A filled quarter disc whose corner is (<paramref name="x"/>, <paramref name="y"/>) and which opens to the right (<paramref name="right"/> true) or to the left, with a brass arc: the frame round a weapon's or a shield's slot.</summary>
-    private static void QuarterFrame(CanvasItem canvas, float scale, float x, float y, float r, bool right, Color fill)
+    /// <summary>A black quarter disc whose corner is (<paramref name="x"/>, <paramref name="y"/>) and which opens to the right (<paramref name="right"/> true) or to the left, with a brass arc: the frame round a weapon's or a shield's slot.</summary>
+    private static void QuarterFrame(CanvasItem canvas, float scale, float x, float y, float r, bool right)
     {
         var points = new List<(float, float)> { (x, y) };
         for (var i = 0; i <= 16; i++)
@@ -78,7 +78,7 @@ internal static class AreaKitStandIns
             var angle = Mathf.Pi / 2 * i / 16;
             points.Add((x + (right ? 1 : -1) * Mathf.Sin(angle) * r, y - Mathf.Cos(angle) * r));
         }
-        Poly(canvas, scale, fill, [.. points]);
+        Poly(canvas, scale, Black, [.. points]);
         for (var i = 0; i < 16; i++)
         {
             var (a1, a2) = (Mathf.Pi / 2 * i / 16, Mathf.Pi / 2 * (i + 1) / 16);
@@ -144,8 +144,8 @@ internal static class AreaKitStandIns
         Part(canvas, scale, "fixture.name_pit", 124, 25, () => Field(canvas, scale, 124, 25, 223, 55));
         Part(canvas, scale, "fixture.doll_pit", 18, 100, () => Field(canvas, scale, 18, 100, 330, 300));
         Cells(canvas, scale, 23, 107, 10, 9, farEdges: false);
-        Part(canvas, scale, "fixture.weapon_frame", 10, 303, () => QuarterFrame(canvas, scale, 10, 400, 97, true, new(.2f, .05f, .05f)));
-        Part(canvas, scale, "fixture.shield_frame", 244, 303, () => QuarterFrame(canvas, scale, 358, 400, 97, false, new(.04f, .05f, .2f)));
+        Part(canvas, scale, "fixture.weapon_frame", 10, 303, () => QuarterFrame(canvas, scale, 10, 400, 97, true));
+        Part(canvas, scale, "fixture.shield_frame", 244, 303, () => QuarterFrame(canvas, scale, 358, 400, 97, false));
         // The arrange legend (690, 192, 78, 32): scattered dots, a red arrow, a small grid.
         Part(canvas, scale, "fixture.arrange_legend", 690, 192, () =>
         {
