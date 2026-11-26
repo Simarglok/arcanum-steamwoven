@@ -456,7 +456,7 @@ class CutOutTest(unittest.TestCase):
         """A synthetic original: grey stone, the parchment on it, a black last column and row, a black top row too when pressed."""
         frame = self.block(flat_frame(32, 32, (80, 80, 82)), 6, 4, 26, 28, (170, 140, 100))
         frame = self.block(self.block(frame, 31, 0, 32, 32, (28, 28, 28)), 0, 31, 32, 32, (28, 28, 28))
-        return self.block(frame, 0, 0, 32, 1, (28, 28, 28)) if state == "pressed" else frame
+        return self.block(self.block(frame, 0, 1, 31, 2, (40, 40, 41)), 0, 0, 32, 1, (28, 28, 28)) if state == "pressed" else frame
 
     def parchment_sheets(self) -> tuple:
         sheet = flat_frame(240, 120, (255, 0, 255))
@@ -480,7 +480,8 @@ class CutOutTest(unittest.TestCase):
         self.assertGreater(idle.pixel(50, 0)[0], 200, "the lit upper chamfer")
         for image, at in ((idle, ((112, 50), (50, 112))), (pressed, ((112, 50), (50, 112), (1, 50), (50, 1)))):
             self.assertEqual({image.pixel(*xy)[:3] for xy in at}, {(28, 28, 28)}, "the black lines")
-        self.assertEqual(pressed.crop(4, 4, 106, 106).data, hover.crop(4, 0, 106, 106).data, "the whole button one cell lower, none sideways")
+        self.assertEqual(pressed.crop(4, 8, 106, 102).data, hover.crop(4, 4, 106, 102).data, "the whole button one cell lower, none sideways")
+        self.assertAlmostEqual(pressed.pixel(50, 4)[0], hover.pixel(50, 0)[0] / 2, delta=2, msg="the top row dimmed as the original dims it")
         self.assertEqual((idle.pixel(50, 100)[:3], pressed.pixel(50, 105)[:3]), ((80, 80, 82),) * 2, "stone under the parchment in both")
         paper = [x for x in range(114) if idle.pixel(x, 80)[0] > 150]
         self.assertAlmostEqual(min(paper), 6 * 114 / 32, delta=2)

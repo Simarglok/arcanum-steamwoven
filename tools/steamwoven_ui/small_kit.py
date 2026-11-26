@@ -3,7 +3,7 @@
 ARC-UI-3272: the schematics skill button and arrows and the follower cycle arrows) as kit parts, in six families (owner 2026-11-25 and 2026-11-26).
 
 * `rect` (the owner kept these from the old HD pack, the installed `interface-redraw-4x`, 4 px per original cell): the stone Add / Remove (647, 648) and the follower arrows (501, 502): the kit part IS the pack's frame of each state at the master size, opaque.
-* `paper` (568, the schematics skill button): three layers, a Codex mottled stone, on it the Codex torn parchment and the Codex symbol, each in the original's place; the lit and the pressed looks by rule.
+* `paper` (568, the schematics skill button): three layers, a Codex mottled stone, on it the Codex torn parchment and the Codex symbol, each in the original's place; the lit look has the lit symbol, the pressed look is made by rule.
 * `ink` (372, 373, the schematics page arrows): Codex draws the ink alone on white; it is cut out, put where the original has it, and the states are made by rule.
 * `wedge` (827, 828, the follower cycle arrows): the olive Codex plate of #3323 without its symbol, cut to the button's shape, and a straight-edged triangle by rule, one full face per state.
 * `dome` (624, 625, 667, 668): by rule, no pack and no Codex: the accepted round face of the bottom strip's buttons (#3202) reduced under the brass ring of the sockets (#2481), the symbol (red checkered cells) by rule E from the original's own frames,
@@ -651,8 +651,13 @@ def raised_stone(slab: Image, original: Image, master: tuple[int, int]) -> Image
     return out
 
 
-def sunk(face_image: Image, step: tuple[int, int], edge: tuple[int, int, int]) -> Image:
-    """The pressed look as the original's frames make it: the whole button one cell lower (none sideways) and a black line of one cell on all four sides, so its lowest cell is hidden."""
+def top_shade(raised: Image, pressed: Image) -> list[float]:
+    """Per original column, how much darker the original's pressed frame draws the button's top row of cells than the raised frame does (never lighter)."""
+    return [min(1.0, luminance(pressed.pixel(x, 1)) / max(1.0, luminance(raised.pixel(x, 0)))) for x in range(raised.w)]
+
+
+def sunk(face_image: Image, step: tuple[int, int], edge: tuple[int, int, int], shade: list[float]) -> Image:
+    """The pressed look as the original's frames make it: the whole button one cell lower (none sideways) and a black line of one cell on all four sides, so its lowest cell is hidden; the top row of cells is dimmed by `shade`."""
     w, h = face_image.w, face_image.h
     step_x, step_y = step
     line = bytes((*edge, 255))
@@ -660,6 +665,13 @@ def sunk(face_image: Image, step: tuple[int, int], edge: tuple[int, int, int]) -
     for y in range(step_y, h - step_y):
         row = face_image.data[((y - step_y) * w + step_x) * 4:((y - step_y) * w + w - step_x) * 4]
         out.data[y * w * 4:(y + 1) * w * 4] = line * step_x + row + line * step_x
+    for x in range(step_x, w - step_x):
+        at = min(len(shade) - 2.0, max(1.0, (x + 0.5) * len(shade) / w - 0.5))   # between the centres of the cells inside the black lines
+        k = int(at)
+        gain = shade[k] + (at - k) * (shade[min(k + 1, len(shade) - 2)] - shade[k])
+        for y in range(step_y, 2 * step_y):
+            o = (y * w + x) * 4
+            out.data[o:o + 3] = bytes(round(v * gain) for v in out.data[o:o + 3])
     return out
 
 
@@ -671,8 +683,8 @@ def ink_trim(path: Path, name: str) -> tuple:
 
 def paper_parts(frames: Path, sheet: Image, piece: Image, slab: Image, b: Small) -> dict[str, Image]:
     """The schematics button as the original builds it, in three layers: the stone, the torn parchment on it, the symbol on the parchment. Idle and hover stand up (the dark symbol, then the lit one); pressed is the
-    hover look one original cell lower inside a black line. Every state is a full opaque frame."""
-    original, pressed = (read_frame(frames, b, b.frames[s]) for s in ("idle", "pressed"))
+    hover look one original cell lower inside a black line, its top row dimmed as the original's. Every state is a full opaque frame."""
+    original, raised_lit, pressed = (read_frame(frames, b, b.frames[s]) for s in ("idle", "hover", "pressed"))
     bare = [(x, y) for y in range(original.h) for x in range(original.w) if is_sheet_cell(original.pixel(x, y))]
     if not bare:
         raise SmallError("the original frame has no bare sheet cell")
@@ -690,7 +702,7 @@ def paper_parts(frames: Path, sheet: Image, piece: Image, slab: Image, b: Small)
         over(face_image, symbol, 0, 0)
         faces.append(face_image)
     step = (round(b.master[0] / b.units[0]), round(b.master[1] / b.units[1]))
-    down = sunk(faces[1], step, mean_colour(pressed, [(x, 0) for x in range(pressed.w)]))
+    down = sunk(faces[1], step, mean_colour(pressed, [(x, 0) for x in range(pressed.w)]), top_shade(raised_lit, pressed))
     return {f"plate.{b.name}": faces[0], f"plate.{b.name}_hover": faces[1], f"plate.{b.name}_pressed": down, f"glyph.{b.name}": Image.blank(*b.master)}
 
 
