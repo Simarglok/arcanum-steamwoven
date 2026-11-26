@@ -63,7 +63,7 @@
       ],
       "after": null
     },
-    "B-BUTTONS-PARCHMENT": {"prompts": ["plate-schem-skills", "glyph-schem-arrows"], "after": null},
+    "B-BUTTONS-PARCHMENT": {"prompts": ["plate-schem-skills", "glyph-schem-arrows", "plate-schem-slab"], "after": null},
     "B-GAUGES": {
       "prompts": [
         "gauge-bars",
@@ -903,6 +903,7 @@
       "notes": "slice 2 of #2481 (ARC-UI-3260): one Codex item, two details cut from the original on a transparent ground; hardware_build.py refs / cut"
     },
     {"id": "plate-schem-skills", "group": "part", "kind": "plate", "title": "Schematics skill button, a torn parchment with the gear and bolt, normal and lit (art 568)", "file": "plate-schem-skills.txt", "size": [1776, 888], "references": ["original", "sheet"], "screen": null, "batch": "B-BUTTONS-PARCHMENT", "notes": "ARC-UI-3272 (owner 2026-11-26): parchment only, cut from magenta along its edge; hover and pressed by rule from the lit cell (small_kit.py)"},
-    {"id": "glyph-schem-arrows", "group": "part", "kind": "glyph", "title": "Schematics page arrows, ink only (arts 372, 373)", "file": "glyph-schem-arrows.txt", "size": [1620, 990], "references": ["original", "sheet"], "screen": null, "batch": "B-BUTTONS-PARCHMENT", "notes": "ARC-UI-3272 (owner 2026-11-26): ink on white, the alpha is the ink; the light idle ink by rule (small_kit.py)"}
+    {"id": "glyph-schem-arrows", "group": "part", "kind": "glyph", "title": "Schematics page arrows, ink only (arts 372, 373)", "file": "glyph-schem-arrows.txt", "size": [1620, 990], "references": ["original", "sheet"], "screen": null, "batch": "B-BUTTONS-PARCHMENT", "notes": "ARC-UI-3272 (owner 2026-11-26): ink on white, the alpha is the ink; the light idle ink by rule (small_kit.py)"},
+    {"id": "plate-schem-slab", "group": "part", "kind": "plate", "title": "Schematics skill button, the empty stone slab under the parchment (art 568)", "file": "plate-schem-slab.txt", "size": [1254, 1254], "references": ["original", "sheet"], "screen": null, "batch": "B-BUTTONS-PARCHMENT", "notes": "ARC-UI-3272 (owner 2026-11-26): the raised slab only; the pressed slab by rule (small_kit.py)"}
   ]
 }

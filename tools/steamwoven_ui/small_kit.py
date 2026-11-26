@@ -3,7 +3,8 @@
 ARC-UI-3272: the schematics skill button and arrows and the follower cycle arrows) as kit parts, in six families (owner 2026-11-25 and 2026-11-26).
 
 * `rect` (the owner kept these from the old HD pack, the installed `interface-redraw-4x`, 4 px per original cell): the stone Add / Remove (647, 648) and the follower arrows (501, 502): the kit part IS the pack's frame of each state at the master size, opaque.
-* `paper` (568, the schematics skill button), `ink` (372, 373, the schematics page arrows): Codex draws the object alone (the parchment on magenta, the ink on white); it is cut along its own edge, put where the original has it, and the states are made by rule.
+* `paper` (568, the schematics skill button): a Codex stone slab and on it the Codex parchment with its symbol, cut along the torn edge into the original's place; the lit and the pressed looks by rule.
+* `ink` (372, 373, the schematics page arrows): Codex draws the ink alone on white; it is cut out, put where the original has it, and the states are made by rule.
 * `wedge` (827, 828, the follower cycle arrows): the olive Codex plate of #3323 without its symbol, cut to the button's shape, and a straight-edged triangle by rule, one full face per state.
 * `dome` (624, 625, 667, 668): by rule, no pack and no Codex: the accepted round face of the bottom strip's buttons (#3202) reduced under the brass ring of the sockets (#2481), the symbol (red checkered cells) by rule E from the original's own frames,
   the hover and pressed overlays as in `round_kit.py`; all four buttons share the plate, so every such button looks the same.
@@ -18,7 +19,7 @@ ARC-UI-3272: the schematics skill button and arrows and the follower cycle arrow
 Per button (TRD SWI-KIT-5; the runtime's convention `SteamwovenKitComposer.ButtonLayers`: face, over it the glyph, over both the overlay `<face>_hover` or `<face>_pressed`):
 
 * `plate.<name>`: the idle face at the plate's master size.
-* `plate.<name>_hover`, `plate.<name>_pressed`: the face of that state; a `rect`, `wedge` or `codex` part is a full opaque frame (laid over the idle plate it replaces it); a `paper` or `ink` frame has the idle frame's alpha and is meant to take the idle frame's place (laid over it, its soft edge doubles; #3341), a `dome` part is an overlay (the lit symbol, the darkened plate) clipped to the plate.
+* `plate.<name>_hover`, `plate.<name>_pressed`: the face of that state; a `rect`, `paper`, `wedge` or `codex` part is a full opaque frame (laid over the idle plate it replaces it); an `ink` frame has the idle frame's alpha and is meant to take the idle frame's place (laid over it, its soft edge doubles; #3341), a `dome` part is an overlay (the lit symbol, the darkened plate) clipped to the plate.
 * `glyph.<name>`: the symbol of a `dome` button (rule E); an EMPTY layer at the plate's size for the others (the symbol is in the face; the runtime composes a face only with a glyph of its size).
 
 The shared soft shadow of round parts (#3249) is a separate runtime layer, not baked into these parts. The Codex sheets are copied to `local/steamwoven-ui/small-sheets/<sheet>.png` with the runner's provenance record next to them.
@@ -499,6 +500,7 @@ LIT_RIM = 2            # master px of the lit symbol's solid outline
 LIT_DARK = 0.68        # the darker cell of a lit symbol, as a share of the bright one's colour
 LIT_SAMPLES = 4        # sub-samples a side for a cell edge inside a master pixel
 PAPER_SHEET = "plate-schem-skills"     # left the idle look, right the lit one
+PAPER_SLAB = "plate-schem-slab"        # the raised stone slab, bare
 INK_SHEET = "glyph-schem-arrows"       # left the left arrow, right the right arrow, dark ink on white
 INK_DARK = 70          # an original cell darker than this is ink of the dark state; both states take their colour from those cells
 # the generator copied a one-cell stair of the original at both arrow heads: along the head's slanting edge (x from, x to, a point of the edge, its slope; px of the sheet) the ink is cut to that line and the notch under it filled.
@@ -540,24 +542,6 @@ def cut_from_magenta(cell: Image) -> Image:
     fit.key_background(out, colour, spread)
     fit.decontaminate(out, 255, fit.SOURCE_EDGE_RADIUS)
     return out
-
-
-def within(content: Image, outline: Image, under: Image, dy: int = 0) -> Image:
-    """`content` moved down by `dy` px inside the alpha of `outline`; where it has no solid pixel, `under` shows."""
-    out = Image(outline.w, outline.h, bytearray(under.data))
-    for y in range(outline.h):
-        for x in range(outline.w):
-            o = (y * outline.w + x) * 4
-            if y - dy >= 0 and content.data[((y - dy) * content.w + x) * 4 + 3] >= 250:
-                out.data[o:o + 3] = content.data[((y - dy) * content.w + x) * 4:((y - dy) * content.w + x) * 4 + 3]
-            out.data[o + 3] = outline.data[o + 3]
-    return out
-
-
-def ink_trim(path: Path, name: str) -> tuple:
-    if button_kit.sha256_file(path) != INK_SHEET_SHA256:
-        raise SmallError(f"{path}: not the arrow sheet its head trim is measured on (INK_SHEET_SHA256)")
-    return INK_TRIM[name]
 
 
 def is_sheet_cell(p: tuple) -> bool:
@@ -605,18 +589,65 @@ def lit_cells(part: Image, units: tuple[int, int]) -> Image:
     return out
 
 
-def paper_parts(frames: Path, sheet: Image, b: Small) -> dict[str, Image]:
-    """The parchment of the schematics button: idle and lit from the two sheet cells, both in the original parchment's place and in the idle outline; pressed is the lit content one original cell lower, as the original moves it."""
-    original = read_frame(frames, b, b.frames["idle"])
+def is_stone_cell(p: tuple) -> bool:
+    """An original cell of the bare stone: grey, neither the parchment nor its symbol."""
+    return abs(p[0] - p[2]) < 20
+
+
+def toned_slab(slab: Image, original: Image) -> Image:
+    """The generated stone brought to the original's: each channel scaled so that the face's mean (the middle four fifths) is the mean of the original's stone cells inside its outer ring."""
+    stone = [(x, y) for y in range(1, original.h - 1) for x in range(1, original.w - 1) if is_stone_cell(original.pixel(x, y))]
+    if not stone:
+        raise SmallError("the original frame has no stone cell")
+    target = mean_colour(original, stone)
+    face = slab.crop(slab.w // 10, slab.h // 10, slab.w * 4 // 5, slab.h * 4 // 5)
+    gain = [target[k] * (len(face.data) / 4) / max(1, sum(face.data[k::4])) for k in range(3)]
+    out = Image(slab.w, slab.h, bytearray(slab.data))
+    for k in range(3):
+        out.data[k::4] = bytes(slab.data[k::4]).translate(bytes(min(255, round(v * gain[k])) for v in range(256)))
+    return out
+
+
+def sunk_slab(slab: Image, step: int, edge: tuple[int, int, int]) -> Image:
+    """The pressed slab as the original makes it: the raised one `step` px lower (its bottom edge stays), a dark line of `step` px along the top and the left."""
+    out = Image(slab.w, slab.h, bytearray(slab.data))
+    for y in range(step, slab.h - step):
+        out.data[y * slab.w * 4:(y + 1) * slab.w * 4] = slab.data[(y - step) * slab.w * 4:(y - step + 1) * slab.w * 4]
+    for y in range(slab.h):
+        for x in range(slab.w if y < step else step):
+            out.data[(y * slab.w + x) * 4:(y * slab.w + x) * 4 + 3] = bytes(edge)
+    return out
+
+
+def ink_trim(path: Path, name: str) -> tuple:
+    if button_kit.sha256_file(path) != INK_SHEET_SHA256:
+        raise SmallError(f"{path}: not the arrow sheet its head trim is measured on (INK_SHEET_SHA256)")
+    return INK_TRIM[name]
+
+
+def paper_parts(frames: Path, sheet: Image, slab: Image, b: Small) -> dict[str, Image]:
+    """The schematics button as the original builds it: a stone slab, the parchment on it, the symbol on the parchment. Idle and hover lie on the raised slab (the dark symbol, then the lit one), pressed on the sunk slab
+    with the lit parchment one original cell lower. Every state is a full opaque frame."""
+    original, pressed = (read_frame(frames, b, b.frames[s]) for s in ("idle", "pressed"))
     box = cells_box(original, lambda p: p[0] - p[2] >= PAPER_WARM)
     bare = [(x, y) for y in range(original.h) for x in range(original.w) if is_sheet_cell(original.pixel(x, y))]
     if not bare:
         raise SmallError("the original frame has no bare sheet cell")
     target = tuple(PAPER_LIGHT * v for v in mean_colour(original, bare))
     idle, lit = (placed(toned(cut_from_magenta(sheet.crop(k * (sheet.w // 2), 0, sheet.w // 2, sheet.h)), target), box, b.units, b.master) for k in (0, 1))
-    fit.decontaminate(idle, 255, fit.EDGE_RADIUS)
-    hover = within(lit_cells(lit, b.units), idle, idle)
-    return {f"plate.{b.name}": idle, f"plate.{b.name}_hover": hover, f"plate.{b.name}_pressed": within(hover, idle, hover, round(b.master[1] / b.units[1])), f"glyph.{b.name}": Image.blank(*b.master)}
+    for layer in (idle, lit):
+        fit.decontaminate(layer, 255, fit.EDGE_RADIUS)
+    lit = lit_cells(lit, b.units)
+    raised = resample(toned_slab(slab, original), *b.master)
+    step = round(b.master[1] / b.units[1])
+    sunk = sunk_slab(raised, step, mean_colour(pressed, [(x, 0) for x in range(pressed.w)]))
+    parts = {}
+    for ident, base, layer, dy in ((f"plate.{b.name}", raised, idle, 0), (f"plate.{b.name}_hover", raised, lit, 0), (f"plate.{b.name}_pressed", sunk, lit, step)):
+        face_image = Image(base.w, base.h, bytearray(base.data))
+        over(face_image, layer, 0, dy)
+        parts[ident] = face_image
+    parts[f"glyph.{b.name}"] = Image.blank(*b.master)
+    return parts
 
 
 def ink_alpha(cell: Image, colour: tuple[int, int, int]) -> Image:
@@ -789,7 +820,10 @@ def build_parts(args: argparse.Namespace, buttons: list[Small]) -> tuple[dict[st
         else:
             path = sheet_path(sheets, PAPER_SHEET if b.family == "paper" else INK_SHEET)
             sheet_image = pngio.read(path)
-            p = paper_parts(frames, sheet_image, b) if b.family == "paper" else ink_parts(frames, sheet_image, b, ink_trim(path, b.name))
+            if b.family == "paper":
+                p = paper_parts(frames, sheet_image, pngio.read(sheet_path(sheets, PAPER_SLAB)), b)
+            else:
+                p = ink_parts(frames, sheet_image, b, ink_trim(path, b.name))
         parts.update(p)
         sources.update({ident: None if ident.startswith("glyph.") else path for ident in p})
     codex = [b for b in buttons if b.family == "codex"]
@@ -813,7 +847,7 @@ def owner_of(ident: str) -> Small:
 
 RULES = {
     "rect": "pack-first (owner 2026-11-25): the old HD pack's frame of this state at the master size, opaque (kept by the owner: the stone Add / Remove and the follower arrows)",
-    "paper": "Codex and rules (owner 2026-11-26, ARC-UI-3272): the parchment and symbol drawn alone on magenta, cut along its edge into the original parchment's place, the paper toned by rule; hover = the lit cell, its symbol an outline with even cells inside, in the idle outline; pressed = it one original cell lower",
+    "paper": "Codex and rules (owner 2026-11-26, ARC-UI-3272): a Codex stone slab and on it the Codex parchment (cut from magenta into the original parchment's place, toned by rule); hover = the lit parchment, its symbol an outline with even cells inside; pressed = the slab sunk by rule and the lit parchment one original cell lower",
     "ink": "Codex and rules (owner 2026-11-26, ARC-UI-3272): the arrow's ink drawn on white, the alpha taken from it, put in the place of the original's ink; each state in the colour of the original's ink cells",
     "wedge": "by rule (owner 2026-11-26, ARC-UI-3272): the olive Codex plate of #3323 without its symbol, cut to the button's shape (pressed in by the original's own darkening), and a straight-edged triangle of the original's red cells",
     "dome": "by rule (owner 2026-11-25): the accepted round face of #3202 + the brass ring of the sockets (#2481) + the symbol by rule E from the original's own frames, states as in #3202",
@@ -845,6 +879,9 @@ def record_of(ident: str, b: Small, source: Path | None, image_path: Path, args:
                 raise SmallError(f"{provenance}: not a JSON provenance record ({error})") from error
         if b.family in ("paper", "ink", "wedge"):
             record["source"]["frames"] = b.folder
+        if b.family == "paper":
+            slab = source.parent / f"{PAPER_SLAB}.png"
+            record["source"]["slab"] = {"sheet": slab.name, "sha256": button_kit.sha256_file(slab)}
     elif b.family == "dome" and not empty:
         masters = args.local_root / "masters"
         record["source"] = {"face": DOME_PLATE, "face_sha256": button_kit.sha256_file(masters / f"{DOME_PLATE}.png"), "ring": DOME_RING, "ring_sha256": button_kit.sha256_file(masters / f"{DOME_RING}.png"), "frames": b.folder}

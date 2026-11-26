@@ -430,24 +430,32 @@ class CutOutTest(unittest.TestCase):
                 image.data[(y * image.w + x) * 4:(y * image.w + x) * 4 + 4] = bytes((*rgb, 255))
         return image
 
-    def test_the_parchment_is_cut_into_the_originals_place_and_pressed_moves_it_down(self):
+    def schem_frame(self, state: str) -> pngio.Image:
+        """A synthetic original: grey stone, the parchment on it, a dark top row when pressed."""
+        frame = self.block(flat_frame(32, 32, (80, 80, 82)), 6, 4, 26, 28, (170, 140, 100))
+        return self.block(frame, 0, 0, 32, 1, (28, 28, 28)) if state == "pressed" else frame
+
+    def test_the_parchment_lies_on_the_slab_and_pressed_sinks_both(self):
         b = sk.button_named("char_schem_skills")
         sheet = flat_frame(240, 120, (255, 0, 255))
         for k, symbol in enumerate(((90, 45, 10), (230, 20, 10))):
             self.block(sheet, k * 120 + 20, 20, k * 120 + 100, 100, (170, 140, 100))
             self.block(sheet, k * 120 + 50, 45, k * 120 + 70, 65, symbol)
         sheet.data[(119 * 240) * 4:(119 * 240) * 4 + 4] = bytes((90, 90, 90, 255))   # a stray corner pixel is not the parchment's edge
+        slab = self.block(flat_frame(114, 114, (40, 40, 40)), 0, 0, 114, 4, (200, 200, 200))
         with tempfile.TemporaryDirectory() as tmp:
-            self.frames(Path(tmp), b, lambda state: self.block(flat_frame(32, 32, (80, 80, 82)), 6, 4, 26, 28, (170, 140, 100)))
-            parts = sk.paper_parts(Path(tmp), sheet, b)
+            self.frames(Path(tmp), b, self.schem_frame)
+            parts = sk.paper_parts(Path(tmp), sheet, slab, b)
         idle, hover, pressed = (parts[f"plate.{b.name}{s}"] for s in ("", "_hover", "_pressed"))
-        solid = [(x, y) for y in range(114) for x in range(114) if idle.pixel(x, y)[3] >= 128]
-        self.assertAlmostEqual(min(x for x, _ in solid), 6 * 114 / 32, delta=1.5)
-        self.assertAlmostEqual(max(y for _, y in solid), 28 * 114 / 32, delta=1.5)
-        self.assertEqual(idle.pixel(2, 2)[3], 0)
-        self.assertEqual(hover.data[3::4], idle.data[3::4])
-        self.assertEqual(pressed.data[3::4], idle.data[3::4])
-        red_top = lambda image: min(y for y in range(114) if image.pixel(60, y)[0] > 200 and image.pixel(60, y)[1] < 60)  # noqa: E731
+        for image in (idle, hover, pressed):
+            self.assertEqual(set(image.data[3::4]), {255})
+        self.assertEqual(idle.pixel(2, 50)[:3], (80, 80, 82), "the stone has the original's tone")
+        self.assertGreater(idle.pixel(50, 1)[0], 200, "the lit upper chamfer")
+        self.assertEqual((pressed.pixel(50, 1)[:3], pressed.pixel(1, 50)[:3]), ((28, 28, 28), (28, 28, 28)))
+        self.assertGreater(pressed.pixel(50, 5)[0], 200, "the chamfer one cell lower")
+        paper = [x for x in range(114) if idle.pixel(x, 90)[0] > 150]
+        self.assertAlmostEqual(min(paper), 6 * 114 / 32, delta=2)
+        red_top = lambda image: min(y for y in range(114) if image.pixel(60, y)[0] > 120 and image.pixel(60, y)[1] < 60)  # noqa: E731
         self.assertEqual(red_top(pressed) - red_top(hover), 4)
 
     def test_a_parchment_sheet_without_the_magenta_ground_is_an_error(self):
@@ -488,15 +496,16 @@ class CutOutTest(unittest.TestCase):
         for k in (0, 1):
             self.block(sheet, k * 120 + 20, 20, k * 120 + 100, 100, (170, 140, 100))
         with tempfile.TemporaryDirectory() as tmp:
-            self.frames(Path(tmp), b, lambda state: self.block(flat_frame(32, 32, (80, 80, 82)), 6, 4, 26, 28, (170, 140, 100)))
+            self.frames(Path(tmp), b, self.schem_frame)
             pngio.write(Path(tmp) / f"{sk.PAPER_SHEET}.png", sheet)
+            pngio.write(Path(tmp) / f"{sk.PAPER_SLAB}.png", flat_frame(114, 114, (40, 40, 40)))
             args = ARGS()
             args.pack, args.local_root, args.frames, args.sheets, args.sp_variant = Path(tmp) / "none", Path(tmp), Path(tmp), Path(tmp), "sp-b"
             parts, sources = sk.build_parts(args, [b])
             path = Path(tmp) / "part.png"
             pngio.write(path, parts[f"plate.{b.name}"])
             record = sk.record_of(f"plate.{b.name}", b, sources[f"plate.{b.name}"], path, args)
-            self.assertEqual((record["source"]["sheet"], record["source"]["frames"]), (f"{sk.PAPER_SHEET}.png", b.folder))
+            self.assertEqual((record["source"]["sheet"], record["source"]["frames"], record["source"]["slab"]["sheet"]), (f"{sk.PAPER_SHEET}.png", b.folder, f"{sk.PAPER_SLAB}.png"))
             self.assertIsNone(sk.record_of(f"glyph.{b.name}", b, sources[f"glyph.{b.name}"], path, args)["source"])
 
 
