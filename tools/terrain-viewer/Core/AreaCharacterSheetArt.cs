@@ -177,11 +177,11 @@ public static class AreaCharacterSheetArtLayout
     /// <summary>The alignment gauge's place: its frame lands with its hot point on the window's (56, 181) (0x55ED31 subtracts the hot point).</summary>
     public static (int X, int Y) AlignmentTopLeft(int hotX, int hotY) => (56 - hotX, 181 - hotY);
 
-    /// <summary>ARC-UI-3321: the corner, in the kit part <c>fixture.align_needle</c>, of a needle frame's cell (35 units, 7 across; <c>sheet_parts.py</c>); the cell holds the frame at its original size with <see cref="NeedleShadow"/> units more for its shadow.</summary>
-    public static (int X, int Y) NeedleCell(int frame) => (35 * (frame % 7), 35 * (frame / 7));
+    /// <summary>ARC-UI-3321: the corner, in the kit part <c>fixture.align_needle</c>, of a needle frame's cell (35 units, 7 across; <c>sheet_parts.py</c>); the cell holds the frame from its corner with the needle's soft shadow down and to the right, and the whole cell is drawn at the original's hot point.</summary>
+    public static (int X, int Y) NeedleCell(int frame) => (NeedleCellUnits * (frame % 7), NeedleCellUnits * (frame / 7));
 
-    /// <summary>The units a needle frame's cell is drawn beyond the frame, right and below, for the shadow.</summary>
-    public const int NeedleShadow = 2;
+    /// <summary>The side of a needle frame's cell in the kit part, in units.</summary>
+    public const int NeedleCellUnits = 35;
 
     /// <summary>The aptitude marker art 255's top-left: x 775, y 221 less the aptitude × 128 / 100 (truncating).</summary>
     public static (int X, int Y) AptitudeMarker(int aptitude) => (775, 221 - aptitude * 128 / 100);

@@ -340,10 +340,10 @@ public partial class AreaCharacterSheetArtView : Control
         {
             var (hotX, hotY) = frame < _alignmentHot.Length ? _alignmentHot[frame] : (0, 0);
             var (x, y) = AreaCharacterSheetArtLayout.AlignmentTopLeft(hotX, hotY);
-            // ARC-UI-3321: over the kit the needle is the kit's clean HD frame (the art's own frame carries its shadow as grey pixels painted for the old dial, #3312); its size and hot point are the original's.
+            // ARC-UI-3321: over the kit the needle is the kit's clean HD frame (the art's own frame carries its shadow as grey pixels painted for the old dial, #3312); its hot point is the original's, and its soft shadow reaches into the cell beyond the frame.
             var (cellX, cellY) = AreaCharacterSheetArtLayout.NeedleCell(frame);
-            var extra = AreaCharacterSheetArtLayout.NeedleShadow;
-            if (!KitBackgroundShown || !AreaKitFixtures.DrawRegion(this, 1, AreaKitStandIns.NeedlePart, x, y, cellX, cellY, needle.GetWidth() + extra, needle.GetHeight() + extra))
+            const int cell = AreaCharacterSheetArtLayout.NeedleCellUnits;
+            if (!KitBackgroundShown || !AreaKitFixtures.DrawRegion(this, 1, AreaKitStandIns.NeedlePart, x, y, cellX, cellY, cell, cell))
                 DrawTextureRect(needle, new Rect2(x, y, needle.GetWidth(), needle.GetHeight()), false);
         }
         if (Art(AreaCharacterSheetArtLayout.AptitudeArt) is { } marker)

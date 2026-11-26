@@ -107,8 +107,10 @@ class SheetPartTests(unittest.TestCase):
             ox, oy = (index % 7) * cell, (index // 7) * cell
             at = lambda x, y: atlas.pixel(int((ox + x) * scale), int((oy + y) * scale))  # noqa: E731
             self.assertEqual(at(12, 50), (90, 25, 20, 255), index)
-            self.assertEqual(at(29, 50)[3], 0, index)  # the baked grey shadow is gone
-            self.assertTrue(0 < at(17, 50)[3] < 100 and at(17, 50)[:3] == (0, 0, 0), index)  # the new one is translucent black
+            self.assertEqual(at(29, 50)[:3], (0, 0, 0), index)  # the baked grey shadow is gone: only the black soft shadow lies there
+            if index == sheet_parts.NEEDLE_FRAMES // 2:  # the bar stands as the upright frame does: tip up, foot at the bottom
+                self.assertTrue(60 < at(26, 70)[3] <= 179 and at(26, 70)[:3] == (0, 0, 0))  # the new one is translucent black, 14 px down and right
+                self.assertEqual(at(26, 118)[3], 0)  # none of it falls past the foot, where the dial's hub lies
 
     def test_a_part_is_cut_by_one_cutter_only(self) -> None:
         self.assertEqual(set(sheet_parts.BY_ID) & set(label_parts.BY_ID), set())

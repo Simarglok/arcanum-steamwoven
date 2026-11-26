@@ -106,7 +106,8 @@ NEEDLE_FRAMES, NEEDLE_COLUMNS, NEEDLE_CELL = 21, 7, 35  # art 254's frames in ce
 NEEDLE_CAST = 0.30  # (red - blue) / (red + 1) above this is the needle's own red, rust or brass; the baked grey shadow is under it
 NEEDLE_PIECE = 40  # px: a smaller piece of that colour is a stray, as is one under a quarter of the frame's largest
 NEEDLE_SMOOTH = 1.6  # px: the found outline is smoothed this much (the pack's own edge keeps the original's pixel stairs)
-NEEDLE_SHADOW_OFFSET, NEEDLE_SHADOW_SIGMA, NEEDLE_SHADOW = 3, 2.0, 0.35  # px, px, alpha: down and to the right, as the sheet's parts cast theirs
+NEEDLE_SHADOW_OFFSET, NEEDLE_SHADOW_SIGMA, NEEDLE_SHADOW = 14, 4.8, 0.7  # px, px, alpha: the shared soft shadow (#3249: 3.6 units down and right, strength 0.7), its blur cut to 1.2 units as the needle is only 2.5 wide (the shared 4.4 would wash it out)
+NEEDLE_FOOT_FADE = 8  # px: the shadow fades in over this from the needle's foot, so none of it falls past the foot onto the dial's hub
 IDENTS = tuple(part.ident for part in PARTS) + (NEEDLE,)  # every id this tool cuts
 
 
@@ -389,10 +390,11 @@ def build_part(frame: pngio.Image, part: SolidPart) -> pngio.Image:
 
 # ---------------------------------------------------------------- the needle
 
-def clean_needle(frame: pngio.Image) -> list[list[list[float]]]:
-    """A needle frame of the pack without its baked grey shadow, premultiplied planes (red, green, blue, alpha 0..255), with room right and below for the shadow drawn by rule."""
-    pad = NEEDLE_SHADOW_OFFSET * 2 + 2
-    width, height = frame.w + pad, frame.h + pad
+def clean_needle(frame: pngio.Image, index: int = NEEDLE_FRAMES // 2) -> list[list[list[float]]]:
+    """A needle frame of the pack without its baked grey shadow, premultiplied planes (red, green, blue, alpha 0..255), in its cell with room right and below for the shadow drawn by rule; `index` (0 points left, 10 up, 20 right) says which end is the foot."""
+    width = height = NEEDLE_CELL * HD  # the whole cell, so the shadow has room right and below the needle
+    if frame.w > width or frame.h > height:
+        raise ValueError(f"a needle frame of {frame.w} x {frame.h} does not fit a cell of {NEEDLE_CELL} units")
     own = [[False] * width for _ in range(height)]
     for y in range(frame.h):
         for x in range(frame.w):
@@ -407,6 +409,10 @@ def clean_needle(frame: pngio.Image) -> list[list[list[float]]]:
     soft = label_parts.blur([[1.0 if v else 0.0 for v in row] for row in kept], EDGE_SIGMA * 0.75)
     moved = [[1.0 if y >= NEEDLE_SHADOW_OFFSET and x >= NEEDLE_SHADOW_OFFSET and kept[y - NEEDLE_SHADOW_OFFSET][x - NEEDLE_SHADOW_OFFSET] else 0.0 for x in range(width)] for y in range(height)]
     shadow = label_parts.blur(moved, NEEDLE_SHADOW_SIGMA)
+    angle = math.pi * (1.0 - index / (NEEDLE_FRAMES - 1))
+    ux, uy = math.cos(angle), -math.sin(angle)  # towards the tip
+    foot = min(x * ux + y * uy for y in range(height) for x in range(width) if kept[y][x])
+    shadow = [[v * min(max((x * ux + y * uy - foot) / NEEDLE_FOOT_FADE, 0.0), 1.0) for x, v in enumerate(row)] for y, row in enumerate(shadow)]
     planes = [[[0.0] * width for _ in range(height)] for _ in range(4)]
     for y in range(height):
         for x in range(width):
@@ -430,10 +436,7 @@ def build_needle(folder: Path) -> pngio.Image:
     cell = NEEDLE_CELL * HD
     atlas = [[[0.0] * (NEEDLE_COLUMNS * cell) for _ in range(rows * cell)] for _ in range(4)]
     for index in range(NEEDLE_FRAMES):
-        frame = pngio.read(folder / f"f{index:03d}.png")
-        planes = clean_needle(frame)
-        if len(planes[0]) > cell or len(planes[0][0]) > cell:
-            raise ValueError(f"needle frame {index}: {frame.w} x {frame.h} does not fit a cell of {NEEDLE_CELL} units")
+        planes = clean_needle(pngio.read(folder / f"f{index:03d}.png"), index)
         ox, oy = (index % NEEDLE_COLUMNS) * cell, (index // NEEDLE_COLUMNS) * cell
         for c in range(4):
             for y, row in enumerate(planes[c]):
@@ -560,10 +563,11 @@ def self_test() -> int:
     planes = clean_needle(bar)
     if planes[3][30][12] < 254.0 or abs(planes[0][30][12] * 255.0 / planes[3][30][12] - 90.0) > 1.0:
         problems.append("the needle's own pixels are not kept as they are")
-    if planes[3][30][26] != 0.0:
+    if planes[0][30][26] != 0.0 or planes[3][30][26] > NEEDLE_SHADOW * 255.0 + 1.0:
         problems.append("the needle frame keeps its baked grey shadow")
-    if not 0.05 * 255.0 < planes[3][30][17] <= NEEDLE_SHADOW * 255.0 + 1.0 or planes[0][30][17] != 0.0:
-        problems.append("no translucent dark shadow right of the needle")
+    under = (30 + NEEDLE_SHADOW_OFFSET, 13 + NEEDLE_SHADOW_OFFSET)  # the shadow of the bar's middle
+    if not 0.25 * 255.0 < planes[3][under[0]][under[1]] <= NEEDLE_SHADOW * 255.0 + 1.0 or planes[0][under[0]][under[1]] != 0.0:
+        problems.append("no translucent dark shadow down and right of the needle")
     for problem in problems:
         print("SHEET PARTS FAIL:", problem)
     if problems:
