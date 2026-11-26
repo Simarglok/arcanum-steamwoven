@@ -116,9 +116,13 @@ On the first start the **launcher** screen opens before the main menu:
    with another executable the screen says so. Your game folder is only read.
 
 To open the launcher again, **hold Shift** while the game starts. **Reset settings** on the launcher forgets the stored
-folder and rules. The launcher also has the **HD** (Off/On: the HD interface art and fonts and the relit night lighting), **HD pack**
-and experimental **Generated interface** rows for an HD pack you have built or copied yourself (they are not in the
+folder and rules. The launcher also has the **HD** (Off/On: the HD interface art and fonts and the relit night lighting) and **HD pack**
+rows for an HD pack you have built or copied yourself, and with HD On a **World zoom** row (they are not in the
 Options window); each choice is saved at once, and the pack source applies from the next start.
+
+**Separate rendering thread (experimental)** is off by default. Turned on, it gives more frames per second when the hero walks or
+the view scrolls, but the engine warns that it may crash. After **Play** the game then closes and starts once more by itself (a
+few seconds). If it crashes, start the game again with **Shift** held and turn the box off.
 
 ## 5. Where your settings and saves live
 

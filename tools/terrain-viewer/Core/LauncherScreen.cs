@@ -101,6 +101,9 @@ public sealed class LauncherScreen
     /// <summary>ARC-DEV-2270: a held quit key (Cmd+Q) quits without the question; off, the held key asks as a short press does.</summary>
     public void SetHoldToQuit(bool on) { Settings = Settings with { HoldToQuit = on }; Notice = null; }
 
+    /// <summary>ARC-RENDER-3420: the separate rendering thread (experimental), stored by Play, which restarts the game once to apply it.</summary>
+    public void SetSeparateRenderThread(bool on) { Settings = Settings with { SeparateRenderThread = on }; Notice = null; }
+
     /// <summary>The settings to store and open: the ready folder with its source and identity, the rule mode, "show at start" and the debug mode;
     /// null (with the notice) when no ready folder is chosen.</summary>
     public LauncherSettings? Play()
