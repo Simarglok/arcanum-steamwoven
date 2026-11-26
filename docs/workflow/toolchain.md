@@ -1431,12 +1431,12 @@ it gives the original's frame back (the symbol's cells exactly; the tests check 
 
 ## Steamwoven small stone and dark buttons, batch B-BUTTONS slice 6 (ARC-UI-3206, ARC-UI-3323)
 
-The kit parts of the small stone and dark buttons (18 arts) in three families ([TRD](../ui/steamwoven-interface-trd.md#asset-kit), owner decisions 2026-11-25): `rect` from the old HD pack (the owner kept only the stone Add / Remove 647, 648 and the follower arrows 501, 502), `dome` by rule (the round skill and slider buttons 624, 625, 667, 668: the accepted round face of #3202 under the brass ring of the sockets, the symbol by rule E) and `codex` (the olive plus and minus 804, 805, the scroll arrows 317, 318, the follow scrolls 506 to 509 and the skill-point plus and minus 257, 258: one generated sheet of cells per family, cut and reduced). Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for the sheet, no Godot and no `dotnet`, so no launch queue:
+The kit parts of the small buttons (23 arts: slice 6 plus the five parchment and dark controls of ARC-UI-3272) in four families ([TRD](../ui/steamwoven-interface-trd.md#asset-kit), owner decisions 2026-11-25): `rect` from the old HD pack (the stone Add / Remove 647, 648 and the follower arrows 501, 502, kept by the owner; the schematics skill button 568 and arrows 372, 373 of ARC-UI-3272), `wedge` by rule (the follower cycle arrows 827, 828, whose pack frames are broken: the original frame's flat plate cells at the master size and a straight-edged triangle with the span and area of its red cells, one full face per state), `dome` by rule (the round skill and slider buttons 624, 625, 667, 668: the accepted round face of #3202 under the brass ring of the sockets, the symbol by rule E) and `codex` (the olive plus and minus 804, 805, the scroll arrows 317, 318, the follow scrolls 506 to 509 and the skill-point plus and minus 257, 258: one generated sheet of cells per family, cut and reduced). Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for the sheet, no Godot and no `dotnet`, so no launch queue:
 
 ```sh
-python3 -B tools/steamwoven_ui/small_kit.py plan                           # the 18 buttons, their family, states and the manifest size check
+python3 -B tools/steamwoven_ui/small_kit.py plan                           # the 23 buttons, their family, states and the manifest size check
 python3 -B tools/steamwoven_ui/small_kit.py build [--only NAME,...] [--dry-run] [--pack DIR] [--sheets DIR] [--sp-variant sp-a|sp-b]   # plate / _hover / _pressed / glyph -> masters/ and provenance/rule/ (pack file, sheet and hash in each record)
-python3 -B tools/steamwoven_ui/small_kit.py sheet --out FILE [--zoom N] [--only NAME,...]      # the composite original idle, pressed | new idle, hover, pressed (English labels)
+python3 -B tools/steamwoven_ui/small_kit.py sheet --out FILE [--zoom N] [--only NAME,...]      # the composite original, every state | new, every state (English labels)
 python3 -B tools/steamwoven_ui/small_kit.py self-test
 ```
 

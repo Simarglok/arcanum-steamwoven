@@ -294,6 +294,52 @@ class PackTest(unittest.TestCase):
             self.assertIsNone(glyph["source"])
 
 
+class WedgeTest(unittest.TestCase):
+    PLATE, RED = (30, 28, 0), (92, 0, 0)
+
+    def stair(self, left: bool) -> pngio.Image:
+        """A synthetic follower cycle arrow: a flat olive plate with a staircase triangle of 7 columns of 1, 3, ... 13 cells."""
+        frame = flat_frame(12, 19, self.PLATE)
+        for k in range(7):
+            x = 2 + k if left else 9 - k
+            for y in range(9 - k, 10 + k):
+                frame.data[(y * 12 + x) * 4:(y * 12 + x) * 4 + 4] = bytes((*self.RED, 255))
+        return frame
+
+    def test_the_fit_spans_the_cells_and_keeps_their_area(self):
+        for left in (True, False):
+            wedge = sk.fit_wedge(self.stair(left))
+            self.assertEqual((wedge.tip, wedge.base), (2, 9) if left else (10, 3))
+            self.assertEqual((wedge.axis, wedge.colour), (9.5, self.RED))
+            self.assertAlmostEqual(abs(wedge.base - wedge.tip) * wedge.half, 49)
+
+    def test_the_face_keeps_the_plate_and_draws_a_straight_triangle(self):
+        for left in (True, False):
+            face = sk.wedge_face(self.stair(left), (48, 76))
+            self.assertEqual(face.pixel(2, 2), (*self.PLATE, 255))
+            self.assertEqual(face.pixel(24, 38), (*self.RED, 255))
+            covered = sum(1 for y in range(76) for x in range(48) if face.pixel(x, y)[:3] == self.RED)
+            self.assertAlmostEqual(covered / 16, 49, delta=4)
+            heights = [sum(1 for y in range(76) if face.pixel(x, y)[0] > 61) for x in (range(10, 34) if left else range(37, 13, -1))]
+            self.assertEqual(heights, sorted(heights))
+            self.assertLess(max(b - a for a, b in zip(heights, heights[1:])), 4, "no stair of a whole cell (4 px) is left")
+
+    def test_the_parts_are_full_faces_with_an_empty_glyph(self):
+        b = sk.button_named("followercycleleft")
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / b.folder).mkdir()
+            for number in b.frames.values():
+                pngio.write(Path(tmp) / b.folder / f"f{number}.png", self.stair(True))
+            parts = sk.wedge_parts(Path(tmp), [b])
+        self.assertEqual(set(parts), {f"plate.{b.name}", f"plate.{b.name}_hover", f"plate.{b.name}_pressed", f"glyph.{b.name}"})
+        self.assertEqual(sk.face(parts, b, "hover").data, parts[f"plate.{b.name}_hover"].data)
+        self.assertEqual(sum(parts[f"glyph.{b.name}"].data[3::4]), 0)
+
+    def test_a_frame_without_a_triangle_is_an_error(self):
+        with self.assertRaises(sk.SmallError):
+            sk.fit_wedge(flat_frame(12, 19, self.PLATE))
+
+
 class TableTest(unittest.TestCase):
     def test_every_button_matches_its_manifest_row(self):
         manifest = {r["id"]: r for r in json.loads(sk.MANIFEST.read_text(encoding="utf-8"))["parts"]}
@@ -307,8 +353,9 @@ class TableTest(unittest.TestCase):
     def test_names_are_unique_and_the_families_are_known(self):
         names = [b.name for b in (*sk.SMALL, *sk.GENERATED)]
         self.assertEqual(len(names), len(set(names)))
-        self.assertTrue(all(b.family in ("rect", "dome") for b in sk.SMALL))
-        self.assertEqual({b.name for b in sk.SMALL if b.family == "rect"}, {"spelltech_add", "spelltech_minus", "followerarrow_dwn", "followerarrow_up"})   # what the owner kept from the pack
+        self.assertTrue(all(b.family in ("rect", "wedge", "dome") for b in sk.SMALL))
+        self.assertEqual({b.name for b in sk.SMALL if b.family == "rect"}, {"spelltech_add", "spelltech_minus", "followerarrow_dwn", "followerarrow_up", "char_schem_skills", "schm_larrow", "schm_rarrow"})   # the pack frames kept
+        self.assertEqual({b.name for b in sk.SMALL if b.family == "wedge"}, {"followercycleleft", "followercycleright"})
         self.assertTrue(all(b.family == "codex" for b in sk.GENERATED))
         self.assertTrue(all("idle" in b.frames for b in (*sk.SMALL, *sk.GENERATED)))
 

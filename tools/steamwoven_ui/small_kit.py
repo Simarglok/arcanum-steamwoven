@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""ARC-UI-3206 and ARC-UI-3323 (batch B-BUTTONS, slice 6): the small buttons (scroll arrows, plus / minus, round skill and slider buttons, follow scrolls and arrows) as kit parts, in three families (owner 2026-11-25).
+"""ARC-UI-3206 and ARC-UI-3323 (batch B-BUTTONS, slice 6): the small buttons (scroll arrows, plus / minus, round skill and slider buttons, follow scrolls and arrows;
+ARC-UI-3272: the schematics skill button and arrows and the follower cycle arrows) as kit parts, in four families (owner 2026-11-25).
 
-* `rect` (the owner kept these from the old HD pack, the installed `interface-redraw-4x`, 4 px per original cell): the stone Add / Remove (647, 648) and the follower arrows (501, 502): the kit part IS the pack's frame of each state at the master size, opaque.
+* `rect` (the owner kept these from the old HD pack, the installed `interface-redraw-4x`, 4 px per original cell): the stone Add / Remove (647, 648), the follower arrows (501, 502), the schematics skill button (568) and arrows (372, 373): the kit part IS the pack's frame of each state at the master size, opaque.
+* `wedge` (827, 828, the follower cycle arrows, whose pack frames are broken): by rule from the original's own frames: the flat plate cells at the master size and a straight-edged triangle over them, one full face per state.
 * `dome` (624, 625, 667, 668): by rule, no pack and no Codex: the accepted round face of the bottom strip's buttons (#3202) reduced under the brass ring of the sockets (#2481), the symbol (red checkered cells) by rule E from the original's own frames,
   the hover and pressed overlays as in `round_kit.py`; all four buttons share the plate, so every such button looks the same.
 * `codex` (804, 805, 317, 318, 506 to 509, 257, 258): generated. One sheet of cells per family (the original frames enlarged and the neighbouring pack frames as the style sample are the input; the sheet is generated large), each cell cut by equal
@@ -15,7 +17,7 @@
 Per button (TRD SWI-KIT-5; the runtime's convention `SteamwovenKitComposer.ButtonLayers`: face, over it the glyph, over both the overlay `<face>_hover` or `<face>_pressed`):
 
 * `plate.<name>`: the idle face at the plate's master size.
-* `plate.<name>_hover`, `plate.<name>_pressed`: the face of that state; a `rect` or `codex` part is a full frame (laid over the idle plate it replaces it), a `dome` part is an overlay (the lit symbol, the darkened plate) clipped to the plate.
+* `plate.<name>_hover`, `plate.<name>_pressed`: the face of that state; a `rect`, `wedge` or `codex` part is a full frame (laid over the idle plate it replaces it), a `dome` part is an overlay (the lit symbol, the darkened plate) clipped to the plate.
 * `glyph.<name>`: the symbol of a `dome` button (rule E); an EMPTY layer at the plate's size for the others (the symbol is in the face; the runtime composes a face only with a glyph of its size).
 
 The shared soft shadow of round parts (#3249) is a separate runtime layer, not baked into these parts. The Codex sheets are copied to `local/steamwoven-ui/small-sheets/<sheet>.png` with the runner's provenance record next to them.
@@ -61,7 +63,7 @@ class Small:
     name: str                       # the plate's name in the manifest (`plate.<name>`) and the art's name in the pack's index
     art: int
     folder: str                     # the census frame folder (`<art>-<name>`)
-    family: str                     # `rect` (the pack's frame, opaque, as it is), `dome` (built by rule from the accepted round plate of #3202, a brass ring and the symbol by rule E), `codex` (generated, owner 2026-11-25)
+    family: str                     # `rect` (the pack's frame, opaque, as it is), `wedge` (by rule: the original's own flat plate and an analytic triangle, ARC-UI-3272), `dome` (built by rule from the accepted round plate of #3202, a brass ring and the symbol by rule E), `codex` (generated, owner 2026-11-25)
     units: tuple[int, int]          # the original frame, in cells
     master: tuple[int, int]         # the kit master of the plate, in px (kit.json)
     frames: dict = field(default_factory=lambda: {"idle": 0, "pressed": 1, "hover": 2})   # state -> frame number (a state without a frame has no overlay)
@@ -84,6 +86,11 @@ SMALL = (
     _stone("spelltech_minus", 648, "648-SpellTech_Minus"),
     Small("followerarrow_dwn", 501, "501-FollowerArrow_DWN", "rect", (67, 13), (240, 48), frames={"idle": 0}),
     Small("followerarrow_up", 502, "502-FollowerArrow_UP", "rect", (67, 13), (240, 48), frames={"idle": 0}),
+    Small("char_schem_skills", 568, "568-char_Schem_Skills", "rect", (32, 32), (114, 114)),
+    Small("schm_larrow", 372, "372-Schm_LArrow", "rect", (18, 22), (66, 78)),
+    Small("schm_rarrow", 373, "373-Schm_RArrow", "rect", (18, 22), (66, 78)),
+    Small("followercycleleft", 827, "827-FollowerCycleLeft", "wedge", (12, 19), (42, 66)),
+    Small("followercycleright", 828, "828-FollowerCycleRight", "wedge", (12, 19), (42, 66)),
 )
 # the buttons the owner rejected from the pack (2026-11-25, #3323) are made by Codex (family `codex`): the olive plus and minus, the scroll arrows, the follow scrolls and the skill-point plus and minus
 GENERATED = (
@@ -344,6 +351,75 @@ def dome_parts(local: Path, frames: Path, group: list[Small]) -> dict[str, Image
     return parts
 
 
+# --- the wedge family (ARC-UI-3272): the follower cycle arrows, whose pack frames are broken ---------------------------------------------------------------------
+
+WEDGE_SAMPLES = 8     # the triangle's coverage of a master pixel is sampled on a WEDGE_SAMPLES x WEDGE_SAMPLES grid
+
+
+@dataclass(frozen=True)
+class Wedge:
+    """A sideways isosceles triangle in original cells: the tip and the base's column edge, the axis row and the half height at the base."""
+    tip: float
+    base: float
+    axis: float
+    half: float
+    colour: tuple[int, int, int]
+
+    def holds(self, x: float, y: float) -> bool:
+        along = (x - self.tip) / (self.base - self.tip)
+        return 0.0 <= along <= 1.0 and abs(y - self.axis) <= self.half * along
+
+
+def red_cells(frame: Image) -> list[bool]:
+    """The cells of the flat red triangle (red above green; the plate is olive)."""
+    return [frame.data[i * 4 + 3] > 0 and frame.data[i * 4] - frame.data[i * 4 + 1] >= RED_DE for i in range(frame.w * frame.h)]
+
+
+def fit_wedge(frame: Image) -> Wedge:
+    """The straight-edged triangle of a frame's staircase of red cells: it spans the cells' columns, stands on their middle row and covers the same area; the tip is at the end with the shorter column."""
+    cells = [(i % frame.w, i // frame.w) for i, red in enumerate(red_cells(frame)) if red]
+    columns: dict[int, int] = {}
+    for x, _ in cells:
+        columns[x] = columns.get(x, 0) + 1
+    if len(columns) < 2:
+        raise SmallError("no red triangle in the frame")
+    first, last = min(columns), max(columns)
+    left = columns[first] < columns[last]
+    rows = [y for _, y in cells]
+    colour = tuple(round(sum(frame.pixel(x, y)[k] for x, y in cells) / len(cells)) for k in range(3))
+    return Wedge(first if left else last + 1, last + 1 if left else first, (min(rows) + max(rows) + 1) / 2.0, len(cells) / (last + 1 - first), colour)  # type: ignore[arg-type]
+
+
+def wedge_layer(wedge: Wedge, units: tuple[int, int], master: tuple[int, int]) -> Image:
+    out = Image.blank(*master)
+    sx, sy, n = units[0] / master[0], units[1] / master[1], WEDGE_SAMPLES
+    for py in range(master[1]):
+        for px in range(master[0]):
+            hits = sum(wedge.holds((px + (i + 0.5) / n) * sx, (py + (j + 0.5) / n) * sy) for j in range(n) for i in range(n))
+            if hits:
+                o = (py * master[0] + px) * 4
+                out.data[o:o + 4] = bytes((*wedge.colour, round(255 * hits / (n * n))))
+    return out
+
+
+def wedge_face(frame: Image, master: tuple[int, int]) -> Image:
+    """The face of one state: the original's own plate cells (the triangle's cells filled from their surroundings) at the master size, the straight-edged triangle over it."""
+    out = resample(inpaint(frame, red_cells(frame)), *master)
+    over(out, wedge_layer(fit_wedge(frame), (frame.w, frame.h), master), 0, 0)
+    return out
+
+
+def wedge_parts(frames: Path, group: list[Small]) -> dict[str, Image]:
+    """`plate.<name>[_hover|_pressed]` of every wedge button, each a full face from that state's original frame, and the empty `glyph.<name>`."""
+    parts: dict[str, Image] = {}
+    for b in group:
+        for state, number in b.frames.items():
+            ident = f"plate.{b.name}" if state == "idle" else f"plate.{b.name}_{state}"
+            parts[ident] = wedge_face(read_frame(frames, b, number), b.master)
+        parts[f"glyph.{b.name}"] = Image.blank(*b.master)
+    return parts
+
+
 # --- the Codex family (owner 2026-11-25): a sheet of cells generated large, cut, reduced to the part's size ---------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -450,6 +526,11 @@ def build_parts(args: argparse.Namespace, buttons: list[Small]) -> tuple[dict[st
     if dome:
         parts.update(dome_parts(args.local_root, args.frames or args.local_root / "census" / "frames", dome))
         sources.update({ident: None for ident in parts if ident.split(".", 1)[1].removesuffix("_hover").removesuffix("_pressed") in {b.name for b in dome}})
+    wedge = [b for b in buttons if b.family == "wedge"]
+    if wedge:
+        p = wedge_parts(args.frames or args.local_root / "census" / "frames", wedge)
+        parts.update(p)
+        sources.update(dict.fromkeys(p))
     codex = [b for b in buttons if b.family == "codex"]
     if codex:
         p, src = codex_parts(args.sheets or args.local_root / "small-sheets", codex, args.sp_variant)
@@ -470,7 +551,8 @@ def owner_of(ident: str) -> Small:
 # --- commands -----------------------------------------------------------------------------------------------------------------
 
 RULES = {
-    "rect": "pack-first (owner 2026-11-25): the old HD pack's frame of this state at the master size, opaque (kept by the owner: the stone Add / Remove and the follower arrows)",
+    "rect": "pack-first (owner 2026-11-25): the old HD pack's frame of this state at the master size, opaque (the stone Add / Remove and the follower arrows, owner 2026-11-25; the schematics skill button and arrows, ARC-UI-3272)",
+    "wedge": "by rule (ARC-UI-3272, the pack frames of these arts are broken): the original frame's own plate cells at the master size and a straight-edged triangle of the same cells' span and area, one full face per state",
     "dome": "by rule (owner 2026-11-25): the accepted round face of #3202 + the brass ring of the sockets (#2481) + the symbol by rule E from the original's own frames, states as in #3202",
     "codex": "generated (owner 2026-11-25): a sheet of cells from Codex, original and neighbouring pack frames as input, cut and reduced to the master size",
 }
@@ -498,6 +580,8 @@ def record_of(ident: str, b: Small, source: Path | None, image_path: Path, args:
                 record["source"]["generation"] = json.loads(provenance.read_text(encoding="utf-8"))
             except ValueError as error:
                 raise SmallError(f"{provenance}: not a JSON provenance record ({error})") from error
+    elif b.family == "wedge" and not empty:
+        record["source"] = {"frames": b.folder}
     elif b.family == "dome" and not empty:
         masters = args.local_root / "masters"
         record["source"] = {"face": DOME_PLATE, "face_sha256": button_kit.sha256_file(masters / f"{DOME_PLATE}.png"), "ring": DOME_RING, "ring_sha256": button_kit.sha256_file(masters / f"{DOME_RING}.png"), "frames": b.folder}
@@ -568,7 +652,7 @@ def face(parts: dict[str, Image], b: Small, state: str) -> Image:
 
 
 def cmd_sheet(args: argparse.Namespace) -> int:
-    """The composite for the owner: per button the original (idle and pressed, at the master size) | the kit's idle | hover | pressed face."""
+    """The composite for the owner: per button the original (every state, at the master size) | the kit's idle | hover | pressed face."""
     need_magick()
     frames = args.frames or args.local_root / "census" / "frames"
     buttons = selected(args.only)
@@ -577,9 +661,7 @@ def cmd_sheet(args: argparse.Namespace) -> int:
         work = Path(tmp)
         rows_out = []
         for k, b in enumerate(buttons):
-            cells = [("orig idle", upscaled(read_frame(frames, b, 0), b.master))]
-            if "pressed" in b.frames:
-                cells.append(("orig pressed", upscaled(read_frame(frames, b, b.frames["pressed"]), b.master)))
+            cells = [(f"orig {state}", upscaled(read_frame(frames, b, number), b.master)) for state, number in b.frames.items()]
             for state in b.frames:
                 if state == "idle" or f"plate.{b.name}_{state}" in parts:
                     cells.append((f"new {state}", face(parts, b, state)))
