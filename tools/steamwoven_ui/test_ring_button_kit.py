@@ -189,6 +189,35 @@ class BuildTests(unittest.TestCase):
                 record = json.loads((out / "records" / f"{ident}.json").read_text(encoding="utf-8"))
                 self.assertEqual(record["empty"], ident.startswith("glyph."), ident)
 
+    def test_the_default_build_tones_the_ring_and_records_what_it_used(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = tree(folder, rk.BUTTONS)
+            _, outbox, placed = rk.codex_dirs(root)
+            placed.mkdir(parents=True)
+            outbox.mkdir(parents=True)
+            for b in rk.BUTTONS:
+                if b == rk.DOME:
+                    continue
+                for state, number in b.frames.items():
+                    pngio.write(placed / f"{b.name}-f{number}.png", discs(b, rk.CODEX_FRAME_PX, (230, 180, 40)))
+                    pngio.write(outbox / f"{rk.codex_item(b, state)}.png", discs(b, 1, (230, 180, 40)))
+            out = Path(folder) / "out"
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(rk.main(["check", "--local-root", str(root)]), 0)
+                self.assertEqual(rk.main(["build", "--local-root", str(root), "--out", str(out)]), 0)
+            b = rk.RINGED[1]
+            part = pngio.read(out / "plate.m_dnbut.png")
+            self.assertEqual(at(part, part.w // 2, part.h // 2)[:3], (230, 180, 40))
+            self.assertLess(at(part, int((b.circles[0].cx + b.circles[0].cut * 0.93) * part.w / 38), part.h // 2)[0], 160)      # the ring took the references' darker brass
+            hover = json.loads((out / "records" / "plate.m_dnbut_hover.json").read_text(encoding="utf-8"))
+            dome = json.loads((out / "records" / "plate.combinebutt.json").read_text(encoding="utf-8"))
+            (root / "masters" / f"{rk.BRASS_REFS[1]}.png").unlink()
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(rk.main(["check", "--local-root", str(root)]), 2)
+        self.assertEqual(hover["source"], "codex")
+        self.assertIn(f"work/{rk.CODEX_BATCH}/placed/m_dnbut-f0", hover["sources"])
+        self.assertEqual((dome["source"], dome["parameters"]["dome"]), ("pack", "pack"))
+
     def test_the_codex_build_refuses_without_placed_frames(self):
         with tempfile.TemporaryDirectory() as folder:
             root = tree(folder, rk.BUTTONS)

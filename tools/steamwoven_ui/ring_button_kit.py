@@ -452,7 +452,8 @@ def cmd_codex_inbox(args: argparse.Namespace) -> int:
 
 
 def placed_art(generated: Image, b: Button) -> Image:
-    """A generated picture as a frame of the whole art at `CODEX_FRAME_PX`: registered onto the geometry of what was sent; an indicator's two wells are the one disc, the right one mirrored when it holds an arrow (as the original's)."""
+    """A generated picture as a frame of the whole art at `CODEX_FRAME_PX`: registered onto the geometry of what was sent; an indicator's two wells are the one disc, the right one mirrored when it holds an arrow (as the original's; its glass
+    gloss is mirrored with it, so the pair is lit symmetrically)."""
     circle = codex_circle(b)
     square = school_kit.placed_frame(generated, circle, (circle.width * CODEX_FRAME_PX, circle.height * CODEX_FRAME_PX))
     _, left, top = (v * CODEX_FRAME_PX for v in codex_pad(b))
@@ -477,8 +478,12 @@ def cmd_codex_place(args: argparse.Namespace) -> int:
     _, outbox, placed = codex_dirs(local_root)
     placed.mkdir(parents=True, exist_ok=True)
     count, problems = 0, []
+    batch = codex_dirs(local_root)[0] / "batch.json"
+    asked = {i["id"] for i in json.loads(batch.read_text(encoding="utf-8"))["items"]} if batch.is_file() else set()
     for b in codex_buttons(args):
         for state, number in b.frames.items():
+            if codex_item(b, state) not in asked:   # the states' stage has not been prepared yet
+                continue
             generated = outbox / f"{codex_item(b, state)}.png"
             if not generated.is_file():
                 problems.append(f"{b.name} {state}: no generated image {generated.name}")
@@ -549,6 +554,8 @@ def record_of(local_root: Path, frames: Path, b: Button, ident: str, dome: str, 
                                                       "generation_sha256": button_kit.sha256_file(generation) if generation.is_file() else None}
         sources[f"work/{CODEX_BATCH}/placed/{b.name}-f{b.frames[state]}"] = {"sha256": button_kit.sha256_file(codex_frame(local_root, b, state))}
         if b in RINGED:
+            if state != "idle":   # the idle frame sets the ring's tone change for every state
+                sources[f"work/{CODEX_BATCH}/placed/{b.name}-f{b.frames['idle']}"] = {"sha256": button_kit.sha256_file(codex_frame(local_root, b, "idle")), "use": "brass tone of the ring"}
             for name in BRASS_REFS:
                 sources[f"masters/{name}.png"] = {"sha256": button_kit.sha256_file(local_root / "masters" / f"{name}.png"), "use": "brass tone of the ring"}
     elif state is not None:
@@ -581,7 +588,11 @@ def cmd_check(args: argparse.Namespace) -> int:
         for state in b.frames:
             pack_frame(school_kit.pack_local(args.local_root), b, state)
             if args.source == "codex" and b != DOME:
-                codex_frame(args.local_root, b, state)
+                placed = pngio.read(codex_frame(args.local_root, b, state))
+                if (placed.w, placed.h) != (b.circles[0].width * CODEX_FRAME_PX, b.circles[0].height * CODEX_FRAME_PX):
+                    raise RingError(f"{b.name} {state}: the placed Codex frame is {placed.w} x {placed.h}, not the art's size x {CODEX_FRAME_PX}")
+        if args.source == "codex" and b in RINGED:
+            reference_brass(args.local_root)
     if args.dome == "olive" and not (args.local_root / "masters" / f"{OLIVE_PLATE}.png").is_file():
         raise RingError(f"no master {OLIVE_PLATE} (the accepted olive plate of #3202)")
     print(f"RING BUTTON KIT check PASS ({len(selected(args))} arts)")

@@ -9,7 +9,7 @@ shadow (#3249); nothing is generated.
 
 The part (master px of the 2880 x 2160 composition, one 600 x 354 canvas laid at (66, 1230) of the schematic surface): the pack frame is resampled to the master's scale (the master is 3.6 px per unit, the pack 4, so 0.9; Lanczos 3)
 and kept where the analytic shape is: a STADIUM (the bar: a rectangle with a half disc at each end) united with the DISC of the brass ring round the dome, minus three round HOLES (the dome and the two wells), whose
-pixels the surface keeps from the original (the dome's glossy face, the arrows). The shape's edges are filtered by the lens ring's tent (2 px, 8 x 8 sub-samples) so no stair of the pack's own alpha shows (its holes are octagonal
+faces are parts of their own (`ring_button_kit.py`, ARC-UI-3269), laid under the brass by the surface's spec. The shape's edges are filtered by the lens ring's tent (2 px, 8 x 8 sub-samples) so no stair of the pack's own alpha shows (its holes are octagonal
 stairs, 4 px steps). The soft shadow of the whole silhouette falls down and to the right outside it (the ellipse shift of `surface_compose.cast_disc_shadows`: 13 px, Gaussian sigma 16, strength 0.7) as black with alpha, because
 the part is laid after the surface's own shadows. The circles and the bar were measured on the pack frame (the transparent holes' areas and bounding boxes, the brass's extent) and checked on the original master.
 
