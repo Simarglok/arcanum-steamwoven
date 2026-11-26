@@ -54,6 +54,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     // ARC-MAGIC-1336: per map, the item entity -> its container's entity, read from the same holders as _holders and dropped with them.
     private readonly Dictionary<int, Dictionary<string, string>> _containerItems = [];
     private readonly Dictionary<(int Map, string Entity), SessionHolderInventory?> _holderNow = [];
+    private readonly HashSet<int> _attachTried = [];
 
     /// <param name="inventory">The maps' seeds and object rows.</param>
     /// <param name="prototypes">ARC-WORLD-106: an item prototype's stored fields (the facts of an item the session made or a regeneration
@@ -177,6 +178,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
         if (_holdersStamp is { } stamp && ReferenceEquals(stamp.Session, session) && stamp.Revision == session.Version.Revision && _holdersCreated == _resolver.CreatedVersion) return;
         _holders.Clear();
         _holderNow.Clear();
+        _attachTried.Clear();
         _containerItems.Clear();
         _holdersStamp = (session, session.Version.Revision);
         _holdersCreated = _resolver.CreatedVersion;
@@ -186,7 +188,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
     // attached with the host, and a restore attaches them again).
     private void AttachRead(GameSessionOwner session, int runtimeMap)
     {
-        if (_inventory.AttachReadMap(session, runtimeMap) is { } refused && _refusedAttach.Add(runtimeMap))
+        // ARC-RENDER-3126: once per map until the session moves, so a refused seed is not checked again for every holder asked.
+        if (_attachTried.Add(runtimeMap) && _inventory.AttachReadMap(session, runtimeMap) is { } refused && _refusedAttach.Add(runtimeMap))
             Console.WriteLine($"ARC-DEV-072 record-map-attach refused map={runtimeMap} failure={refused}");
     }
 

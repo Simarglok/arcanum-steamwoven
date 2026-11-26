@@ -170,6 +170,9 @@ public sealed class AreaObjectTargetsTests
         Change(MapChangeKey.ForEntity("sector:1:0", GameSessionOwner.ObjectConditionProperty), (long)SessionObjectCondition.Destroyed);
         Change(AreaCompanionPlacement.MapKey(entity), 9);
         Agree("off, destroyed and away", barrel.Key, door.Key, npc.Key);
+        Change(AreaCompanionPlacement.MapKey(entity), 1);
+        Change(MapChangeKey.ForEntity(entity, AreaUseScriptHost.DestroyedProperty), 1);
+        Agree("an NPC a script destroyed", barrel.Key, door.Key, npc.Key);
     }
 
     [TestMethod]
