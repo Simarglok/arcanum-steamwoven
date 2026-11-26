@@ -574,11 +574,6 @@ def toned(cut: Image, target: tuple[float, float, float]) -> Image:
     return out
 
 
-def is_stone_cell(p: tuple) -> bool:
-    """An original cell of the bare stone: grey, neither the parchment nor its symbol."""
-    return abs(p[0] - p[2]) < 20
-
-
 def parchment_box(frame: Image) -> tuple[int, int, int, int]:
     """Where the bare parchment goes: the columns and rows of the original with at least `STRAY` warm cells (a lone warm chip of the stone is not the sheet's edge)."""
     warm = [[frame.pixel(x, y)[0] - frame.pixel(x, y)[2] >= PAPER_WARM for x in range(frame.w)] for y in range(frame.h)]
@@ -905,7 +900,7 @@ def owner_of(ident: str) -> Small:
 
 RULES = {
     "rect": "pack-first (owner 2026-11-25): the old HD pack's frame of this state at the master size, opaque (kept by the owner: the stone Add / Remove and the follower arrows)",
-    "paper": "Codex and rules (owner 2026-11-26, ARC-UI-3272): Codex stone, on it the Codex torn parchment (cut from magenta, toned by rule) and the Codex symbol; hover = the lit symbol, solid as in the original; pressed = the hover look one original cell lower inside a black line",
+    "paper": "Codex and rules (owner 2026-11-26, ARC-UI-3272): Codex stone, on it the Codex torn parchment (cut from magenta, toned by rule) and the Codex symbol; hover = the lit symbol, solid as in the original; pressed = the hover look one original cell lower inside a black line, its top row dimmed as the original's; the visible stone has the original's mean colour",
     "ink": "Codex and rules (owner 2026-11-26, ARC-UI-3272): the arrow's ink drawn on white, the alpha taken from it, put in the place of the original's ink; each state in the colour of the original's ink cells",
     "wedge": "by rule (owner 2026-11-26, ARC-UI-3272): the olive Codex plate of #3323 without its symbol, cut to the button's shape (pressed in by the original's own darkening), and a straight-edged triangle of the original's red cells",
     "dome": "by rule (owner 2026-11-25): the accepted round face of #3202 + the brass ring of the sockets (#2481) + the symbol by rule E from the original's own frames, states as in #3202",
