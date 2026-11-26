@@ -381,9 +381,9 @@ def fit_wedge(frame: Image) -> Wedge:
     columns: dict[int, int] = {}
     for x, _ in cells:
         columns[x] = columns.get(x, 0) + 1
-    if len(columns) < 2:
-        raise SmallError("no red triangle in the frame")
-    first, last = min(columns), max(columns)
+    first, last = min(columns, default=0), max(columns, default=0)
+    if first == last or columns[first] == columns[last]:
+        raise SmallError("no sideways red triangle in the frame")
     left = columns[first] < columns[last]
     rows = [y for _, y in cells]
     colour = tuple(round(sum(frame.pixel(x, y)[k] for x, y in cells) / len(cells)) for k in range(3))
@@ -512,7 +512,7 @@ def codex_parts(sheets: Path, buttons: list[Small], sp_variant: str = SP_VARIANT
 
 
 def build_parts(args: argparse.Namespace, buttons: list[Small]) -> tuple[dict[str, Image], dict[str, Path | None]]:
-    """All parts of the buttons by family: `rect` from the pack's frames, `dome` by rule from the round plate of #3202, `codex` from the generated sheets. The source file of each part (None for a part made by rule)."""
+    """All parts of the buttons by family: `rect` from the pack's frames, `wedge` by rule from the original's frames, `dome` by rule from the round plate of #3202, `codex` from the generated sheets. The source file of each part (None for a part made by rule)."""
     parts: dict[str, Image] = {}
     sources: dict[str, Path | None] = {}
     rect = [b for b in buttons if b.family == "rect"]

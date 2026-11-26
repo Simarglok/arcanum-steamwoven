@@ -1,4 +1,4 @@
-"""ARC-UI-3206, ARC-UI-3323: tests of the small button kit tool (pack frames, the round dome by rule, Codex sheets) on synthetic pictures (no art)."""
+"""ARC-UI-3206, ARC-UI-3323: tests of the small button kit tool (pack frames, the wedge and round dome by rule, Codex sheets) on synthetic pictures (no art)."""
 from __future__ import annotations
 
 import json
@@ -335,9 +335,34 @@ class WedgeTest(unittest.TestCase):
         self.assertEqual(sk.face(parts, b, "hover").data, parts[f"plate.{b.name}_hover"].data)
         self.assertEqual(sum(parts[f"glyph.{b.name}"].data[3::4]), 0)
 
-    def test_a_frame_without_a_triangle_is_an_error(self):
-        with self.assertRaises(sk.SmallError):
-            sk.fit_wedge(flat_frame(12, 19, self.PLATE))
+    def test_a_frame_without_a_sideways_triangle_is_an_error(self):
+        for colour in (self.PLATE, self.RED):   # no red cell at all; a red rectangle (both ends as tall)
+            with self.assertRaises(sk.SmallError):
+                sk.fit_wedge(flat_frame(12, 19, colour))
+
+    def test_a_shifted_triangle_keeps_its_shift(self):
+        frame = self.stair(True)
+        shifted = pngio.Image(12, 19, bytearray(flat_frame(12, 19, self.PLATE).data))
+        shifted.data[12 * 4:] = frame.data[:-12 * 4]
+        self.assertEqual((sk.fit_wedge(shifted).axis, sk.fit_wedge(shifted).half), (10.5, 7.0))
+
+    def test_the_build_path_and_records_name_the_original_frames(self):
+        b = sk.button_named("followercycleleft")
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / b.folder).mkdir()
+            for number in b.frames.values():
+                pngio.write(Path(tmp) / b.folder / f"f{number}.png", self.stair(True))
+            args = ARGS()
+            args.pack, args.local_root, args.frames, args.sheets, args.sp_variant = Path(tmp) / "none", Path(tmp), Path(tmp), None, "sp-b"
+            parts, sources = sk.build_parts(args, [b])
+            self.assertEqual(set(sources), set(parts))
+            self.assertTrue(all(v is None for v in sources.values()))
+            path = Path(tmp) / "part.png"
+            pngio.write(path, parts[f"plate.{b.name}"])
+            self.assertEqual(sk.record_of(f"plate.{b.name}", b, None, path, args)["source"], {"frames": b.folder})
+            glyph = sk.record_of(f"glyph.{b.name}", b, None, path, args)
+            self.assertIsNone(glyph["source"])
+            self.assertIn("empty glyph", glyph["rule"])
 
 
 class TableTest(unittest.TestCase):

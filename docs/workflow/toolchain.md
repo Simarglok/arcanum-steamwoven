@@ -1435,7 +1435,7 @@ The kit parts of the small buttons (23 arts: slice 6 plus the five parchment and
 
 ```sh
 python3 -B tools/steamwoven_ui/small_kit.py plan                           # the 23 buttons, their family, states and the manifest size check
-python3 -B tools/steamwoven_ui/small_kit.py build [--only NAME,...] [--dry-run] [--pack DIR] [--sheets DIR] [--sp-variant sp-a|sp-b]   # plate / _hover / _pressed / glyph -> masters/ and provenance/rule/ (pack file, sheet and hash in each record)
+python3 -B tools/steamwoven_ui/small_kit.py build [--only NAME,...] [--dry-run] [--pack DIR] [--sheets DIR] [--sp-variant sp-a|sp-b]   # plate / _hover / _pressed / glyph -> masters/ and provenance/rule/ (a record names its pack file or sheet with the hash; a rule-built one its source frames or parts)
 python3 -B tools/steamwoven_ui/small_kit.py sheet --out FILE [--zoom N] [--only NAME,...]      # the composite original, every state | new, every state (English labels)
 python3 -B tools/steamwoven_ui/small_kit.py self-test
 ```
