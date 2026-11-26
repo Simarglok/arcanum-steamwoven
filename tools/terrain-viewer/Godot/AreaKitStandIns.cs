@@ -12,8 +12,7 @@ namespace Arcanum.TerrainViewer;
 /// </summary>
 internal static class AreaKitStandIns
 {
-    private static readonly Color Black = new(0f, 0f, 0f), Edge = new(.2f, .24f, .32f), Paper = new(.93f, .88f, .72f), Rule = new(.78f, .7f, .5f),
-        Well = new(4f / 255f, 5f / 255f, 9f / 255f); // the black of the kit's cell well (fixtures.py)
+    private static readonly Color Black = new(0f, 0f, 0f), Edge = new(.2f, .24f, .32f), Paper = new(.93f, .88f, .72f), Rule = new(.78f, .7f, .5f);
     private static readonly HashSet<SteamwovenKitWindow> Drawn = [];
 
     /// <summary>The windows whose stand-ins were drawn since <see cref="ResetForSelfTest"/>, for the smoke (a window that draws none of its own art over the kit has passed here).</summary>
@@ -101,8 +100,8 @@ internal static class AreaKitStandIns
             for (var row = 0; row < rows; row++) for (var column = 0; column < columns; column++) AreaKitFixtures.Draw(canvas, scale, "grid.inventory_cells", x + column * 32, y + row * 32);
             if (farEdges) return;
             // The well carries its lines on its far edges: the last unit of the grid is covered with the well's black.
-            Field(canvas, scale, x + columns * 32 - 1, y, 1, rows * 32, Well, edge: false);
-            Field(canvas, scale, x, y + rows * 32 - 1, columns * 32, 1, Well, edge: false);
+            Field(canvas, scale, x + columns * 32 - 1, y, 1, rows * 32, edge: false);
+            Field(canvas, scale, x, y + rows * 32 - 1, columns * 32, 1, edge: false);
         }
         else Lines(canvas, scale, x - .5f, y - .5f, columns, rows, 32, Edge, farEdges);
     }

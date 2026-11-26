@@ -73,10 +73,12 @@ class FixtureTests(unittest.TestCase):
         for centres in (across, down):
             self.assertEqual(len(centres), 1, centres)
             self.assertAlmostEqual(centres[0], 31.5, delta=0.1)
-        # The grid pits draw no line of their own round the grid: nothing of the line's colour past their trim.
+        self.assertEqual(cell.pixel(cell.w // 2, cell.h // 2), (0, 0, 0, 255), "the original's black ground")
+        # The grid pits share that ground and draw no line of their own round the grid: nothing of the line's colour past their trim.
         for ident in ("fixture.pack_pit", "fixture.doll_pit", "fixture.holder_pit_loot", "fixture.holder_pit_barter"):
             for variant in fixtures.VARIANTS:
                 pit, part = fixtures.draw(ident, variant), BY(ident)
+                self.assertEqual(pit.pixel(pit.w // 2, pit.h // 2), (0, 0, 0, 255), f"{ident} {variant}: the grid's ground")
                 sx, sy = pit.w / part.width, pit.h / part.height
                 row = _line_centres([pit.pixel(x, pit.h // 2)[:3] for x in range(pit.w)], sx)
                 column = _line_centres([pit.pixel(pit.w // 2, y)[:3] for y in range(pit.h)], sy)

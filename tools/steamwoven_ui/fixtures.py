@@ -101,6 +101,7 @@ BY_ID = {fixture.ident: fixture for fixture in FIXTURES}
 LINE_AT = -0.5
 Colour = tuple[int, int, int]
 BLACK: Colour = (4, 5, 9)
+GRID_GROUND: Colour = (0, 0, 0)  # the item grids' ground, the original's pure black, as under its empty-slot covers (ARC-UI-3342, owner 2026-11-26)
 EDGE: Colour = (62, 74, 98)
 BRASS: Colour = (184, 146, 62)
 BRASS_DARK: Colour = (104, 76, 28)
@@ -230,8 +231,8 @@ def _trim(c: Canvas, x0: float, y0: float, x1: float, y1: float, variant: str) -
         c.frame(x0, y0, x1, y1, 2, EDGE)
 
 
-def _pit(c: Canvas, variant: str) -> None:
-    c.rect(0, 0, c.w, c.h, BLACK)
+def _pit(c: Canvas, variant: str, ground: Colour = BLACK) -> None:
+    c.rect(0, 0, c.w, c.h, ground)
     _trim(c, 0, 0, c.w, c.h, variant)
 
 
@@ -371,11 +372,13 @@ def draw(ident: str, variant: str = "brass") -> pngio.Image:
     width, height = fixture.master
     c = Canvas(width, height, (fixture.width, fixture.height))
     if ident == "grid.inventory_cells":
-        c.rect(0, 0, width, height, BLACK)
+        c.rect(0, 0, width, height, GRID_GROUND)
         x, y = c.X(fixture.width + LINE_AT), c.Y(fixture.height + LINE_AT)
         c.rect(x - 1, 0, x + 1, height, EDGE)
         c.rect(0, y - 1, width, y + 1, EDGE)
-    elif ident in ("fixture.pack_pit", "fixture.doll_pit", "fixture.holder_pit_loot", "fixture.holder_pit_barter", "fixture.name_pit", "fixture.quote_field", "fixture.count_pit", "fixture.sheet_name_box", "fixture.schem_channel"):
+    elif ident in ("fixture.pack_pit", "fixture.doll_pit", "fixture.holder_pit_loot", "fixture.holder_pit_barter"):
+        _pit(c, variant, GRID_GROUND)
+    elif ident in ("fixture.name_pit", "fixture.quote_field", "fixture.count_pit", "fixture.sheet_name_box", "fixture.schem_channel"):
         _pit(c, variant)
     elif ident == "fixture.sheet_derived_box":
         _pit(c, variant)
