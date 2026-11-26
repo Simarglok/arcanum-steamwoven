@@ -224,6 +224,8 @@ public partial class AreaInventoryGridArea : Control
     {
         MouseFilter = MouseFilterEnum.Stop;
         FocusMode = FocusModeEnum.None;
+        AddChild(_rings);
+        AddChild(_heldLayer);
         _textLayer = new TextLayer { Name = "Texts" };
         AddChild(_textLayer);
         Fit(AreaInventoryDrag.FrameWidth);
@@ -294,7 +296,11 @@ public partial class AreaInventoryGridArea : Control
         }
     }
 
-    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += RedrawForKit;
+    public override void _EnterTree()
+    {
+        AreaGameBarPanel.KitBackgroundChanged += RedrawForKit;
+        InterfaceHd.Changed += RedrawForKit;
+    }
 
     private void RedrawForKit() => QueueRedraw();
 
@@ -308,6 +314,7 @@ public partial class AreaInventoryGridArea : Control
     public override void _ExitTree()
     {
         AreaGameBarPanel.KitBackgroundChanged -= RedrawForKit;
+        InterfaceHd.Changed -= RedrawForKit;
         if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
         _watched.Clear();
     }
@@ -739,11 +746,63 @@ public partial class AreaInventoryGridArea : Control
     public override void _Draw()
     {
         _runs.Clear();
+        _ringItems.Clear(); _heldPaints.Clear(); _holding = false;
         DrawFrame();
+        _rings.Show(_ringItems);
+        _heldLayer.Set(_heldPaints);
         if (_textLayer is null) return;
         _textLayer.Runs = [.. _runs];
         _textLayer.TextScale = _scale;
         _textLayer.QueueRedraw();
+    }
+
+    // ARC-UI-3347: the small ringed buttons draw from the kit through the round-part layer (their cut and shadow); the item on the cursor then goes to a layer over it, so a button never covers it.
+    private readonly AreaKitRoundPartsLayer _rings = new();
+    private readonly PaintLayer _heldLayer = new() { Name = "Held" };
+    private readonly List<AreaKitRoundPartsLayer.Item> _ringItems = [];
+    private readonly List<Action<CanvasItem>> _heldPaints = [];
+    private bool _holding;
+
+    /// <summary>ARC-UI-3347: the buttons the last redraw drew from the kit, for the self-test.</summary>
+    internal IReadOnlyList<int> RingsShownForSelfTest => _rings.ShownForSelfTest;
+
+    /// <summary>ARC-UI-3347: true when the button <paramref name="art"/> at (<paramref name="x"/>, <paramref name="y"/>) of the frame takes its kit face (the original frame 0, as the frame draws these buttons).</summary>
+    private bool Ring(int art, float x, float y)
+    {
+        if (!IsInsideTree() || AreaKitRingFaces.Face(art, 0, GetViewportRect().Size) is not { } face || AreaKitRoundPartsLayer.KitItem(art, face, (x, y), _scale) is not { } item) return false;
+        _ringItems.Add(item);
+        return true;
+    }
+
+    // A draw of the frame, or of the held item over the ringed buttons while any of them is the kit's.
+    private void Paint(Action<CanvasItem> paint)
+    {
+        if (_holding && _ringItems.Count > 0) _heldPaints.Add(paint);
+        else paint(this);
+    }
+
+    /// <summary>ARC-UI-3347: the draws recorded by the frame, made in this node's own draw (a child over the round-part layer, with the frame's material and filter).</summary>
+    private sealed partial class PaintLayer : Control
+    {
+        private Action<CanvasItem>[] _paints = [];
+
+        public PaintLayer()
+        {
+            MouseFilter = MouseFilterEnum.Ignore;
+            UseParentMaterial = true;
+        }
+
+        internal void Set(IReadOnlyList<Action<CanvasItem>> paints)
+        {
+            if (paints.Count == 0 && _paints.Length == 0) return;
+            _paints = [.. paints];
+            QueueRedraw();
+        }
+
+        public override void _Draw()
+        {
+            foreach (var paint in _paints) paint(this);
+        }
     }
 
     private void DrawFrame()
@@ -814,7 +873,7 @@ public partial class AreaInventoryGridArea : Control
         Rect2 Scaled(float x, float y, float w, float h) => new(x * _scale, y * _scale, w * _scale, h * _scale);
         void Art(int number, float x, float y)
         {
-            if (look.Art.GetValueOrDefault(number) is { } texture) DrawTextureRect(texture, Scaled(x, y, texture.GetWidth(), texture.GetHeight()), false);
+            if (look.Art.GetValueOrDefault(number) is { } texture && !Ring(number, x, y)) DrawTextureRect(texture, Scaled(x, y, texture.GetWidth(), texture.GetHeight()), false);
         }
         void Item(Texture2D? texture, (float X, float Y, float Width, float Height) rect, Vector2? origin = null, string? name = null)
         {
@@ -822,15 +881,15 @@ public partial class AreaInventoryGridArea : Control
             {
                 // An item whose art does not read keeps the diagnostic look: a framed box with its name.
                 var box = (origin is { } start ? new Rect2(start, new Vector2(rect.Width, rect.Height) * _scale) : Scaled(rect.X, rect.Y, rect.Width, rect.Height)).Grow(-2 * _scale);
-                DrawRect(box, new Color(.2f, .3f, .38f, .85f));
-                DrawRect(box, new Color(.5f, .65f, .75f), false);
+                Paint(canvas => canvas.DrawRect(box, new Color(.2f, .3f, .38f, .85f)));
+                Paint(canvas => canvas.DrawRect(box, new Color(.5f, .65f, .75f), false));
                 // ARC-UI-3136: the name in the original's art font (text font 229), nothing without the font; never Godot's default font.
                 if (name is not null) Block(look.Fonts?.Text, name, ((int)MathF.Round(box.Position.X / _scale) + 2, (int)MathF.Round(box.Position.Y / _scale) + 1, Math.Max(1, (int)(box.Size.X / _scale) - 4), Math.Max(1, (int)(box.Size.Y / _scale) - 2)));
                 return;
             }
             var (x, y, w, h) = AreaInventoryArtLayout.Place(rect, texture.GetWidth(), texture.GetHeight());
             var placed = origin is { } at ? new Rect2(at + new Vector2(x - rect.X, y - rect.Y) * _scale, new Vector2(w, h) * _scale) : Scaled(x, y, w, h);
-            DrawTextureRect(texture, placed, false);
+            Paint(canvas => canvas.DrawTextureRect(texture, placed, false));
         }
         // ARC-UI-3037: over the kit's background (the paper doll and the pack, also of the identify and repair windows) the window draws neither of its own background arts; the view window's art, items and text stay.
         if (AreaGameBarPanel.KitBackgroundWindow != SteamwovenKitWindow.Inventory)
@@ -929,6 +988,7 @@ public partial class AreaInventoryGridArea : Control
             var cell = AreaInventoryDrag.CellPixels * _scale;
             var origin = _pointer - new Vector2(held.Offset % 10 + .5f, held.Offset / 10 + .5f) * cell;
             var name = placed?.Name ?? _view.Doll.FirstOrDefault(slot => slot.Entity == held.Entity)?.Name ?? "?";
+            _holding = true;
             Item(texture, (0, 0, w * AreaInventoryDrag.CellPixels, h * AreaInventoryDrag.CellPixels), origin, name);
         }
     }
@@ -954,7 +1014,7 @@ public partial class AreaInventoryGridArea : Control
                 coversFromKit.Add(number);
                 return;
             }
-            if (look.Art.GetValueOrDefault(number) is { } texture) DrawTextureRect(texture, Scaled(x, y, texture.GetWidth(), texture.GetHeight()), false);
+            if (look.Art.GetValueOrDefault(number) is { } texture && !Ring(number, x, y)) DrawTextureRect(texture, Scaled(x, y, texture.GetWidth(), texture.GetHeight()), false);
         }
         // An item's art centred in its rectangle (scaled down when larger) and cut to the band from clipTop to clipBottom of the frame.
         void Item(Texture2D? texture, (float X, float Y, float Width, float Height) rect, string name, float clipTop = float.MinValue, float clipBottom = float.MaxValue)
@@ -965,8 +1025,8 @@ public partial class AreaInventoryGridArea : Control
             {
                 // An item whose art does not read keeps the diagnostic look: a framed box with its name.
                 var box = Scaled(rect.X, top, rect.Width, bottom - top).Grow(-2 * _scale);
-                DrawRect(box, new Color(.2f, .3f, .38f, .85f));
-                DrawRect(box, new Color(.5f, .65f, .75f), false);
+                Paint(canvas => canvas.DrawRect(box, new Color(.2f, .3f, .38f, .85f)));
+                Paint(canvas => canvas.DrawRect(box, new Color(.5f, .65f, .75f), false));
                 // ARC-UI-3136: the name in the original's art font (text font 229), nothing without the font or where the scroll clips the box; never Godot's default font.
                 if (top == rect.Y && bottom == rect.Y + rect.Height) Block(look.Fonts?.Text, name, ((int)MathF.Round(box.Position.X / _scale) + 2, (int)MathF.Round(box.Position.Y / _scale) + 1, Math.Max(1, (int)(box.Size.X / _scale) - 4), Math.Max(1, (int)(box.Size.Y / _scale) - 2)));
                 return;
@@ -975,7 +1035,7 @@ public partial class AreaInventoryGridArea : Control
             var (from, to) = (Math.Max(y, clipTop), Math.Min(y + h, clipBottom));
             if (to <= from) return;
             var ratio = texture.GetHeight() / h;
-            DrawTextureRectRegion(texture, Scaled(x, from, w, to - from), new Rect2(0, (from - y) * ratio, texture.GetWidth(), (to - from) * ratio));
+            Paint(canvas => canvas.DrawTextureRectRegion(texture, Scaled(x, from, w, to - from), new Rect2(0, (from - y) * ratio, texture.GetWidth(), (to - from) * ratio)));
         }
         // ARC-UI-3033: over a complete kit background of the barter window the frame's own background art (the merchant's side, and the hero's inventory below) is not drawn; the loot window's kit (ARC-UI-3032) is the bool above.
         var barterKit = _kit;
@@ -1144,6 +1204,7 @@ public partial class AreaInventoryGridArea : Control
                     : (1, 1, "?");
             var cell = AreaInventoryDrag.CellPixels;
             var origin = _pointer / _scale - new Vector2(held.Offset % 10 + .5f, held.Offset / 10 + .5f) * cell;
+            _holding = true;
             Item(look.ItemArt(held.Entity), (origin.X, origin.Y, w * cell, h * cell), name);
         }
     }

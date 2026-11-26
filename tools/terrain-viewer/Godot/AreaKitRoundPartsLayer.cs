@@ -50,6 +50,10 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
     internal static Item? KitItem(int art, Texture2D face, (int X, int Y) place) =>
         AreaKitRoundParts.Of(art) is { } part ? new Item(art, face, new Rect2(place.X, place.Y, part.Width, part.Height), true) : null;
 
+    /// <summary>ARC-UI-3347: as <see cref="KitItem(int, Texture2D, ValueTuple{int, int})"/> for a view that draws in screen pixels: the art's rectangle at <paramref name="place"/> (units) times <paramref name="scale"/>.</summary>
+    internal static Item? KitItem(int art, Texture2D face, (float X, float Y) place, float scale) =>
+        AreaKitRoundParts.Of(art) is { } part ? new Item(art, face, new Rect2(place.X * scale, place.Y * scale, part.Width * scale, part.Height * scale), true) : null;
+
     /// <summary>Hides every part: the view draws its arts as before.</summary>
     internal void Clear()
     {

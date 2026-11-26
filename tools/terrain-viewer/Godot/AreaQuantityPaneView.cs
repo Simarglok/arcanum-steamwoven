@@ -32,6 +32,29 @@ public partial class AreaQuantityPaneView : Control
     /// <summary>The digits the count draws (the cells' text, no leading zeros), empty without the font.</summary>
     internal string CountTextForSelfTest => _count.Font is null ? string.Empty : new string(QuantityPaneRules.Cells(_value).Where(c => c is not null).Reverse().Select(c => c!.Value).ToArray());
 
+    // ARC-UI-3347: the All button of the kit, through the round-part layer (its rect stays for the pointer).
+    private readonly AreaKitRoundPartsLayer _rings = new();
+
+    /// <summary>ARC-UI-3347: the buttons drawn from the kit now, for the self-test.</summary>
+    internal IReadOnlyList<int> RingsShownForSelfTest => _rings.ShownForSelfTest;
+
+    public override void _EnterTree()
+    {
+        InterfaceHd.Changed += KitChanged;
+        GetViewport().SizeChanged += KitChanged;
+    }
+
+    public override void _ExitTree()
+    {
+        InterfaceHd.Changed -= KitChanged;
+        GetViewport().SizeChanged -= KitChanged;
+    }
+
+    private void KitChanged()
+    {
+        if (IsNodeReady()) Render();
+    }
+
     public override void _Ready()
     {
         Name = "QuantityPane";
@@ -56,6 +79,7 @@ public partial class AreaQuantityPaneView : Control
             AddChild(rect);
             _buttons[b] = rect;
         }
+        AddChild(_rings);
         // Hidden mid-press (the bars went away): no release reaches the view, so the press and the hover are forgotten.
         VisibilityChanged += () => { if (!Visible) { _held = null; _hovered = null; Render(); } };
         Render();
@@ -107,20 +131,28 @@ public partial class AreaQuantityPaneView : Control
         _background.Visible = look?.Background is not null;
         if (look?.Background is { } background) _background.Size = background.GetSize();
         _count.Set(look?.CountFont, _value);
-        for (var b = 0; b < _buttons.Length; b++) DrawButton(_buttons[b], look?.Buttons.ElementAtOrDefault(b), b);
+        var rings = new List<AreaKitRoundPartsLayer.Item>();
+        for (var b = 0; b < _buttons.Length; b++)
+        {
+            var frame = DrawButton(_buttons[b], look?.Buttons.ElementAtOrDefault(b), b);
+            AreaKitRingButtonRect.Apply(_buttons[b], QuantityPaneRules.Buttons[b].Art, frame, rings);
+        }
+        _rings.Show(rings);
     }
 
     // A button's frame (GB4): down while held with the pointer over it; lit (two steps) under the pointer; else idle. A button whose art did not read is
     // not shown (no invisible area takes the pointer).
-    private void DrawButton(TextureRect rect, Texture2D[]? frames, int button)
+    private int DrawButton(TextureRect rect, Texture2D[]? frames, int button)
     {
         rect.Visible = frames is { Length: > 0 };
-        if (frames is not { Length: > 0 }) return;
+        if (frames is not { Length: > 0 }) return 0;
         var held = _held == button;
         var hovered = _hovered == button;
         var look = held && hovered ? AreaBarButtonLook.Down : hovered && !held ? AreaBarButtonLook.Hovered : AreaBarButtonLook.Idle;
-        rect.Texture = frames[AreaGameBarLayout.Frame(look, frames.Length)];
+        var frame = AreaGameBarLayout.Frame(look, frames.Length);
+        rect.Texture = frames[frame];
         rect.Size = frames[0].GetSize();
+        return frame;
     }
 
     /// <summary>The count: its digits right-aligned in six cells of the roller font's "0" width (0x56A300), black.</summary>

@@ -385,5 +385,23 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(run("check", "--local-root", str(Path(folder) / "absent"))[0], 2)
 
 
+class ViewerTableTests(unittest.TestCase):
+    def test_the_viewers_ringed_buttons_are_this_tools_arts_with_their_circles(self):
+        """ARC-UI-3347: `SteamwovenKitTable.RingFaces` names the plate of each ringed button outside the sheet's sockets, and `AreaKitRoundParts` holds its circle, as this tool's table does."""
+        import re
+        source = (sk.HERE.parents[1] / "tools" / "terrain-viewer" / "Core" / "SteamwovenKitComposer.cs").read_text(encoding="utf-8")
+        block = source[source.index("RingFaces { get; }"):]
+        block = block[:block.index("};")]
+        viewer = {int(art): name for art, name in re.findall(r'\[(\d+)\] = "plate\.([a-z_]+)"', block)}
+        rings = {ring.art: ring for ring in rk.RINGS if ring.method != "codex"}     # 23, 24, 770, 771 stand in the sheet's sockets
+        self.assertEqual({art: ring.name for art, ring in rings.items()}, viewer)
+        table = sk.ROUND_PARTS_SOURCE.read_text(encoding="utf-8")
+        rows = {int(a): (int(w), int(h), float(cx), float(cy), float(r)) for a, w, h, cx, cy, r in
+                re.findall(r"\[(\d+)\] = new\((\d+), (\d+), ([0-9.]+)f, ([0-9.]+)f, ([0-9.]+)f\)", table)}
+        for art, ring in rings.items():
+            c = ring.circle
+            self.assertEqual(rows[art], (c.width, c.height, c.cx, c.cy, c.radius), ring.name)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -11,9 +11,12 @@ public sealed class AreaKitRoundPartsTests
     [TestMethod]
     public void The_table_holds_the_college_rings_and_the_round_tabs()
     {
-        // The sixteen colleges, the four skill group buttons and the eight discipline buttons: nothing else, nothing twice (the lens rings are not round parts of the pages).
+        // The sixteen colleges, the four skill group buttons, the eight discipline buttons and the twelve small ringed buttons (ARC-UI-3347): nothing else, nothing twice (the lens rings are not round parts of the pages).
         var arts = AreaKitRoundParts.ArtNumbers;
-        Assert.AreEqual(16 + 4 + 8, arts.Count);
+        Assert.AreEqual(16 + 4 + 8 + 12, arts.Count);
+        foreach (var ring in new[] { 145, 146, 147, 148, 299, 338, 339, 340, 757, 758, 823, 824 }) Assert.IsNotNull(AreaKitRoundParts.Of(ring), $"ringed button {ring}");
+        // The character sheet's plus and minus stand in the sheet's sockets, not as round parts.
+        foreach (var socket in new[] { 23, 24, 770, 771 }) Assert.IsNull(AreaKitRoundParts.Of(socket), $"sheet button {socket}");
         Assert.AreEqual(arts.Count, arts.Distinct().Count());
         foreach (var lens in new[] { 231, 232, 233, 198 }) Assert.IsNull(AreaKitRoundParts.Of(lens), $"lens ring {lens}: the surface carries the ring");
         foreach (var college in AreaCharacterSheetSpellsLayout.CollegeArtNumbers) Assert.IsNotNull(AreaKitRoundParts.Of(college), $"college ring {college}");

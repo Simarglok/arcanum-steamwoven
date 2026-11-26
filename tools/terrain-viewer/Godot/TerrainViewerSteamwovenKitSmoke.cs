@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Arcanum.Presentation.Hud;
 using Arcanum.Presentation.Steamwoven;
 using Arcanum.Session;
 using Arcanum.World;
@@ -24,7 +25,8 @@ public partial class TerrainViewerApp
         KitLogSide = new(0.1f, 0.3f, 0.7f), KitLogBook = new(0.7f, 0.4f, 0.1f), KitSchematic = new(0.1f, 0.5f, 0.3f),
         KitSaveTop = new(0.85f, 0.45f, 0.65f), KitSaveBody = new(0.35f, 0.65f, 0.25f), KitSaveBottom = new(0.25f, 0.35f, 0.75f), KitPremadeBody = new(0.6f, 0.25f, 0.55f), KitNewCharBody = new(0.25f, 0.6f, 0.6f),
         KitFixture = new(0.95f, 0.95f, 0.2f), KitHardware = new(0.5f, 0.45f, 0.3f),
-        KitRound = new(0.1f, 0.9f, 0.6f), KitRoundPressed = new(0.9f, 0.1f, 0.9f), KitRoundHover = new(0.6f, 0.95f, 0.9f);
+        KitRound = new(0.1f, 0.9f, 0.6f), KitRoundPressed = new(0.9f, 0.1f, 0.9f), KitRoundHover = new(0.6f, 0.95f, 0.9f),
+        KitRing = new(0.95f, 0.55f, 0.05f), KitRingPressed = new(0.05f, 0.55f, 0.95f), KitRingHover = new(0.55f, 0.05f, 0.95f);
 
     /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's provisional 150 and 570 px; the caps are 120 px wide.</summary>
     private static IReadOnlyList<(string Id, int Width, int Height, Color Colour)> SyntheticKitParts { get; } =
@@ -69,6 +71,13 @@ public partial class TerrainViewerApp
             var part = AreaKitRoundParts.Of(pair.Key)!.Value;
             var (width, height) = (6 * (int)Math.Round(part.Width * 3.5 / 6), 6 * (int)Math.Round(part.Height * 3.5 / 6));
             return new (string Id, int Width, int Height, Color Colour)[] { (pair.Value, width, height, KitRound), (pair.Value + "_pressed", width, height, KitRoundPressed), (pair.Value + "_hover", width, height, KitRoundHover), ("glyph." + pair.Value["plate.".Length..], width, height, KitGlyph) };
+        }),
+        // ARC-UI-3347: the twelve ringed buttons outside the character sheet (#3270), the three states (a two-frame art's hover plate is never asked for), as the round buttons.
+        .. SteamwovenKitTable.RingFaces.SelectMany(pair =>
+        {
+            var part = AreaKitRoundParts.Of(pair.Key)!.Value;
+            var (width, height) = (6 * (int)Math.Round(part.Width * 3.5 / 6), 6 * (int)Math.Round(part.Height * 3.5 / 6));
+            return new (string Id, int Width, int Height, Color Colour)[] { (pair.Value, width, height, KitRing), (pair.Value + "_pressed", width, height, KitRingPressed), (pair.Value + "_hover", width, height, KitRingHover) };
         }),
     ];
 
@@ -194,15 +203,15 @@ public partial class TerrainViewerApp
 
     /// <summary>The view of a character-family two-strip screen the kit smoke probes: the pre-made browser (ARC-UI-3039) and the new character screen (ARC-UI-3040) expose the same self-test surface.</summary>
     private sealed record KitCharacterView(string Name, SteamwovenKitScreen Screen, string Body, Color BodyColor, int[] OwnArts, Action Place, Action QueueRedraw, Func<IReadOnlyList<SteamwovenKitDraw>?> Kit,
-        Func<IReadOnlyList<int>> OwnDrawn, Func<int, bool> Nearest, Func<IReadOnlyDictionary<int, Texture2D[]>> Textures);
+        Func<IReadOnlyList<int>> OwnDrawn, Func<int, bool> Nearest, Func<IReadOnlyDictionary<int, Texture2D[]>> Textures, int[] RingArts, Func<IReadOnlyList<int>> Rings);
 
     private static KitCharacterView KitPremadeView(AreaPremadeBrowserArtView art) => new("premade", SteamwovenKitScreen.PremadeBrowser, "backdrop.pregencharacterbase", KitPremadeBody,
         [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaPremadeBrowserArtLayout.BackgroundArt], art.Place, art.QueueRedraw, () => art.KitScreenForSelfTest,
-        () => art.OwnBackdropDrawnForSelfTest, art.KitSampledNearestForSelfTest, () => art.TexturesForSelfTest);
+        () => art.OwnBackdropDrawnForSelfTest, art.KitSampledNearestForSelfTest, () => art.TexturesForSelfTest, [], () => []);
 
     private static KitCharacterView KitNewCharacterView(AreaNewCharacterArtView art) => new("newcharacter", SteamwovenKitScreen.NewCharacter, "backdrop.createcharacterbase", KitNewCharBody,
         [AreaPremadeBrowserArtLayout.TopStripArt, AreaPremadeBrowserArtLayout.BottomStripArt, AreaNewCharacterArtLayout.BackgroundArt], art.Place, art.QueueRedraw, () => art.KitScreenForSelfTest,
-        () => art.OwnBackdropDrawnForSelfTest, art.KitSampledNearestForSelfTest, () => art.TexturesForSelfTest);
+        () => art.OwnBackdropDrawnForSelfTest, art.KitSampledNearestForSelfTest, () => art.TexturesForSelfTest, [AreaBarterArtLayout.CycleLeftArt, AreaBarterArtLayout.CycleRightArt], () => art.RingsShownForSelfTest);
 
     /// <summary>
     /// ARC-UI-3039, ARC-UI-3040 (census M07 and M08; ARC_STEAMWOVEN_KIT_SYNTHETIC=1 on the menu column pass, the "premade" and "newcharacter" screens): the real screen over the synthetic kit's three parts. At each size the view draws the composer's plan (the strips and the
@@ -225,6 +234,8 @@ public partial class TerrainViewerApp
         if (composed is null || drawn is null) return;
         require(art.Nearest(1) == composed.Body.Exact, $"[{tag}] the body is sampled {(composed.Body.Exact ? "nearest" : "linear")} as its draw is {(composed.Body.Exact ? "exact" : "scaled")}");
         require(BodyResident(), $"[{tag}] the screen's own body is resident while it is open");
+        // ARC-UI-3347: the screen's ringed buttons (the new character screen's cycle arrows) are the kit's.
+        require(art.RingArts.All(number => art.Rings().Contains(number)), $"[{tag}] the {art.Name} screen's ringed buttons are the kit's (from the kit {string.Join(",", art.Rings())})");
         foreach (var other in SteamwovenKitTable.Screens.Values.Select(screen => screen.Body).OfType<string>().Where(other => other != bodyId))
             require(!SteamwovenKitStore.ResidentForSelfTest.Any(path => System.IO.Path.GetFileName(path).StartsWith(other, StringComparison.Ordinal)), $"[{tag}] the body {other} of another screen is not resident");
         using (var image = GetViewport().GetTexture().GetImage())
@@ -276,7 +287,7 @@ public partial class TerrainViewerApp
         _gameSettings = _gameSettings with { HdInterface = false };
         SyncInterfaceHd();
         await frames(4);
-        require(art.Kit() is null && !BodyResident(), $"[{tag}] with the HD option off nothing of the kit is drawn or resident");
+        require(art.Kit() is null && !BodyResident() && art.Rings().Count == 0, $"[{tag}] with the HD option off nothing of the kit is drawn or resident (ringed buttons from the kit {string.Join(",", art.Rings())})");
         _gameSettings = _gameSettings with { HdInterface = savedHd };
         SyncInterfaceHd();
         await frames(4);
@@ -516,6 +527,7 @@ public partial class TerrainViewerApp
                 var (plainBackgrounds, plainCovers) = plain.LootDrawForSelfTest;
                 require(AreaGameBarPanel.KitBackgroundWindow is null && !plain.KitBackgroundShown && plainBackgrounds.SequenceEqual([234, 221]) && plainCovers.Count == 0,
                     $"[{tag}] with no kit the loot window draws its own arts 234 and 221 and no kit cover (drew {string.Join(",", plainBackgrounds)}, kit covers {string.Join(",", plainCovers)})");
+                require(plain.RingsShownForSelfTest.Count == 0, $"[{tag}] with no kit the loot window draws its own buttons (from the kit {string.Join(",", plain.RingsShownForSelfTest)})");
                 await CaptureHudAsync("steamwoven-" + tag + "-loot-before", frames);
             }
             EndInventory();
@@ -536,6 +548,9 @@ public partial class TerrainViewerApp
                 await frames(2);
                 var (backgrounds, covers) = area.LootDrawForSelfTest;
                 require(area.KitBackgroundShown && backgrounds.Count == 0, $"[{tag}] over the kit background the loot window draws no background art of its own (drew {string.Join(",", backgrounds)})");
+                // ARC-UI-3347: the arrange button is the kit's in every loot window, the hero's doll and bag buttons where the window shows them.
+                require(area.RingsShownForSelfTest.Contains(340) && (!area.HeroTogglesShown || (area.RingsShownForSelfTest.Contains(338) && area.RingsShownForSelfTest.Contains(339))),
+                    $"[{tag}] the loot window's ringed buttons are the kit's (from the kit {string.Join(",", area.RingsShownForSelfTest)}, hero toggles {area.HeroTogglesShown})");
                 // The hero's doll cover shows on a pile too (only the body's doll view needs a body), so it is asserted positively.
                 require(!area.HeroDoll || covers.Contains(341), $"[{tag}] the hero's doll cover is the kit's when its view is on (kit covers {string.Join(",", covers)})");
                 require(covers.Contains(349) == area.BodyDoll && covers.Contains(341) == area.HeroDoll, $"[{tag}] the doll covers it draws are the kit's (kit covers {string.Join(",", covers)}, body doll {area.BodyDoll}, hero doll {area.HeroDoll})");
@@ -711,6 +726,72 @@ public partial class TerrainViewerApp
         }
     }
 
+    /// <summary>
+    /// ARC-UI-3347: the ringed buttons of the views no pass of this smoke opens (the strip's note entry and quantity pane, the dialog box), each made alone over the window: its buttons draw the kit's faces (read back by pixel on the quantity
+    /// pane's All button), a set without their plates keeps each art's own frame, and with the HD option off nothing is the kit's.
+    /// </summary>
+    private async Task CheckKitRingViewsAsync(string tag, string root, string ringlessRoot, Func<int, Task> frames, Action<bool, string> require)
+    {
+        using var flat = Image.CreateEmpty(23, 23, false, Image.Format.Rgba8);
+        flat.Fill(Colors.White);
+        Texture2D[] own = [ImageTexture.CreateFromImage(flat), ImageTexture.CreateFromImage(flat), ImageTexture.CreateFromImage(flat)];
+        var layer = new CanvasLayer { Name = "KitRingViews", Layer = 60 };
+        AddChild(layer);
+        var pane = new AreaQuantityPaneView();
+        var note = new AreaMapNoteEntryView { Position = new Vector2(0, 220) };
+        layer.AddChild(pane); layer.AddChild(note);
+        AreaDialogBoxView? dialog = null;
+        if (DialogBoxArt() is { } dialogArt)
+        {
+            dialog = new AreaDialogBoxView();
+            layer.AddChild(dialog);
+            dialog.SetArt(dialogArt);
+        }
+        var savedHd = _gameSettings.HdInterface;
+        try
+        {
+            pane.Bind(new(null, [.. QuantityPaneRules.Buttons.Select(_ => (Texture2D[]?)own)], null));
+            note.Bind(new(null, [.. MapNoteEntry.Buttons.Select(_ => (Texture2D[]?)null)], [.. MapNoteEntry.Markers.Select(_ => (Texture2D[]?)[own[0], own[1]])], null!));
+            dialog?.Show("?", AreaDialogBoxKind.YesNo, (420, 20));
+            int[] markers = [.. MapNoteEntry.Markers.Select(marker => marker.Art)];
+            await frames(3);
+            require(pane.RingsShownForSelfTest.SequenceEqual([299]), $"[{tag}] the quantity pane's All button is the kit's (from the kit {string.Join(",", pane.RingsShownForSelfTest)})");
+            require(note.RingsShownForSelfTest.SequenceEqual(markers), $"[{tag}] the note entry's markers are the kit's (from the kit {string.Join(",", note.RingsShownForSelfTest)})");
+            require(dialog is null || dialog.RingsShownForSelfTest.Order().SequenceEqual([AreaDialogBoxLayout.AcceptArt, AreaDialogBoxLayout.CancelArt]),
+                $"[{tag}] the dialog box's accept and cancel buttons are the kit's (from the kit {string.Join(",", dialog?.RingsShownForSelfTest ?? [])})");
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            using (var image = GetViewport().GetTexture().GetImage())
+            {
+                var all = QuantityPaneRules.Buttons.Single(button => button.Art == 299);
+                var at = pane.GetGlobalTransformWithCanvas() * new Vector2(all.X + 11.5f, all.Y - AreaGameBarLayout.BottomTop + 11.5f);
+                var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
+                var colour = image.GetPixel(Math.Clamp((int)(at.X * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(at.Y * ratio.Y), 0, image.GetHeight() - 1));
+                require(Near(colour, KitRing), $"[{tag}] the All button's middle is the kit's face (got {colour})");
+            }
+            // AC2: a set without the ringed buttons' plates keeps each art's own frame.
+            SteamwovenKitStore.UseRoot(ringlessRoot);
+            pane.Bind(new(null, [.. QuantityPaneRules.Buttons.Select(_ => (Texture2D[]?)own)], null));
+            note.SetState("", 0);
+            dialog?.QueueRedraw();
+            await frames(3);
+            require(pane.RingsShownForSelfTest.Count == 0 && note.RingsShownForSelfTest.Count == 0 && (dialog?.RingsShownForSelfTest.Count ?? 0) == 0, $"[{tag}] without their plates the ringed buttons draw their own frames");
+            SteamwovenKitStore.UseRoot(root);
+            _gameSettings = _gameSettings with { HdInterface = false };
+            SyncInterfaceHd();
+            await frames(3);
+            require(pane.RingsShownForSelfTest.Count == 0 && note.RingsShownForSelfTest.Count == 0 && (dialog?.RingsShownForSelfTest.Count ?? 0) == 0, $"[{tag}] with the HD option off no ringed button is the kit's");
+            GD.Print($"ARC-UI-3347 kit-ring-views {tag} checked pane note dialog={(dialog is null ? "no art" : "yes")}");
+        }
+        finally
+        {
+            SteamwovenKitStore.UseRoot(root);
+            _gameSettings = _gameSettings with { HdInterface = savedHd };
+            SyncInterfaceHd();
+            layer.QueueFree();
+        }
+        await frames(3);
+    }
+
     private async Task CaptureSteamwovenKitAsync(AreaGameBarPanel panel, Window window, Func<int, Task> frames, Action<bool, string> require)
     {
         var root = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-").FullName;
@@ -720,6 +801,7 @@ public partial class TerrainViewerApp
         var noMapRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-nomap-").FullName;
         var fixturelessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-fixtureless-").FullName;
         var noGlyphRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-noglyph-").FullName;
+        var ringlessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-ringless-").FullName;
         var roundlessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-roundless-").FullName;
         var savedHd = _gameSettings.HdInterface;
         var done = new HashSet<(string, SteamwovenStep)>();
@@ -954,6 +1036,10 @@ public partial class TerrainViewerApp
                     panel.Relayout();
                     await frames(4);
                     require(panel.KitButtonForSelfTest(AreaBarButton.Character).Count >= 2, $"[{tag}] with the glyph back the Character button is drawn from the kit again");
+                    Ensure("ringless", ringlessRoot, step, [.. SteamwovenKitTable.RingFaces.Values.SelectMany(id => new[] { id, id + "_pressed", id + "_hover" })]);
+                    await CheckKitRingViewsAsync(tag, root, ringlessRoot, frames, require);
+                    panel.Relayout();
+                    await frames(4);
                 }
                 GD.Print($"ARC-UI-2461 steamwoven {tag} step={step} exact={plan.Layout.ExactStep} runtime={plan.Layout.RuntimeScale.ToDouble():F4} top={column.TopStrip} bottom={column.BottomStrip} zone={zone}");
             }
@@ -974,7 +1060,7 @@ public partial class TerrainViewerApp
             SyncInterfaceHd();
             panel.Relayout();
             await frames(3);
-            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, roundlessRoot, noMapRoot, backdroplessRoot, noGlyphRoot, fixturelessRoot })
+            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, roundlessRoot, noMapRoot, backdroplessRoot, noGlyphRoot, fixturelessRoot, ringlessRoot })
                 try { System.IO.Directory.Delete(folder, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-2461 synthetic kit not removed: " + folder); }
         }
     }

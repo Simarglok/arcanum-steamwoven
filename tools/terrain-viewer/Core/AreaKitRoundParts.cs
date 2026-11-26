@@ -57,6 +57,20 @@ public static class AreaKitRoundParts
         [311] = new(32, 31, 16.05f, 14.9f, 14.8f),
         [312] = new(32, 31, 15.9f, 15.0f, 14.85f),
         [313] = new(32, 31, 15.55f, 14.9f, 14.8f),
+        // ARC-UI-3347: the small brass-ringed buttons of the windows, boxes and strip panes (<c>ring_kit.RINGS</c>: the cut radius of the master less <see cref="Trim"/>): the note markers 145 to 148, the quantity pane's All 299, the cycle
+        // buttons 757 and 758, the doll, bag and arrange buttons 338 to 340, the dialog box's accept and cancel 823 and 824. The character sheet's plus and minus (23, 24, 770, 771) are not here: they stand in the sheet's sockets.
+        [145] = new(23, 23, 11.5f, 11.5f, 11.1f),
+        [146] = new(23, 23, 11.5f, 11.5f, 11.1f),
+        [147] = new(23, 23, 11.5f, 11.5f, 11.1f),
+        [148] = new(23, 23, 11.5f, 11.5f, 11.1f),
+        [299] = new(23, 23, 11.5f, 11.5f, 11.1f),
+        [757] = new(23, 23, 11.5f, 11.5f, 11.1f),
+        [758] = new(23, 23, 11.5f, 11.5f, 11.1f),
+        [338] = new(28, 27, 13.4f, 12.1f, 12.8f),
+        [339] = new(28, 27, 13.4f, 12.1f, 12.8f),
+        [340] = new(28, 27, 13.4f, 12.1f, 12.8f),
+        [823] = new(28, 29, 13.35f, 13.0f, 12.8f),
+        [824] = new(28, 29, 13.35f, 13.0f, 12.8f),
     };
 
     /// <summary>The arts that have a round part, in order.</summary>
