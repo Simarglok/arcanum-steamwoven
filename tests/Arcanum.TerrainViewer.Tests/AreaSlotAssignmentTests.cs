@@ -59,19 +59,33 @@ public sealed class AreaSlotAssignmentTests
     }
 
     [TestMethod]
-    public void A_key_drawn_twice_and_dropped_or_reset_slots_stay_a_permutation()
+    public void A_key_drawn_twice_keeps_one_of_its_states()
     {
         var slots = new AreaSlotAssignment<char>();
         var states = "ABCD";
         Submit(slots, ref states, "xxy");
-        Submit(slots, ref states, "yxx");
-        Assert.AreEqual('C', states[0]);
-        // The pool shrank: the keys of the dropped slots are forgotten.
+        Assert.AreEqual('C', Submit(slots, ref states, "yxx")[0]);
+    }
+
+    [TestMethod]
+    public void The_keys_of_dropped_slots_are_forgotten()
+    {
+        var slots = new AreaSlotAssignment<char>();
+        var states = "ABCD";
+        Submit(slots, ref states, "xyz");
+        // The pool shrank below the slot that held z.
         states = states[..2];
-        Submit(slots, ref states, "yx");
+        Assert.AreEqual("AB", Submit(slots, ref states, "z"));
+    }
+
+    [TestMethod]
+    public void A_reset_forgets_every_key()
+    {
+        var slots = new AreaSlotAssignment<char>();
+        var states = "ABCD";
+        Submit(slots, ref states, "xy");
         slots.Reset();
-        var kept = states;
-        Assert.AreEqual(kept, Submit(slots, ref states, "xy"));
+        Assert.AreEqual("ABCD", Submit(slots, ref states, "yx"));
     }
 
     [TestMethod]

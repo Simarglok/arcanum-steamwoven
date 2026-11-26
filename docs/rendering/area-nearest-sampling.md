@@ -65,7 +65,7 @@ so across the whole-pixel translation above an item whose other inputs are uncha
 sends nothing to the engine and is not redrawn; the pixels it samples are the same. The
 canvas also keeps each command's engine state (material, index row, world rectangle) with
 the command: when the draw list shifts, the state moves to the node that draws the command
-next, so only commands that enter the view are prepared from nothing. A standalone item
+next, so a command that stays in the view is not prepared from nothing again. A standalone item
 keeps and writes its own view state.
 
 Rows live in one canvas-owned cache. Rows used by the current submission are never
