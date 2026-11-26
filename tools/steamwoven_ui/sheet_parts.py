@@ -106,7 +106,7 @@ NEEDLE_FRAMES, NEEDLE_COLUMNS, NEEDLE_CELL = 21, 7, 35  # art 254's frames in ce
 NEEDLE_CAST = 0.30  # (red - blue) / (red + 1) above this is the needle's own red, rust or brass; the baked grey shadow is under it
 NEEDLE_PIECE = 40  # px: a smaller piece of that colour is a stray, as is one under a quarter of the frame's largest
 NEEDLE_SMOOTH = 1.6  # px: the found outline is smoothed this much (the pack's own edge keeps the original's pixel stairs)
-NEEDLE_SHADOW_OFFSET, NEEDLE_SHADOW_SIGMA, NEEDLE_SHADOW = 14, 4.8, 0.7  # px, px, alpha: the shared soft shadow (#3249: 3.6 units down and right, strength 0.7), its blur cut to 1.2 units as the needle is only 2.5 wide (the shared 4.4 would wash it out)
+NEEDLE_SHADOW_OFFSET, NEEDLE_SHADOW_SIGMA, NEEDLE_SHADOW = 14, 4.8, 0.7  # px, px, alpha: the shared soft shadow (#3249: its 3.6 units down and right in whole px, 3.5 units, strength 0.7), its blur cut to 1.2 units as the needle is only 2.5 wide (the shared 4.4 would wash it out)
 NEEDLE_FOOT_FADE = 8  # px: the shadow fades in over this from the needle's foot, so none of it falls past the foot onto the dial's hub
 IDENTS = tuple(part.ident for part in PARTS) + (NEEDLE,)  # every id this tool cuts
 
