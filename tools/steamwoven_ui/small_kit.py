@@ -499,7 +499,6 @@ PAPER_TEXTURE = 1.0    # the share of the generated paper's own light and dark t
 PAPER_SHEET = "plate-schem-skills"     # the symbol is taken from here: left cell the idle (dark) one, right the lit one
 PAPER_PIECE = "plate-schem-paper"      # the bare parchment with its torn edge
 PAPER_SLAB = "plate-schem-slab"        # the mottled stone of the button, bare
-PAPER_FOOT = 1         # cells the parchment ends above the original's, so that a line of stone stays under it in the pressed look (owner 2026-11-26)
 SYMBOL_CORE = 0.5      # the symbolness from which a pixel belongs to the symbol's body
 SYMBOL_GROW = 2        # px of the sheet round the body that keep their soft edge
 INK_SHEET = "glyph-schem-arrows"       # left the left arrow, right the right arrow, dark ink on white
@@ -581,13 +580,13 @@ def is_stone_cell(p: tuple) -> bool:
 
 
 def parchment_box(frame: Image) -> tuple[int, int, int, int]:
-    """Where the bare parchment goes: the columns and rows of the original with at least `STRAY` warm cells (a lone warm chip of the stone is not the sheet's edge), its foot `PAPER_FOOT` cells higher."""
+    """Where the bare parchment goes: the columns and rows of the original with at least `STRAY` warm cells (a lone warm chip of the stone is not the sheet's edge)."""
     warm = [[frame.pixel(x, y)[0] - frame.pixel(x, y)[2] >= PAPER_WARM for x in range(frame.w)] for y in range(frame.h)]
     xs = [x for x in range(frame.w) if sum(row[x] for row in warm) >= STRAY]
     ys = [y for y in range(frame.h) if sum(warm[y]) >= STRAY]
     if not xs or not ys:
         raise SmallError("the original frame has no parchment")
-    return min(xs), min(ys), max(xs) + 1, max(ys) + 1 - PAPER_FOOT
+    return min(xs), min(ys), max(xs) + 1, max(ys) + 1
 
 
 def symbol_layer(cut: Image) -> Image:
@@ -626,28 +625,29 @@ def symbol_layer(cut: Image) -> Image:
     return out
 
 
-def toned_slab(slab: Image, original: Image) -> Image:
-    """The generated stone brought to the original's: each channel scaled so that its mean over the original's stone cells (inside the outer ring) is theirs. The stone is opaque and square."""
-    if min(slab.data[3::4]) < 255 or abs(slab.w / slab.h - 1.0) > 0.01:
-        raise SmallError(f"the stone sheet is {slab.w} x {slab.h} or not opaque: an opaque square is needed")
-    stone = [(x, y) for y in range(1, original.h - 2) for x in range(1, original.w - 2) if is_stone_cell(original.pixel(x, y))]
-    if not stone:
-        raise SmallError("the original frame has no stone cell")
-    target = mean_colour(original, stone)
-    mine = mean_colour(resample(slab, original.w - 1, original.h - 1), stone)
-    out = Image(slab.w, slab.h, bytearray(slab.data))
-    for k in range(3):
-        gain = target[k] / max(1, mine[k])
-        out.data[k::4] = bytes(slab.data[k::4]).translate(bytes(min(255, round(v * gain)) for v in range(256)))
+def toned_slab(face_image: Image, original: Image, paper: Image) -> Image:
+    """The stone, at its size on the button, brought to the original's tone: each channel scaled so that the mean of what stays visible (not under `paper`) is the mean of the original's visible stone
+    (the cells outside the parchment's box, the black last column and row not counted)."""
+    x0, y0, x1, y1 = parchment_box(original)
+    stone = [(x, y) for y in range(original.h - 1) for x in range(original.w - 1) if not (x0 <= x < x1 and y0 <= y < y1)]
+    seen = [i for i in range(face_image.w * face_image.h) if paper.data[((i // face_image.w) * paper.w + i % face_image.w) * 4 + 3] == 0]
+    if not stone or not seen:
+        raise SmallError("no stone is left to see round the parchment")
+    out = Image(face_image.w, face_image.h, bytearray(face_image.data))
+    for k, target in enumerate(mean_colour(original, stone)):
+        gain = target * len(seen) / max(1, sum(face_image.data[i * 4 + k] for i in seen))
+        out.data[k::4] = bytes(face_image.data[k::4]).translate(bytes(min(255, round(v * gain)) for v in range(256)))
     return out
 
 
-def raised_stone(slab: Image, original: Image, master: tuple[int, int]) -> Image:
-    """The button standing up, as the original draws it: the stone over all but the last column and row of cells, those a black line."""
-    step_x, step_y = round(master[0] / original.w), round(master[1] / original.h)
+def raised_stone(slab: Image, original: Image, paper: Image) -> Image:
+    """The button standing up, as the original draws it: the stone (an opaque square sheet) over all but the last column and row of cells, those a black line."""
+    if min(slab.data[3::4]) < 255 or abs(slab.w / slab.h - 1.0) > 0.01:
+        raise SmallError(f"the stone sheet is {slab.w} x {slab.h} or not opaque: an opaque square is needed")
+    step_x, step_y = round(paper.w / original.w), round(paper.h / original.h)
     edge = mean_colour(original, [(original.w - 1, y) for y in range(1, original.h)] + [(x, original.h - 1) for x in range(1, original.w)])
-    out = Image.blank(*master, (*edge, 255))
-    paste(out, resample(toned_slab(slab, original), master[0] - step_x, master[1] - step_y), 0, 0)
+    out = Image.blank(paper.w, paper.h, (*edge, 255))
+    paste(out, toned_slab(resample(slab, paper.w - step_x, paper.h - step_y), original, paper), 0, 0)
     return out
 
 
@@ -689,19 +689,21 @@ def paper_parts(frames: Path, sheet: Image, piece: Image, slab: Image, b: Small)
     if not bare:
         raise SmallError("the original frame has no bare sheet cell")
     target = tuple(PAPER_LIGHT * v for v in mean_colour(original, bare))
-    paper = placed(toned(cut_from_magenta(piece), target), parchment_box(original), b.units, b.master)
+    step = (round(b.master[0] / b.units[0]), round(b.master[1] / b.units[1]))
+    x0, y0, x1, y1 = parchment_box(original)
+    foot = (b.master[1] - 2 * step[1]) * b.units[1] / b.master[1]   # a master px or so higher at most, so that the pressed look keeps the whole parchment above its black line
+    paper = placed(toned(cut_from_magenta(piece), target), (x0, y0, x1, min(y1, foot)), b.units, b.master)
     fit.decontaminate(paper, 255, fit.EDGE_RADIUS)
     box = cells_box(original, lambda p: p[0] - p[2] >= PAPER_WARM)
     cuts = [cut_from_magenta(sheet.crop(k * (sheet.w // 2), 0, sheet.w // 2, sheet.h)) for k in (0, 1)]
     idle, lit = (placed(symbol_layer(cut), box, b.units, b.master, shape=cut) for cut in cuts)
-    stone = raised_stone(slab, original, b.master)
+    stone = raised_stone(slab, original, paper)
     faces = []
     for symbol in (idle, lit):
         face_image = Image(stone.w, stone.h, bytearray(stone.data))
         over(face_image, paper, 0, 0)
         over(face_image, symbol, 0, 0)
         faces.append(face_image)
-    step = (round(b.master[0] / b.units[0]), round(b.master[1] / b.units[1]))
     down = sunk(faces[1], step, mean_colour(pressed, [(x, 0) for x in range(pressed.w)]), top_shade(raised_lit, pressed))
     return {f"plate.{b.name}": faces[0], f"plate.{b.name}_hover": faces[1], f"plate.{b.name}_pressed": down, f"glyph.{b.name}": Image.blank(*b.master)}
 

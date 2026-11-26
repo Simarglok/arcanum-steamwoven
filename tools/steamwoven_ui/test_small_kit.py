@@ -413,24 +413,25 @@ class ToneTest(unittest.TestCase):
         with self.assertRaises(sk.SmallError):
             sk.symbol_layer(flat_frame(8, 8, (200, 170, 100)))
 
-    def test_the_parchment_ends_a_cell_above_the_originals_and_ignores_a_lone_chip(self):
+    def test_the_parchment_takes_the_originals_rows_and_ignores_a_lone_chip(self):
         frame = flat_frame(32, 32, (80, 80, 82))
         for y in range(2, 30):
             for x in range(5, 27):
                 frame.data[(y * 32 + x) * 4:(y * 32 + x) * 4 + 4] = bytes((170, 140, 100, 255))
         for x in (6, 8):
             frame.data[(30 * 32 + x) * 4:(30 * 32 + x) * 4 + 4] = bytes((100, 90, 70, 255))
-        self.assertEqual(sk.parchment_box(frame), (5, 2, 27, 29))
+        self.assertEqual(sk.parchment_box(frame), (5, 2, 27, 30))
         with self.assertRaises(sk.SmallError):
             sk.parchment_box(flat_frame(32, 32, (80, 80, 82)))
 
     def test_a_stone_sheet_that_is_not_an_opaque_square_is_an_error(self):
         frame = flat_frame(32, 32, (80, 80, 82))
+        paper = pngio.Image.blank(114, 114)
         clear = flat_frame(64, 64, (40, 40, 40))
         clear.data[3] = 0
         for slab in (clear, flat_frame(64, 48, (40, 40, 40))):
             with self.assertRaises(sk.SmallError):
-                sk.toned_slab(slab, frame)
+                sk.raised_stone(slab, frame, paper)
 
     def test_a_cell_without_paper_is_an_error(self):
         with self.assertRaises(sk.SmallError):
@@ -454,7 +455,7 @@ class CutOutTest(unittest.TestCase):
 
     def schem_frame(self, state: str) -> pngio.Image:
         """A synthetic original: grey stone, the parchment on it, a black last column and row, a black top row too when pressed."""
-        frame = self.block(flat_frame(32, 32, (80, 80, 82)), 6, 4, 26, 28, (170, 140, 100))
+        frame = self.block(flat_frame(32, 32, (80, 80, 82)), 6, 4, 26, 30, (170, 140, 100))
         frame = self.block(self.block(frame, 31, 0, 32, 32, (28, 28, 28)), 0, 31, 32, 32, (28, 28, 28))
         return self.block(self.block(frame, 0, 1, 31, 2, (40, 40, 41)), 0, 0, 32, 1, (28, 28, 28)) if state == "pressed" else frame
 
@@ -476,13 +477,15 @@ class CutOutTest(unittest.TestCase):
         idle, hover, pressed = (parts[f"plate.{b.name}{s}"] for s in ("", "_hover", "_pressed"))
         for image in (idle, hover, pressed):
             self.assertEqual(set(image.data[3::4]), {255})
-        self.assertEqual(idle.pixel(2, 50)[:3], (80, 80, 82), "the stone has the original's tone")
-        self.assertGreater(idle.pixel(50, 0)[0], 200, "the lit upper chamfer")
+        seen = [idle.pixel(x, y)[0] for y in range(110) for x in range(110) if not (21 <= x < 93 and 14 <= y < 106)]
+        self.assertAlmostEqual(sum(seen) / len(seen), 80, delta=1.5, msg="the visible stone has the original's mean tone")
+        self.assertGreater(idle.pixel(50, 0)[0], 180, "the lit upper chamfer")
         for image, at in ((idle, ((112, 50), (50, 112))), (pressed, ((112, 50), (50, 112), (1, 50), (50, 1)))):
             self.assertEqual({image.pixel(*xy)[:3] for xy in at}, {(28, 28, 28)}, "the black lines")
         self.assertEqual(pressed.crop(4, 8, 106, 102).data, hover.crop(4, 4, 106, 102).data, "the whole button one cell lower, none sideways")
         self.assertAlmostEqual(pressed.pixel(50, 4)[0], hover.pixel(50, 0)[0] / 2, delta=2, msg="the top row dimmed as the original dims it")
-        self.assertEqual((idle.pixel(50, 100)[:3], pressed.pixel(50, 105)[:3]), ((80, 80, 82),) * 2, "stone under the parchment in both")
+        self.assertLess(idle.pixel(50, 108)[0], 100, "a row of stone under the standing parchment")
+        self.assertGreater(pressed.pixel(50, 109)[0], 150, "the whole parchment, down to the black line")
         paper = [x for x in range(114) if idle.pixel(x, 80)[0] > 150]
         self.assertAlmostEqual(min(paper), 6 * 114 / 32, delta=2)
         self.assertEqual((idle.pixel(57, 50)[:3], hover.pixel(57, 50)[:3]), ((90, 45, 10), (230, 20, 10)), "the symbol solid in both looks")
