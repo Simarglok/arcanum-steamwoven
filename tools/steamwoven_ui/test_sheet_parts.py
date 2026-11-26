@@ -51,6 +51,65 @@ class SheetPartTests(unittest.TestCase):
             with self.assertRaises(KeyError):
                 fixtures.draw(part.ident)
 
+    def test_the_sockets_are_put_on_the_originals_places(self) -> None:
+        # the originals' sockets of art 22, from each part's corner: where the knobs of the sheet's + and - buttons lie (AreaCharacterSheetArtLayout.Socket states them)
+        expected = {"fixture.stat_oval": ((12.5, 21.5), (67.5, 21.5)), "fixture.health_disc": ((14.5, 32.0), (70.5, 32.0)), "fixture.fatigue_disc": ((14.5, 32.0), (70.5, 32.0))}
+        self.assertEqual({p.ident for p in sheet_parts.PARTS if p.sockets}, set(expected))
+        for ident, targets in expected.items():
+            part = sheet_parts.BY_ID[ident]
+            self.assertEqual(tuple(target for _, target in part.sockets), targets, ident)
+            x0, x1, y0, y1 = sheet_parts.fit_window(part)
+            for (sx, sy), (tx, ty) in part.sockets:
+                self.assertAlmostEqual((sx - x0) * part.width / (x1 - x0), tx, places=9, msg=ident)
+                self.assertAlmostEqual((sy - y0) * part.height / (y1 - y0), ty, delta=0.05, msg=ident)
+                self.assertLess(abs(sx - tx) + abs(sy - ty), 1.0, ident)  # the HD frame is off by a fraction of a unit only
+
+    def test_a_part_without_sockets_covers_exactly_its_box(self) -> None:
+        for part in sheet_parts.PARTS:
+            if not part.sockets:
+                self.assertEqual(sheet_parts.fit_window(part), (0.0, float(part.width), 0.0, float(part.height)), part.ident)
+
+    def test_a_fitted_cut_moves_the_part_to_the_target_place(self) -> None:
+        oval = sheet_parts.BY_ID["fixture.stat_oval"]
+        frame = frame_with_parts()
+        plain = sheet_parts.build_part(frame, sheet_parts.SolidPart(oval.ident, oval.x, oval.y, oval.width, oval.height, oval.anchor, (), oval.note))
+        moved = sheet_parts.build_part(frame, sheet_parts.SolidPart(oval.ident, oval.x, oval.y, oval.width, oval.height, oval.anchor, (), oval.note,
+                                                                    (((12.0, 20.0), (14.0, 22.0)), ((68.0, 20.0), (70.0, 22.0)))))
+        self.assertEqual((moved.w, moved.h), (plain.w, plain.h))
+
+        def centre(image: pngio.Image) -> tuple[float, float]:
+            pits = [(x, y) for y in range(image.h) for x in range(image.w) if image.pixel(x, y)[3] == 255 and max(image.pixel(x, y)[:3]) < 20]
+            return sum(x for x, _ in pits) / len(pits), sum(y for _, y in pits) / len(pits)
+
+        (ax, ay), (bx, by) = centre(plain), centre(moved)
+        self.assertAlmostEqual(bx - ax, 2.0 * plain.w / oval.width, delta=0.4)
+        self.assertAlmostEqual(by - ay, 2.0 * plain.h / oval.height, delta=0.4)
+
+    def test_the_needle_is_one_cut_fixture_of_21_cells_without_the_baked_grey_shadow(self) -> None:
+        needle = fixtures.BY_ID[sheet_parts.NEEDLE]
+        self.assertTrue(needle.cut)
+        self.assertEqual((needle.width, needle.height), (sheet_parts.NEEDLE_COLUMNS * sheet_parts.NEEDLE_CELL, 3 * sheet_parts.NEEDLE_CELL))
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            for index in range(sheet_parts.NEEDLE_FRAMES):
+                frame = pngio.Image.blank(36, 112)
+                for y in range(112):
+                    for x in range(36):
+                        colour = (90, 25, 20, 255) if 8 <= x < 16 else (110, 102, 92, 255) if 24 <= x < 32 else None
+                        if colour:
+                            frame.data[(y * 36 + x) * 4:(y * 36 + x) * 4 + 4] = bytes(colour)
+                pngio.write(folder / f"f{index:03d}.png", frame)
+            atlas = sheet_parts.build_needle(folder)
+        self.assertEqual((atlas.w, atlas.h), needle.master)
+        scale = atlas.w / (needle.width * 4)  # master px per HD px
+        cell = sheet_parts.NEEDLE_CELL * 4
+        for index in (0, 10, 20):
+            ox, oy = (index % 7) * cell, (index // 7) * cell
+            at = lambda x, y: atlas.pixel(int((ox + x) * scale), int((oy + y) * scale))  # noqa: E731
+            self.assertEqual(at(12, 50), (90, 25, 20, 255), index)
+            self.assertEqual(at(29, 50)[3], 0, index)  # the baked grey shadow is gone
+            self.assertTrue(0 < at(17, 50)[3] < 100 and at(17, 50)[:3] == (0, 0, 0), index)  # the new one is translucent black
+
     def test_a_part_is_cut_by_one_cutter_only(self) -> None:
         self.assertEqual(set(sheet_parts.BY_ID) & set(label_parts.BY_ID), set())
 

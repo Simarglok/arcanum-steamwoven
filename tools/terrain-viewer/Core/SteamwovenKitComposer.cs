@@ -169,7 +169,7 @@ public static class SteamwovenKitTable
     {
         ["grid.inventory_cells"] = (32, 32), ["fixture.pack_pit"] = (324, 388), ["fixture.doll_pit"] = (330, 300), ["fixture.holder_pit_loot"] = (324, 260), ["fixture.holder_pit_barter"] = (324, 228),
         ["fixture.name_pit"] = (223, 55), ["fixture.quote_field"] = (267, 36), ["fixture.count_pit"] = (61, 17), ["fixture.count_icons"] = (38, 115), ["fixture.weapon_frame"] = (112, 97),
-        ["fixture.shield_frame"] = (114, 97), ["fixture.arrange_legend"] = (78, 32), ["fixture.sheet_name_box"] = (360, 87), ["fixture.sheet_derived_box"] = (452, 113), ["fixture.stat_oval"] = (80, 44),
+        ["fixture.shield_frame"] = (114, 97), ["fixture.arrange_legend"] = (78, 32), ["fixture.sheet_name_box"] = (390, 102), ["fixture.sheet_derived_box"] = (488, 128), ["fixture.align_needle"] = (245, 105), ["fixture.stat_oval"] = (80, 44),
         ["fixture.align_dial"] = (109, 111), ["fixture.health_disc"] = (87, 68), ["fixture.fatigue_disc"] = (87, 67), ["fixture.mt_ruler"] = (60, 332), ["fixture.sheet_stat_names_l"] = (50, 160), ["fixture.sheet_stat_names_r"] = (55, 160), ["fixture.sheet_dial_letters"] = (65, 25), ["fixture.schem_page"] = (506, 367),
         ["grid.schematic"] = (506, 367), ["fixture.schem_slot"] = (103, 71), ["fixture.schem_channel"] = (126, 30), ["fixture.gear_hat"] = (90, 70), ["fixture.gear_scroll"] = (96, 72),
     };
@@ -180,8 +180,44 @@ public static class SteamwovenKitTable
     private static readonly string[] InventoryFixtures = ["grid.inventory_cells", "fixture.pack_pit", "fixture.doll_pit", "fixture.name_pit", "fixture.count_pit", "fixture.count_icons", "fixture.weapon_frame", "fixture.shield_frame", "fixture.arrange_legend"],
         LootFixtures = ["grid.inventory_cells", "fixture.pack_pit", "fixture.holder_pit_loot", "fixture.count_pit", "fixture.count_icons"],
         BarterFixtures = ["grid.inventory_cells", "fixture.pack_pit", "fixture.holder_pit_barter", "fixture.quote_field", "fixture.count_pit", "fixture.count_icons"],
-        CharacterFixtures = ["fixture.sheet_name_box", "fixture.sheet_derived_box", "fixture.stat_oval", "fixture.align_dial", "fixture.health_disc", "fixture.fatigue_disc", "fixture.mt_ruler", "fixture.sheet_stat_names_l", "fixture.sheet_stat_names_r", "fixture.sheet_dial_letters"],
+        CharacterFixtures = ["fixture.sheet_name_box", "fixture.sheet_derived_box", "fixture.stat_oval", "fixture.align_dial", "fixture.align_needle", "fixture.health_disc", "fixture.fatigue_disc", "fixture.mt_ruler", "fixture.sheet_stat_names_l", "fixture.sheet_stat_names_r", "fixture.sheet_dial_letters"],
         SchematicFixtures = ["fixture.schem_page", "grid.schematic", "fixture.schem_slot", "fixture.schem_channel", "fixture.gear_hat", "fixture.gear_scroll"];
+
+    /// <summary>
+    /// ARC-UI-3321: the sheet's + and − buttons as the kit draws them (the art of <see cref="SteamwovenKitTable"/>'s manifest rows <c>plate.&lt;name&gt;</c>, made by <a href="https://github.com/Simarglok/arcanum-steamwoven/issues/3270">#3270</a>): the face
+    /// (<c>plate.&lt;name&gt;</c>), the symbol over it (<c>glyph.&lt;name&gt;</c>, empty where the face carries it) and over both the overlay of the look (<c>plate.&lt;name&gt;_hover</c>, <c>_pressed</c>), each of the size in original units given here.
+    /// The eight stat rows draw the 19 x 19 pair (arts 23, 24); the two discs, whose sockets are larger, the 21 x 21 pair (arts 770, 771) at the same button corner. The original art stays 23 and 24 on every row (the exe creates all twenty
+    /// buttons with them).
+    /// </summary>
+    public static IReadOnlyDictionary<string, int> SheetButtonUnits { get; } = new Dictionary<string, int> { ["char_minus"] = 19, ["char_plus"] = 19, ["char_htftminus"] = 21, ["char_htftplus"] = 21 };
+
+    /// <summary>The name of the sheet button a row draws from the kit.</summary>
+    public static string SheetButtonName(int row, bool plus) => (row < 2 ? "char_htft" : "char_") + (plus ? "plus" : "minus");
+
+    /// <summary>The ids of the layers of the sheet button <paramref name="name"/>: face, symbol, hover overlay, pressed overlay.</summary>
+    public static (string Plate, string Glyph, string Hover, string Pressed) SheetButtonLayers(string name) => ($"plate.{name}", $"glyph.{name}", $"plate.{name}_hover", $"plate.{name}_pressed");
+
+    /// <summary>The overlay a sheet button lays over its face and symbol in a frame of the three-frame bar button: the pressed or the hover part, or none at rest.</summary>
+    public static string? SheetButtonOverlay(string name, int frame) =>
+        frame == AreaGameBarLayout.Frame(AreaBarButtonLook.Down, 3) ? SheetButtonLayers(name).Pressed
+        : frame == AreaGameBarLayout.Frame(AreaBarButtonLook.Hovered, 3) ? SheetButtonLayers(name).Hover : null;
+
+    private static readonly Dictionary<string, int> SheetButtonParts = SheetButtonUnits
+        .SelectMany(pair => { var layers = SheetButtonLayers(pair.Key); return new[] { layers.Plate, layers.Glyph, layers.Hover, layers.Pressed }.Select(id => (Id: id, Units: pair.Value)); })
+        .ToDictionary(part => part.Id, part => part.Units);
+
+    /// <summary>
+    /// Every part a window draws over its kit background besides the sheets, covers and round faces: its fixtures and, for the character window, the sheet buttons' layers. The character window needs all of them (ARC-UI-3321):
+    /// with one missing it keeps its old art whole.
+    /// </summary>
+    public static IReadOnlyList<string> PartsOf(SteamwovenKitWindow window) => window == SteamwovenKitWindow.Character ? [.. CharacterFixtures, .. SheetButtonParts.Keys] : FixturesOf(window);
+
+    /// <summary>Whether a window keeps its old art whole when one of <see cref="PartsOf"/> is missing (the others draw a plain stand-in for a missing fixture).</summary>
+    public static bool NeedsEveryPart(SteamwovenKitWindow window) => window == SteamwovenKitWindow.Character;
+
+    /// <summary>The size in original units of a part of <see cref="PartsOf"/>, or null for an unknown id.</summary>
+    public static (int Width, int Height)? PartUnits(string id) =>
+        FixtureUnits.TryGetValue(id, out var units) ? units : SheetButtonParts.TryGetValue(id, out var side) ? (side, side) : null;
 
     /// <summary>The fixtures a covered window draws over its kit background (they stay resident with it, SWI-RUN-5); the logbook and the world map have none here (the map's are <a href="https://github.com/Simarglok/arcanum-steamwoven/issues/3112">#3112</a>).</summary>
     public static IReadOnlyList<string> FixturesOf(SteamwovenKitWindow window) => window switch
@@ -531,7 +567,7 @@ public static class SteamwovenKitComposer
 
     /// <summary>ARC-UI-3098: the kit part of a fixture when the set holds it at the table's size at the step, else null (the window draws its plain stand-in for that detail, <c>AreaKitStandIns</c>).</summary>
     public static SteamwovenKitPart? Fixture(SteamwovenKitSet set, string id) =>
-        SteamwovenKitTable.FixtureUnits.TryGetValue(id, out var units) && set.TryGet(id, out var part)
+        SteamwovenKitTable.PartUnits(id) is { } units && set.TryGet(id, out var part)
         && part.Width == SteamwovenGrid.BakedLength(SteamwovenKitTable.MasterOf(units.Width), set.Step) && part.Height == SteamwovenGrid.BakedLength(SteamwovenKitTable.MasterOf(units.Height), set.Step) ? part : null;
 
     /// <summary>The size of a cover in original units: its master size over 3.6 master px per unit.</summary>

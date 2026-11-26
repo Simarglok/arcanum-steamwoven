@@ -2,10 +2,10 @@
 """ARC-UI-3321: the character sheet's solid fixtures as kit parts, cut out of the player's own HD frame of the sheet.
 
     python3 -B tools/steamwoven_ui/sheet_parts.py list
-    python3 -B tools/steamwoven_ui/sheet_parts.py build --hd-frame HD_char_maint.png [--out DIR] [--only ID,...]
+    python3 -B tools/steamwoven_ui/sheet_parts.py build --hd-frame HD_char_maint.png [--needle-dir DIR] [--out DIR] [--only ID,...]
     python3 -B tools/steamwoven_ui/sheet_parts.py self-test
 
-Art 22 of the sheet bakes in the stat ovals (brass, with their two sockets), the alignment dial, the health and fatigue discs and the magic-technology ruler. The kit's surface carries none of them, and the
+Art 22 of the sheet bakes in the figured brass frames of the name box and the derived-stats box, the stat ovals (brass, with their two sockets), the alignment dial, the health and fatigue discs and the magic-technology ruler. The kit's surface carries none of them, and the
 rule-drawn stand-ins of ARC-UI-3098 are poor beside the earlier generative HD version that the owner likes (#3321, pack-first). So each is cut from that HD frame the way `label_parts.py` cuts the labels, but
 for a solid part that sits on the wood with a cast shadow instead of lettering that is the wood's own tone:
 
@@ -21,8 +21,14 @@ for a solid part that sits on the wood with a cast shadow instead of lettering t
   4. **Master.** The part's box (sheet units, in the HD frame's own coordinates, at 4 px per unit) is reduced by an exact area average of the premultiplied picture to the master size on the 6 px grid
      (`kit_check.snap`), written to `local/steamwoven-ui/masters/<id>.png` (ignored by git: derived from the player's own pack, SWI-PRV-1), ready for `bake.py`.
 
-What the runtime draws on top stays out: the needle, the numbers in the pits and the dial's number pit text, the heart's and cross's live fill, the plus and minus buttons. The dial's E&G with its curls is the label part
+**Sockets.** The HD frame draws the + and − sockets of the ovals and discs a fraction of a unit off the original's; those parts are cut over a slightly narrower, shifted window so that each socket lands on the original's place (`fit_window`).
+
+What the runtime draws on top stays out: the numbers in the pits and the dial's number pit text, the heart's and cross's live fill, the plus and minus buttons (button parts of #3270). The dial's E&G with its curls is the label part
 of ARC-UI-3299: the dial part holds the paper under it rebuilt by `label_parts` (the same rule, the ground without the letters). The ruler's divisions 75 50 25 0 25 50 75 are in the ruler part (digits carry no language).
+
+**The needle** (`fixture.align_needle`) is the pack's 21 frames of art 254 (4 px per unit, `align/f000.png` to `f020.png` beside the frame) cleaned: each frame bakes the needle's shadow as opaque grey pixels painted for the original's paper,
+which stand as a pale second needle over the dial (#3312). Only the needle's own red, rust and brass pixels stay (a red-over-blue cast), with their enclosed highlights and a soft edge, over a translucent shadow drawn by rule down and to the
+right. The 21 frames are one picture of cells of 35 units, 7 across; the viewer draws a frame's cell at the original's hot point.
 
 Standard library only, on `pngio`. Same input gives the same bytes. No original or derived pixel is in git: this file holds the rule and the places.
 """
@@ -68,21 +74,40 @@ class SolidPart:
     anchor: tuple[int, int]  # a point inside the part itself (sheet units): picks the found piece
     repaint: tuple[tuple[int, int, int, int], ...]  # boxes (x0, y0, x1, y1) of lettering rebuilt to bare ground first (the dial's E&G is the label part of ARC-UI-3299)
     note: str
+    sockets: tuple[tuple[tuple[float, float], tuple[float, float]], ...] = ()  # none, or the two + and − sockets as ((x, y) of the HD frame, (x, y) of the original), both in units from the part's corner
 
+
+# The HD frame draws the sockets a fraction of a unit off the original's (the original's + and − art matches art 22 pixel for pixel); the cut is stretched across and moved down or up so that both land on the original's places.
+OVAL_SOCKETS = (((12.69, 21.25), (12.5, 21.5)), ((67.25, 21.28), (67.5, 21.5)))
+HEALTH_SOCKETS = (((14.94, 31.94), (14.5, 32.0)), ((70.19, 32.0), (70.5, 32.0)))
+FATIGUE_SOCKETS = (((14.94, 32.06), (14.5, 32.0)), ((70.19, 32.06), (70.5, 32.0)))
+FIT_PAD = 8  # px of the read box kept round the part's box for a fitted cut's window to move into
 
 PARTS: tuple[SolidPart, ...] = (
+    SolidPart("fixture.sheet_name_box", 106, 2, 390, 102, (300, 50), (),
+              "the name and info box: the figured brass frame with its curls and the black field, cut from the old HD frame (ARC-UI-3321)"),
+    SolidPart("fixture.sheet_derived_box", 10, 270, 488, 128, (200, 330), (),
+              "the derived-stats and resistance box: the figured brass frame with its curls, the black field and the divider, cut from the old HD frame (ARC-UI-3321)"),
     SolidPart("fixture.stat_oval", 167, 105, 80, 44, (207, 127), (),
-              "the brass oval round a stat number with its two sockets and the black pit, cut from the first oval (ST) of the old HD frame and drawn eight times (ARC-UI-3321)"),
+              "the brass oval round a stat number with its two sockets and the black pit, cut from the first oval (ST) of the old HD frame and drawn eight times (ARC-UI-3321)", OVAL_SOCKETS),
     SolidPart("fixture.align_dial", 3, 128, 109, 111, (56, 190), ((28, 146, 90, 170),),
               "the alignment dial: brass bezel, paper face with its ticks and the two end glyphs, the hub with its screw, the brass lower plate, the number pit; no needle, no E&G (ARC-UI-3321)"),
     SolidPart("fixture.health_disc", 405, 122, 87, 68, (448, 140), (),
-              "the health disc: brass ring with two sockets, black pit, the red heart (ARC-UI-3321)"),
+              "the health disc: brass ring with two sockets, black pit, the red heart (ARC-UI-3321)", HEALTH_SOCKETS),
     SolidPart("fixture.fatigue_disc", 405, 192, 87, 67, (448, 225), (),
-              "the fatigue disc: brass ring with two sockets, black pit, the blue cross (ARC-UI-3321)"),
+              "the fatigue disc: brass ring with two sockets, black pit, the blue cross (ARC-UI-3321)", FATIGUE_SOCKETS),
     SolidPart("fixture.mt_ruler", 740, 60, 60, 332, (770, 223), (),
               "the magic-technology ruler: parchment strip with its ticks and the divisions 75 50 25 0 25 50 75, the magic sign, the technology gear, the two number caps (ARC-UI-3321)"),
 )
 BY_ID = {part.ident: part for part in PARTS}
+
+NEEDLE = "fixture.align_needle"
+NEEDLE_FRAMES, NEEDLE_COLUMNS, NEEDLE_CELL = 21, 7, 35  # art 254's frames in cells of 35 units, 7 across (the viewer's AreaCharacterSheetArtLayout.NeedleCell)
+NEEDLE_CAST = 0.30  # (red - blue) / (red + 1) above this is the needle's own red, rust or brass; the baked grey shadow is under it
+NEEDLE_PIECE = 40  # px: a smaller piece of that colour is a stray, as is one under a quarter of the frame's largest
+NEEDLE_SMOOTH = 1.6  # px: the found outline is smoothed this much (the pack's own edge keeps the original's pixel stairs)
+NEEDLE_SHADOW_OFFSET, NEEDLE_SHADOW_SIGMA, NEEDLE_SHADOW = 3, 2.0, 0.35  # px, px, alpha: down and to the right, as the sheet's parts cast theirs
+IDENTS = tuple(part.ident for part in PARTS) + (NEEDLE,)  # every id this tool cuts
 
 
 # ---------------------------------------------------------------- small raster helpers (flat row-major lists, width w)
@@ -275,7 +300,7 @@ def shadow_profile(light: list[list[float]], dist: list[list[float]], owner: lis
     return profile
 
 
-def cut_solid(rgb: list[list[list[float]]], anchor: tuple[int, int], keep: tuple[int, int, int, int] | None = None) -> Solid:
+def cut_solid(rgb: list[list[list[float]]], anchor: tuple[int, int], keep: tuple[float, float, float, float] | None = None) -> Solid:
     """`rgb` is the read box of the HD frame ([channel][y][x] floats, with unshadowed wood round the part); `anchor` a px inside the part; `keep` the part's own box (x0, y0, x1, y1) in px of the read box, the shadow fades out toward its edge."""
     height, width = len(rgb[0]), len(rgb[0][0])
     label, target = find_part(rgb, anchor)
@@ -319,8 +344,19 @@ def cut_solid(rgb: list[list[list[float]]], anchor: tuple[int, int], keep: tuple
 
 # ---------------------------------------------------------------- parts
 
+def fit_window(part: SolidPart) -> tuple[float, float, float, float]:
+    """The span of the HD frame (x0, x1, y0, y1 in units from the part's corner) that the part's master covers: the whole box, or for a part with sockets the span whose linear map onto the box puts the HD sockets on the original's."""
+    if not part.sockets:
+        return 0.0, float(part.width), 0.0, float(part.height)
+    ((ax, ay), (tx, ty)), ((bx, by), (ux, uy)) = part.sockets
+    scale = (ux - tx) / (bx - ax)
+    shift = tx - scale * ax
+    down = ((ty - ay) + (uy - by)) / 2.0
+    return -shift / scale, (part.width - shift) / scale, -down, part.height - down
+
+
 def build_part(frame: pngio.Image, part: SolidPart) -> pngio.Image:
-    """The master of one part: the read box cut, cropped to the part's box on a transparent canvas at 4 px per unit, premultiplied, reduced to the part's master size, straight again."""
+    """The master of one part: the read box cut, the part's window (`fit_window`) of it premultiplied at 4 px per unit on a transparent ground, reduced to the part's master size, straight again."""
     x0, y0 = max(part.x - READ_MARGIN, 0), max(part.y - READ_MARGIN, 0)
     x1, y1 = min(part.x + part.width + READ_MARGIN, frame.w // HD), min(part.y + part.height + READ_MARGIN, frame.h // HD)
     read = label_parts.read_box(frame, (x0, y0, x1, y1))
@@ -333,23 +369,86 @@ def build_part(frame: pngio.Image, part: SolidPart) -> pngio.Image:
     anchor = ((part.anchor[0] - x0) * HD, (part.anchor[1] - y0) * HD)
     px_w, px_h = part.width * HD, part.height * HD
     ox, oy = (part.x - x0) * HD, (part.y - y0) * HD
-    solid = cut_solid(read, anchor, (ox, oy, ox + px_w, oy + px_h))
-    planes = [[[0.0] * px_w for _ in range(px_h)] for _ in range(4)]
-    for y in range(px_h):
-        for x in range(px_w):
-            a = solid.alpha[oy + y][ox + x]
-            if a <= 0.0:
+    wx0, wx1, wy0, wy1 = (v * HD for v in fit_window(part))
+    solid = cut_solid(read, anchor, (ox + wx0, oy + wy0, ox + wx1, oy + wy1))
+    pad = FIT_PAD
+    planes = [[[0.0] * (px_w + 2 * pad) for _ in range(px_h + 2 * pad)] for _ in range(4)]
+    for y in range(px_h + 2 * pad):
+        for x in range(px_w + 2 * pad):
+            sy, sx = oy + y - pad, ox + x - pad
+            if not (0 <= sy < solid.height and 0 <= sx < solid.width) or solid.alpha[sy][sx] <= 0.0:
                 continue
+            a = solid.alpha[sy][sx]
             for c in range(3):
-                planes[c][y][x] = solid.rgb[c][oy + y][ox + x] * a
+                planes[c][y][x] = solid.rgb[c][sy][sx] * a
             planes[3][y][x] = a * 255.0
     master_w, master_h = fixtures.snap(part.width), fixtures.snap(part.height)
-    small = label_parts.area_resample(planes, master_w, master_h)
-    out = pngio.Image.blank(master_w, master_h)
-    for y in range(master_h):
-        for x in range(master_w):
+    small = label_parts.area_resample(planes, master_w, master_h, (pad + wx0, pad + wx1, pad + wy0, pad + wy1))
+    return straight(small, master_w, master_h)
+
+
+# ---------------------------------------------------------------- the needle
+
+def clean_needle(frame: pngio.Image) -> list[list[list[float]]]:
+    """A needle frame of the pack without its baked grey shadow, premultiplied planes (red, green, blue, alpha 0..255), with room right and below for the shadow drawn by rule."""
+    pad = NEEDLE_SHADOW_OFFSET * 2 + 2
+    width, height = frame.w + pad, frame.h + pad
+    own = [[False] * width for _ in range(height)]
+    for y in range(frame.h):
+        for x in range(frame.w):
+            r, _, b, a = frame.pixel(x, y)
+            own[y][x] = a > 127 and (r - b) / (r + 1.0) > NEEDLE_CAST
+    label, sizes = pieces(own, NEEDLE_PIECE)
+    if not sizes:
+        raise ValueError("no needle found in a frame")
+    kept = fill_holes([[label[y][x] > 0 and sizes[label[y][x] - 1] * 4 >= max(sizes) for x in range(width)] for y in range(height)])
+    kept = [[v > 0.5 for v in row] for row in label_parts.blur([[1.0 if v else 0.0 for v in row] for row in kept], NEEDLE_SMOOTH)]
+    _, _, sy, sx = nearest_piece([[1 if kept[y][x] and y < frame.h and x < frame.w and frame.pixel(x, y)[3] > 127 and own[y][x] else 0 for x in range(width)] for y in range(height)])
+    soft = label_parts.blur([[1.0 if v else 0.0 for v in row] for row in kept], EDGE_SIGMA * 0.75)
+    moved = [[1.0 if y >= NEEDLE_SHADOW_OFFSET and x >= NEEDLE_SHADOW_OFFSET and kept[y - NEEDLE_SHADOW_OFFSET][x - NEEDLE_SHADOW_OFFSET] else 0.0 for x in range(width)] for y in range(height)]
+    shadow = label_parts.blur(moved, NEEDLE_SHADOW_SIGMA)
+    planes = [[[0.0] * width for _ in range(height)] for _ in range(4)]
+    for y in range(height):
+        for x in range(width):
+            a = min(max((soft[y][x] - 0.25) / 0.5, 0.0), 1.0)
+            total = a + (1.0 - a) * shadow[y][x] * NEEDLE_SHADOW
+            if total <= 0.0:
+                continue
+            if a > 0.0:
+                # a pixel the smoothed outline takes in beyond the needle's own colour (the baked grey, the ground) is drawn in the nearest pixel of the needle
+                inside = y < frame.h and x < frame.w and own[y][x]
+                colour = frame.pixel(x, y) if inside else frame.pixel(sx[y][x], sy[y][x])
+                for c in range(3):
+                    planes[c][y][x] = a * colour[c]
+            planes[3][y][x] = total * 255.0
+    return planes
+
+
+def build_needle(folder: Path) -> pngio.Image:
+    """The 21 cleaned frames in their cells, reduced to the part's master size."""
+    rows = (NEEDLE_FRAMES + NEEDLE_COLUMNS - 1) // NEEDLE_COLUMNS
+    cell = NEEDLE_CELL * HD
+    atlas = [[[0.0] * (NEEDLE_COLUMNS * cell) for _ in range(rows * cell)] for _ in range(4)]
+    for index in range(NEEDLE_FRAMES):
+        frame = pngio.read(folder / f"f{index:03d}.png")
+        planes = clean_needle(frame)
+        if len(planes[0]) > cell or len(planes[0][0]) > cell:
+            raise ValueError(f"needle frame {index}: {frame.w} x {frame.h} does not fit a cell of {NEEDLE_CELL} units")
+        ox, oy = (index % NEEDLE_COLUMNS) * cell, (index // NEEDLE_COLUMNS) * cell
+        for c in range(4):
+            for y, row in enumerate(planes[c]):
+                atlas[c][oy + y][ox:ox + len(row)] = row
+    master = (fixtures.snap(NEEDLE_COLUMNS * NEEDLE_CELL), fixtures.snap(rows * NEEDLE_CELL))
+    return straight(label_parts.area_resample(atlas, *master), *master)
+
+
+def straight(small: list[list[list[float]]], width: int, height: int) -> pngio.Image:
+    """Premultiplied planes (alpha 0..255) as a straight-alpha picture."""
+    out = pngio.Image.blank(width, height)
+    for y in range(height):
+        for x in range(width):
             a = small[3][y][x]
-            i = (y * master_w + x) * 4
+            i = (y * width + x) * 4
             if a < 0.5:
                 continue
             for c in range(3):
@@ -358,7 +457,7 @@ def build_part(frame: pngio.Image, part: SolidPart) -> pngio.Image:
     return out
 
 
-def build(frame_path: Path, out: Path, only: set[str] | None = None) -> list[str]:
+def build(frame_path: Path, out: Path, only: set[str] | None = None, needle_dir: Path | None = None) -> list[str]:
     frame = pngio.read(frame_path)
     if (frame.w, frame.h) != (3200, 1600):
         raise ValueError(f"the HD frame of the sheet must be 3200 x 1600 (4x of art 22), got {frame.w} x {frame.h}")
@@ -369,6 +468,9 @@ def build(frame_path: Path, out: Path, only: set[str] | None = None) -> list[str
             continue
         pngio.write(out / f"{part.ident}.png", build_part(frame, part))
         written.append(part.ident)
+    if not only or NEEDLE in only:
+        pngio.write(out / f"{NEEDLE}.png", build_needle(needle_dir or frame_path.parent / "align"))
+        written.append(NEEDLE)
     return written
 
 
@@ -448,11 +550,25 @@ def self_test() -> int:
             worst = max(worst, max(abs(back[c] - picture[c][y][x]) for c in range(3)))
     if worst > 22.0:
         problems.append(f"layer over the bare wood does not give the shadow back (worst {worst:.1f} levels)")
+    # the needle: a red bar beside a grey "baked shadow" bar: the grey goes, the bar stays, a translucent shadow lies down and to the right of it
+    bar = pngio.Image.blank(40, 60)
+    for y in range(8, 52):
+        for x in range(40):
+            colour = (90, 25, 20, 255) if 10 <= x < 16 else (110, 102, 92, 255) if 22 <= x < 30 else None
+            if colour:
+                bar.data[(y * 40 + x) * 4:(y * 40 + x) * 4 + 4] = bytes(colour)
+    planes = clean_needle(bar)
+    if planes[3][30][12] < 254.0 or abs(planes[0][30][12] * 255.0 / planes[3][30][12] - 90.0) > 1.0:
+        problems.append("the needle's own pixels are not kept as they are")
+    if planes[3][30][26] != 0.0:
+        problems.append("the needle frame keeps its baked grey shadow")
+    if not 0.05 * 255.0 < planes[3][30][17] <= NEEDLE_SHADOW * 255.0 + 1.0 or planes[0][30][17] != 0.0:
+        problems.append("no translucent dark shadow right of the needle")
     for problem in problems:
         print("SHEET PARTS FAIL:", problem)
     if problems:
         return 1
-    print(f"SHEET PARTS PASS: {len(PARTS)} parts, deterministic cut, the part found, the shadow measured by sector (down-right {solid.profile[sector_down_right][2]:.2f} at 2 px), layer over bare wood within {worst:.0f} levels of the picture")
+    print(f"SHEET PARTS PASS: {len(PARTS)} parts and the needle, deterministic cut, the part found, the shadow measured by sector (down-right {solid.profile[sector_down_right][2]:.2f} at 2 px), layer over bare wood within {worst:.0f} levels of the picture")
     return 0
 
 
@@ -462,6 +578,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("list")
     build_parser = sub.add_parser("build")
     build_parser.add_argument("--hd-frame", type=Path, required=True, help="the HD pack's frame of art 22 (3200 x 1600)")
+    build_parser.add_argument("--needle-dir", type=Path, default=None, help="the HD pack's frames of art 254 (f000.png to f020.png); default: the `align` folder beside the frame")
     build_parser.add_argument("--out", type=Path, default=None, help="default: local/steamwoven-ui/masters of the main checkout")
     build_parser.add_argument("--only", default="")
     sub.add_parser("self-test")
@@ -470,18 +587,19 @@ def main(argv: list[str] | None = None) -> int:
         for part in PARTS:
             master = (fixtures.snap(part.width), fixtures.snap(part.height))
             print(f"{part.ident}  at {part.x}, {part.y}  {part.width} x {part.height} units  master {master[0]} x {master[1]}")
+        print(f"{NEEDLE}  {NEEDLE_FRAMES} frames of art 254 in cells of {NEEDLE_CELL} units, {NEEDLE_COLUMNS} across  master {fixtures.BY_ID[NEEDLE].master[0]} x {fixtures.BY_ID[NEEDLE].master[1]}")
         return 0
     if args.command == "self-test":
         return self_test()
     only = {item for item in args.only.split(",") if item}
-    unknown = only - set(BY_ID)
+    unknown = only - set(IDENTS)
     if unknown:
         print("unknown part:", ", ".join(sorted(unknown)), file=sys.stderr)
         return 2
     out = args.out or fixtures.default_out()
     image_archive.warn_if_ephemeral(out, "sheet_parts.py build")
     try:
-        done = build(args.hd_frame, out, only or None)
+        done = build(args.hd_frame, out, only or None, args.needle_dir)
     except (ValueError, pngio.PngError, OSError) as error:
         print("SHEET PARTS FAIL:", error, file=sys.stderr)
         return 2

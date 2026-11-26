@@ -53,7 +53,7 @@ class LabelPartTests(unittest.TestCase):
             fixture = fixtures.BY_ID[part.ident]
             self.assertTrue(fixture.cut, part.ident)
             self.assertEqual((fixture.width, fixture.height), (part.width, part.height), part.ident)
-        self.assertEqual(sorted(f.ident for f in fixtures.FIXTURES if f.cut), sorted([p.ident for p in label_parts.PARTS] + [p.ident for p in sheet_parts.PARTS]), "every cut fixture has exactly one cutter (ARC-UI-3299 labels, ARC-UI-3321 solid parts)")
+        self.assertEqual(sorted(f.ident for f in fixtures.FIXTURES if f.cut), sorted([p.ident for p in label_parts.PARTS] + list(sheet_parts.IDENTS)), "every cut fixture has exactly one cutter (ARC-UI-3299 labels, ARC-UI-3321 solid parts)")
 
     def test_a_cut_fixture_is_a_placed_part_of_the_manifest_and_is_not_drawn(self) -> None:
         manifest = {p["id"]: p for p in build_kit.json.loads(build_kit.MANIFEST.read_text())["parts"]}

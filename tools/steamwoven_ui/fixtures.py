@@ -77,13 +77,14 @@ FIXTURES: tuple[Fixture, ...] = (
     Fixture("fixture.weapon_frame", 112, 97, INV, "the quarter-disc frame of the weapon slot at 10, 303"),
     Fixture("fixture.shield_frame", 114, 97, INV, "the quarter-disc frame of the shield slot at 244, 303"),
     Fixture("fixture.arrange_legend", 78, 32, INV, "the arrange button's legend at 690, 192: scattered dots, an arrow, a grid"),
-    Fixture("fixture.sheet_name_box", 360, 87, ("G05",), "the name and info box of the character sheet at 119, 9"),
-    Fixture("fixture.sheet_derived_box", 452, 113, ("G05",), "the derived-stats and resistance box at 24, 278 with its divider"),
-    Fixture("fixture.stat_oval", 80, 44, ("G05",), "the brass oval round a stat number with its two sockets and the black pit, in the old HD version's look (ARC-UI-3321): eight of them, the first one's corner at 167, 105, then 143 right and 40 down", cut=True),
-    Fixture("fixture.align_dial", 109, 111, ("G05",), "the alignment dial at 3, 128 in the old HD version's look: brass bezel, paper face with its ticks, the hub, the number pit (the letters E and G are the label part, the needle and the pit's number are live; ARC-UI-3321)", cut=True),
+    Fixture("fixture.sheet_name_box", 390, 102, ("G05",), "the name and info box of the character sheet at 106, 2 in the old HD version's look: the figured brass frame with its curls and the black field (ARC-UI-3321)", cut=True),
+    Fixture("fixture.sheet_derived_box", 488, 128, ("G05",), "the derived-stats and resistance box at 10, 270 in the old HD version's look: the figured brass frame with its curls, the black field and the divider (ARC-UI-3321)", cut=True),
+    Fixture("fixture.stat_oval", 80, 44, ("G05",), "the brass oval round a stat number, two sockets and the black pit, in the old HD look: eight of them, the first at 167, 105, then 143 right and 40 down", cut=True),
+    Fixture("fixture.align_dial", 109, 111, ("G05",), "the alignment dial at 3, 128 in the old HD look: brass bezel, paper face with ticks, hub, number pit (E and G are the label part; needle and number are live)", cut=True),
+    Fixture("fixture.align_needle", 245, 105, ("G05",), "art 254's 21 needle frames from the HD pack, the baked grey shadow replaced by a rule shadow, 35-unit cells, 7 across (#3312)", cut=True),
     Fixture("fixture.health_disc", 87, 68, ("G05",), "the health disc with its red heart and two sockets at 405, 122 in the old HD version's look (ARC-UI-3321)", cut=True),
     Fixture("fixture.fatigue_disc", 87, 67, ("G05",), "the fatigue disc with its blue cross and two sockets at 405, 192 in the old HD version's look (ARC-UI-3321)", cut=True),
-    Fixture("fixture.mt_ruler", 60, 332, ("G05",), "the magic and technology ruler at 740, 60 in the old HD version's look: parchment strip with its ticks and the divisions 75 50 25 0 25 50 75, the magic sign, the technology gear, the two number caps (ARC-UI-3321)", cut=True),
+    Fixture("fixture.mt_ruler", 60, 332, ("G05",), "the magic and technology ruler at 740, 60 in the old HD look: parchment strip with ticks and divisions 75 50 25 0 25 50 75, magic sign, gear, two number caps", cut=True),
     Fixture("fixture.sheet_stat_names_l", 50, 160, ("G05",), "the stat names ST CN DX BE of the sheet at 131, 115 + 40 r in the old HD version's look (the part's corner is 120, 108)", cut=True),
     Fixture("fixture.sheet_stat_names_r", 55, 160, ("G05",), "the stat names IN WP PE CH of the sheet at 263, 115 + 40 r in the old HD version's look (the part's corner is 255, 108)", cut=True),
     Fixture("fixture.sheet_dial_letters", 65, 25, ("G05",), "the alignment dial's E&G with its two curls at 45..70, 153 (the part's corner is 25, 146)", cut=True),
@@ -331,11 +332,8 @@ def draw(ident: str, variant: str = "brass") -> pngio.Image:
         _pit(c, variant, (2, 2, 320, 256))
     elif ident == "fixture.holder_pit_barter":
         _pit(c, variant, (2, 2, 320, 224))
-    elif ident in ("fixture.name_pit", "fixture.quote_field", "fixture.count_pit", "fixture.sheet_name_box", "fixture.schem_channel"):
+    elif ident in ("fixture.name_pit", "fixture.quote_field", "fixture.count_pit", "fixture.schem_channel"):
         _pit(c, variant)
-    elif ident == "fixture.sheet_derived_box":
-        _pit(c, variant)
-        c.rect(c.X(284), c.Y(16), c.X(287), c.Y(100), EDGE)
     elif ident == "fixture.count_icons":
         _icons(c)
     elif ident == "fixture.weapon_frame":
@@ -388,7 +386,7 @@ def self_test() -> int:
         if width % GRID or height % GRID:
             problems.append(f"{fixture.ident}: master {width} x {height} is not on the 6 px grid")
     for variant in VARIANTS:
-        for ident in ("fixture.count_pit", "fixture.sheet_derived_box", "fixture.gear_scroll"):
+        for ident in ("fixture.count_pit", "fixture.quote_field", "fixture.gear_scroll"):
             first, second = draw(ident, variant), draw(ident, variant)
             fixture = BY_ID[ident]
             if first.data != second.data or (first.w, first.h) != fixture.master:

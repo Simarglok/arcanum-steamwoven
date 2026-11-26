@@ -112,6 +112,8 @@ def fixture_part(fixture: fixtures.Fixture) -> dict:
     kind = "grid" if fixture.ident.startswith("grid.") else "fixture"
     if not fixture.cut:
         how = "no original art, drawn by fixtures.py (ARC-UI-3098)"
+    elif fixture.ident == sheet_parts.NEEDLE:
+        how = "cut from the player's own HD pack by sheet_parts.py (ARC-UI-3321)"
     elif fixture.ident in sheet_parts.BY_ID:
         how = "cut from the player's own HD frame by sheet_parts.py (ARC-UI-3321)"
     else:

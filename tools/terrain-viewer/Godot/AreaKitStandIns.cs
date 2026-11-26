@@ -182,6 +182,8 @@ internal static class AreaKitStandIns
 
     /// <summary>ARC-UI-3321: the kit part that carries the ruler's divisions.</summary>
     internal const string RulerPart = "fixture.mt_ruler";
+    /// <summary>ARC-UI-3321: the alignment needle's frames; it has no stand-in (the art's own needle is drawn where the kit has none).</summary>
+    internal const string NeedlePart = "fixture.align_needle";
 
     /// <summary>The character sheet's main page (art 22): the name and info box, the eight stat ovals, the alignment dial, the health disc with its heart and the fatigue disc with its cross, the magic-technology ruler with its ticks and its two end signs, and the derived-stats box (the letters and the ruler's numbers are written by the sheet, <see cref="SheetLabels"/>).</summary>
     internal static IReadOnlySet<string> CharacterSheet(CanvasItem canvas)
@@ -189,9 +191,9 @@ internal static class AreaKitStandIns
         Drawn.Add(SteamwovenKitWindow.Character);
         var drawn = new HashSet<string>();
         void Draw(string id, float x, float y, Action standIn) { if (Part(canvas, 1, id, x, y, standIn)) drawn.Add(id); }
-        Draw("fixture.sheet_name_box", 119, 9, () => Field(canvas, 1, 119, 9, 360, 87));
-        Draw("fixture.sheet_derived_box", 24, 278, () => Field(canvas, 1, 24, 278, 452, 113));
-        // ARC-UI-3321: the ovals, the dial, the discs and the ruler are cut from the old HD frame and carry their cast shadow, so a part's box is a little larger than the object: the oval's box starts at 167, 105 (its sockets reach 170.6 and 243.1), the rows 40 apart (the boxes overlap by 4 units, the shadow only fades inside them).
+        Draw("fixture.sheet_name_box", 106, 2, () => Field(canvas, 1, 119, 9, 360, 87));
+        Draw("fixture.sheet_derived_box", 10, 270, () => Field(canvas, 1, 24, 278, 452, 113));
+        // ARC-UI-3321: the two boxes, the ovals, the dial, the discs and the ruler are cut from the old HD frame and carry their cast shadow, so a part's box is a little larger than the object: the oval's box starts at 167, 105 (its sockets reach 170.6 and 243.1), the rows 40 apart (the boxes overlap by 4 units, the shadow only fades inside them).
         for (var r = 0; r < 4; r++)
         {
             var y = 105 + 40 * r;

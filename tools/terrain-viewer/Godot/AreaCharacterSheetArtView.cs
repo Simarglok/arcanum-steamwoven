@@ -340,7 +340,11 @@ public partial class AreaCharacterSheetArtView : Control
         {
             var (hotX, hotY) = frame < _alignmentHot.Length ? _alignmentHot[frame] : (0, 0);
             var (x, y) = AreaCharacterSheetArtLayout.AlignmentTopLeft(hotX, hotY);
-            DrawTextureRect(needle, new Rect2(x, y, needle.GetWidth(), needle.GetHeight()), false);
+            // ARC-UI-3321: over the kit the needle is the kit's clean HD frame (the art's own frame carries its shadow as grey pixels painted for the old dial, #3312); its size and hot point are the original's.
+            var (cellX, cellY) = AreaCharacterSheetArtLayout.NeedleCell(frame);
+            var extra = AreaCharacterSheetArtLayout.NeedleShadow;
+            if (!KitBackgroundShown || !AreaKitFixtures.DrawRegion(this, 1, AreaKitStandIns.NeedlePart, x, y, cellX, cellY, needle.GetWidth() + extra, needle.GetHeight() + extra))
+                DrawTextureRect(needle, new Rect2(x, y, needle.GetWidth(), needle.GetHeight()), false);
         }
         if (Art(AreaCharacterSheetArtLayout.AptitudeArt) is { } marker)
         {
@@ -359,8 +363,22 @@ public partial class AreaCharacterSheetArtView : Control
             var (number, x, y) = Place(hit);
             if (hit.Kind == Kind.Tab && Art(number) is null) continue;
             var shown = hit.Kind == Kind.Tab && hit.Index == (int)_tab ? AreaBarButtonFrameDown(number) : Frame(hit);
+            if (hit.Kind != Kind.Tab && KitBackgroundShown && KitButton(hit, x, y, shown)) continue;
             if (Art(number, shown) is { } texture) DrawTextureRect(texture, new Rect2(x, y, texture.GetWidth(), texture.GetHeight()), false);
         }
+    }
+
+    /// <summary>
+    /// ARC-UI-3321: a + or − button from the kit's layers over its socket (face, symbol and the overlay of the look in the art's frame order: 1 pressed, 2 hover); false when the kit has none (the original art is drawn).
+    /// </summary>
+    private bool KitButton(Hit hit, int x, int y, int frame)
+    {
+        var layers = SteamwovenKitTable.SheetButtonLayers(SteamwovenKitTable.SheetButtonName(hit.Index, hit.Kind == Kind.Plus));
+        if (!AreaKitFixtures.Has(layers.Plate) || !AreaKitFixtures.Has(layers.Glyph)) return false;
+        AreaKitFixtures.Draw(this, 1, layers.Plate, x, y);
+        AreaKitFixtures.Draw(this, 1, layers.Glyph, x, y);
+        if (SteamwovenKitTable.SheetButtonOverlay(SteamwovenKitTable.SheetButtonName(hit.Index, hit.Kind == Kind.Plus), frame) is { } over) AreaKitFixtures.Draw(this, 1, over, x, y);
+        return true;
     }
 
     /// <summary>The shown tab keeps its pressed frame (the page is on).</summary>

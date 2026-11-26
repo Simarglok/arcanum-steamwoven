@@ -1101,4 +1101,89 @@ public sealed class SteamwovenKitTests
         Assert.IsNull(SteamwovenKitComposer.Fixture(set, "fixture.align_dial"), "a missing part is left out");
         Assert.IsNull(SteamwovenKitComposer.Fixture(set, "fixture.unknown"), "an id the table does not size");
     }
+
+    /// <summary>ARC-UI-3321: each of the 21 needle frames has its own cell of 35 units inside the needle part (the largest frame is 31 x 28 units, drawn 2 units larger for its shadow).</summary>
+    [TestMethod]
+    public void The_needle_frames_lie_in_their_own_cells_of_the_needle_part()
+    {
+        var units = SteamwovenKitTable.FixtureUnits["fixture.align_needle"];
+        var cells = Enumerable.Range(0, 21).Select(AreaCharacterSheetArtLayout.NeedleCell).ToArray();
+        Assert.AreEqual(21, cells.Distinct().Count());
+        Assert.IsTrue(cells.All(cell => cell.X % 35 == 0 && cell.Y % 35 == 0 && cell.X + 35 <= units.Width && cell.Y + 35 <= units.Height));
+        Assert.AreEqual((0, 0), cells[0]);
+        Assert.AreEqual((210, 0), cells[6]);
+        Assert.AreEqual((0, 35), cells[7]);
+        Assert.AreEqual((210, 70), cells[20]);
+        Assert.IsTrue(SteamwovenKitTable.PartsOf(SteamwovenKitWindow.Character).Contains("fixture.align_needle"));
+    }
+
+    /// <summary>ARC-UI-3321: the sheet's + and − buttons are the manifest's button plates at their art's size (made by #3270); the character window needs every one of their layers and every fixture.</summary>
+    [TestMethod]
+    public void The_sheet_buttons_are_manifest_plates_and_the_character_window_needs_all_its_parts()
+    {
+        var parts = KitManifest().GetProperty("parts").EnumerateArray().ToDictionary(part => part.GetProperty("id").GetString()!);
+        var ids = SteamwovenKitTable.PartsOf(SteamwovenKitWindow.Character);
+        var arts = new Dictionary<string, string> { ["char_minus"] = "23", ["char_plus"] = "24", ["char_htftminus"] = "770", ["char_htftplus"] = "771" };
+        CollectionAssert.AreEquivalent(arts.Keys.ToArray(), SteamwovenKitTable.SheetButtonUnits.Keys.ToArray());
+        foreach (var (name, units) in SteamwovenKitTable.SheetButtonUnits)
+        {
+            var layers = SteamwovenKitTable.SheetButtonLayers(name);
+            foreach (var id in new[] { layers.Plate, layers.Glyph, layers.Hover, layers.Pressed })
+            {
+                Assert.IsTrue(ids.Contains(id), id);
+                Assert.AreEqual((units, units), SteamwovenKitTable.PartUnits(id), id);
+            }
+            var plate = parts[layers.Plate];
+            Assert.AreEqual(SteamwovenKitTable.MasterOf(units), plate.GetProperty("size")[0].GetInt32(), layers.Plate);
+            Assert.AreEqual(arts[name], plate.GetProperty("source_arts")[0].GetString(), layers.Plate);
+        }
+        CollectionAssert.AreEquivalent(new[] { "char_htftminus", "char_htftplus", "char_minus", "char_plus" },
+            Enumerable.Range(0, AreaStatsPage.Rows).SelectMany(row => new[] { SteamwovenKitTable.SheetButtonName(row, false), SteamwovenKitTable.SheetButtonName(row, true) }).Distinct().ToArray());
+        Assert.AreEqual("char_htftminus", SteamwovenKitTable.SheetButtonName(1, false));
+        Assert.AreEqual("char_plus", SteamwovenKitTable.SheetButtonName(2, true));
+        CollectionAssert.IsSubsetOf(SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.Character).ToArray(), ids.ToArray());
+        Assert.AreEqual(SteamwovenKitTable.FixturesOf(SteamwovenKitWindow.Character).Count + 16, ids.Count);
+        foreach (var window in Enum.GetValues<SteamwovenKitWindow>())
+        {
+            Assert.AreEqual(window == SteamwovenKitWindow.Character, SteamwovenKitTable.NeedsEveryPart(window), window.ToString());
+            if (window != SteamwovenKitWindow.Character) CollectionAssert.AreEqual(SteamwovenKitTable.FixturesOf(window).ToArray(), SteamwovenKitTable.PartsOf(window).ToArray(), window.ToString());
+        }
+        var step = SteamwovenStep.Half;
+        int B(int units) => SteamwovenGrid.BakedLength(SteamwovenKitTable.MasterOf(units), step);
+        var set = SteamwovenKitSet.FromParts(step, "/kit/x1-2", [new("plate.char_minus", B(19), B(19)), new("glyph.char_minus", B(19), B(19) + 1), new("plate.char_htftplus", B(19), B(19))]);
+        Assert.IsNotNull(SteamwovenKitComposer.Fixture(set, "plate.char_minus"));
+        Assert.IsNull(SteamwovenKitComposer.Fixture(set, "glyph.char_minus"), "a wrong sized layer is left out");
+        Assert.IsNull(SteamwovenKitComposer.Fixture(set, "plate.char_htftplus"), "a disc button at the stat button's size is left out");
+        Assert.IsNull(SteamwovenKitTable.PartUnits("plate.char_but"));
+    }
+
+    [TestMethod]
+    public void A_sheet_button_lays_its_pressed_or_hover_part_over_its_face_and_none_at_rest()
+    {
+        int Frame(AreaBarButtonLook look) => AreaGameBarLayout.Frame(look, 3);
+        Assert.AreEqual("plate.char_plus_pressed", SteamwovenKitTable.SheetButtonOverlay("char_plus", Frame(AreaBarButtonLook.Down)));
+        Assert.AreEqual("plate.char_plus_hover", SteamwovenKitTable.SheetButtonOverlay("char_plus", Frame(AreaBarButtonLook.Hovered)));
+        Assert.IsNull(SteamwovenKitTable.SheetButtonOverlay("char_plus", Frame(AreaBarButtonLook.Idle)));
+    }
+
+    /// <summary>
+    /// ARC-UI-3321: the knob of each of the twenty socket buttons lies on its fixture's socket: the oval's copy at its own place (corner 167 + 143 c, 105 + 40 r, sockets at 12.5 and 67.5, 21.5 from it) and the two discs (corner 405, 122 and
+    /// 192, sockets at 14.5 and 70.5, 32 from it), the places the cut puts them (<c>sheet_parts.py</c>).
+    /// </summary>
+    [TestMethod]
+    public void The_sheet_buttons_are_centred_in_the_sockets_of_the_fixtures()
+    {
+        for (var row = 0; row < AreaStatsPage.Rows; row++)
+        {
+            var (corner, sockets) = row < 2
+                ? (Corner: (X: 405, Y: row == 0 ? 122 : 192), Sockets: (Left: 14.5, Right: 70.5, Y: 32.0))
+                : (Corner: (X: 167 + 143 * ((row - 2) / 4), Y: 105 + 40 * ((row - 2) % 4)), Sockets: (Left: 12.5, Right: 67.5, Y: 21.5));
+            foreach (var plus in new[] { false, true })
+            {
+                var socket = AreaCharacterSheetArtLayout.Socket(row, plus);
+                Assert.AreEqual(corner.X + (plus ? sockets.Right : sockets.Left), socket.X, 1e-9, $"row {row} plus {plus}");
+                Assert.AreEqual(corner.Y + sockets.Y, socket.Y, 1e-9, $"row {row} plus {plus}");
+            }
+        }
+    }
 }
