@@ -3277,6 +3277,39 @@ not a contract): first opening to the next drawn frame, cold against warmed-up, 
 opening is the panel's own cost (inventory 39 ms, sheet 50 ms, logbook 27 ms inside the opening call). The self-test case `ARC-DEV-369 self-test prepared HD frames`
 checks that a prepared frame draws the pixels of a lazily resolved one, that refusals stay refusals, and that a stale or dropped frame resolves at the draw.
 
+
+## Performance overlay (ARC-DEV-3389)
+
+**Ctrl+F** shows and hides a small panel at the right edge, below the top interface bar, in the WORLD and AREA modes, in play, in the main menu and over
+the game's windows (not while the bug report or the owner-checks overlay is open: they own every key). It is off at every start
+and is not saved. It is a diagnostic of this project, no part of the original: Ctrl+F has no action there (F under Ctrl is a
+control code the game ignores, ARC-INPUT-004). The pointer passes through it, and it reads only: the session and the save do not
+change. Because it is drawn with the game, a bug report taken while it is shown has it on the screenshot.
+
+The text is written twice a second. Frame, update and collection figures cover the last 3 s.
+
+| Row | Meaning |
+| --- | --- |
+| FPS | 1000 divided by the average frame time of the window |
+| frame ms | time from one frame's start to the next: average, 95th percentile, longest. With vsync it does not go below the screen's refresh interval |
+| update ms | time the viewer's own per-frame update took on the main thread (its `_Process`; input handling and other nodes are not in it): average, longest |
+| main step ms | Godot's process-time monitor: the longest main-loop step of the last second, render submission included (and any wait inside it) |
+| render ms | render time of the main viewport: CPU (frame setup included) and GPU; `n/a` where the driver reports none |
+| draw calls, objects, prims | Godot's render counters of the last frame, the overlay's own draws included |
+| memory | the process's resident memory and Godot's video memory (the texture counter is left out: it is broken on Metal, issue #3333) |
+| .NET | managed heap (garbage not yet collected included) and the bytes allocated per second |
+| GC per s | collections per second of generations 0, 1 and 2 |
+| CPU | processor time of all threads, in percent of one core; the node and Godot object counts |
+| window | the window's size in pixels |
+
+**Cost.** Hidden, it is one null test per frame. Shown, a frame records its times into a fixed buffer without allocating; twice a
+second the text is built and the process read (a few KiB of allocations, which the allocation row includes), the panel adds its
+own draw calls, and the renderer's time measurement is on. For monitoring from outside the game (Metal HUD, Instruments) see
+issue [#3378](https://github.com/Simarglok/arcanum-steamwoven/issues/3378).
+
+**Smoke.** Stage `report` (also in the map battery): `ARC-DEV-3389 native-smoke perf-overlay PASS`. With
+`ARC_PERF_OVERLAY_CAPTURE=<folder>` a window run saves `before.png` and `shown.png`.
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)
