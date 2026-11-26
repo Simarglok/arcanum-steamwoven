@@ -493,6 +493,8 @@ def wedge_parts(frames: Path, cell: Image, group: list[Small]) -> dict[str, Imag
 
 STRAY = 3              # a lone solid pixel left by the keying (a corner of the ground) is not the object's edge
 PAPER_WARM = 25        # an original cell whose red exceeds its blue by this much is parchment or symbol; the stone round it is grey
+PAPER_LIGHT = 1.18     # the sheet's tone: the hue of the original sheet's mean colour, this much lighter (light cream; ARC-UI-3272, owner 2026-11-26)
+PAPER_TEXTURE = 0.5    # the share of the generated paper's own light and dark that is kept (the owner asked for a weaker texture)
 PAPER_SHEET = "plate-schem-skills"     # left the idle look, right the lit one
 INK_SHEET = "glyph-schem-arrows"       # left the left arrow, right the right arrow, dark ink on white
 INK_DARK = 70          # an original cell darker than this is ink of the dark state; both states take their colour from those cells
@@ -555,10 +557,43 @@ def ink_trim(path: Path, name: str) -> tuple:
     return INK_TRIM[name]
 
 
+def is_sheet_cell(p: tuple) -> bool:
+    """An original cell of the bare sheet: lit warm tan, not the red or brown symbol and not the grey stone."""
+    return p[0] - p[2] >= 40 and p[1] - p[2] >= 22 and p[0] - p[1] < 55 and sum(p[:3]) >= 360
+
+
+def symbolness(r: int, g: int, b: int) -> float:
+    """How much of a generated pixel is the symbol (dark brown, or bright red) rather than the paper: 0 to 1."""
+    return min(1.0, max(0.0, (140.0 - luminance((r, g, b))) / 50.0, (r - g - 60.0) / 40.0))
+
+
+def toned(cut: Image, target: tuple[float, float, float]) -> Image:
+    """The cut parchment with its paper moved to the `target` mean colour and its texture kept at `PAPER_TEXTURE`; the symbol's pixels keep their colour."""
+    d = cut.data
+    paper = [i for i in range(0, len(d), 4) if d[i + 3] == 255 and symbolness(d[i], d[i + 1], d[i + 2]) == 0.0]
+    if not paper:
+        raise SmallError("the sheet cell has no bare paper")
+    mean = [sum(d[i + k] for i in paper) / len(paper) for k in range(3)]
+    out = Image(cut.w, cut.h, bytearray(d))
+    for i in range(0, len(d), 4):
+        if d[i + 3] == 0:
+            continue
+        w = 1.0 - symbolness(d[i], d[i + 1], d[i + 2])
+        for k in range(3):
+            v = d[i + k] + w * (target[k] + PAPER_TEXTURE * (d[i + k] - mean[k]) - d[i + k])
+            out.data[i + k] = max(0, min(255, round(v)))
+    return out
+
+
 def paper_parts(frames: Path, sheet: Image, b: Small) -> dict[str, Image]:
     """The parchment of the schematics button: idle and lit from the two sheet cells, both in the original parchment's place and in the idle outline; pressed is the lit content one original cell lower, as the original moves it."""
-    box = cells_box(read_frame(frames, b, b.frames["idle"]), lambda p: p[0] - p[2] >= PAPER_WARM)
-    idle, lit = (placed(cut_from_magenta(sheet.crop(k * (sheet.w // 2), 0, sheet.w // 2, sheet.h)), box, b.units, b.master) for k in (0, 1))
+    original = read_frame(frames, b, b.frames["idle"])
+    box = cells_box(original, lambda p: p[0] - p[2] >= PAPER_WARM)
+    bare = [(x, y) for y in range(original.h) for x in range(original.w) if is_sheet_cell(original.pixel(x, y))]
+    if not bare:
+        raise SmallError("the original frame has no bare sheet cell")
+    target = tuple(PAPER_LIGHT * v for v in mean_colour(original, bare))
+    idle, lit = (placed(toned(cut_from_magenta(sheet.crop(k * (sheet.w // 2), 0, sheet.w // 2, sheet.h)), target), box, b.units, b.master) for k in (0, 1))
     fit.decontaminate(idle, 255, fit.EDGE_RADIUS)
     hover = within(lit, idle, idle)
     return {f"plate.{b.name}": idle, f"plate.{b.name}_hover": hover, f"plate.{b.name}_pressed": within(hover, idle, hover, round(b.master[1] / b.units[1])), f"glyph.{b.name}": Image.blank(*b.master)}

@@ -388,6 +388,23 @@ class WedgeTest(unittest.TestCase):
             self.assertIn("empty glyph", glyph["rule"])
 
 
+class ToneTest(unittest.TestCase):
+    def test_the_paper_moves_to_the_target_with_half_its_texture_and_the_symbol_stays(self):
+        cut = flat_frame(4, 1, (200, 170, 100))
+        cut.data[4:8] = bytes((220, 190, 120, 255))
+        cut.data[8:12] = bytes((90, 45, 10, 255))
+        cut.data[12:16] = bytes((200, 170, 100, 0))
+        out = sk.toned(cut, (100.0, 90.0, 80.0))
+        self.assertEqual([out.pixel(x, 0) for x in range(4)], [(95, 85, 75, 255), (105, 95, 85, 255), (90, 45, 10, 255), (200, 170, 100, 0)])
+
+    def test_the_symbol_is_the_dark_brown_or_the_bright_red(self):
+        self.assertEqual([sk.symbolness(*c) for c in ((90, 45, 10), (230, 20, 10), (210, 180, 130))], [1.0, 1.0, 0.0])
+
+    def test_a_cell_without_paper_is_an_error(self):
+        with self.assertRaises(sk.SmallError):
+            sk.toned(flat_frame(4, 4, (90, 45, 10)), (1.0, 1.0, 1.0))
+
+
 class CutOutTest(unittest.TestCase):
     """The parchment and ink families on synthetic sheets (no art)."""
 
