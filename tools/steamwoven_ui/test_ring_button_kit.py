@@ -350,6 +350,27 @@ class BuildTests(unittest.TestCase):
         self.assertEqual((dome["source"], dome["parameters"]["dome"]), ("pack", "smooth"))
         self.assertEqual(dome["parameters"]["smoothing_units"]["face"], list(rk.SMOOTH_FACE))
 
+    def test_the_smooth_dome_is_smoothed_in_both_states_and_the_pack_cut_is_not(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = tree(folder, [rk.DOME])
+            for number in rk.DOME.frames.values():
+                path = root.parent / school_kit.PACK_DIR / "interface" / f"{rk.DOME.name}-f{number:03d}.png"
+                frame = pngio.read(path)
+                for y in range(frame.h):
+                    for x in range(frame.w):
+                        if (x // 2 + y // 2) % 2:
+                            frame.data[(y * frame.w + x) * 4] ^= 16
+                pngio.write(path, frame)
+            built = {dome: rk.button_parts(root, root / "census" / "frames", rk.DOME, dome) for dome in ("smooth", "pack")}
+        for ident in ("plate.combinebutt", "plate.combinebutt_pressed"):
+            spread = {}
+            for dome, parts in built.items():
+                red = [at(parts[ident], x, y)[0] for y in range(80, 106) for x in range(80, 106)]
+                spread[dome] = max(red) - min(red)
+            self.assertLessEqual(spread["smooth"], 2, ident)
+            self.assertGreater(spread["pack"], 8, ident)
+            self.assertEqual(at(built["smooth"][ident], 93, 2), at(built["pack"][ident], 93, 2), ident)
+
     def test_the_codex_build_refuses_without_placed_frames(self):
         with tempfile.TemporaryDirectory() as folder:
             root = tree(folder, rk.BUTTONS)
