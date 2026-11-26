@@ -5,7 +5,7 @@ cycle arrows and the small right arrow, the three inventory "lil" buttons and th
 How each is made (owner decisions of 2026-11-26 in the issue's thread; every part is a full face cut to the ring's circle by an analytic round alpha, no shadow baked):
 
 * `codex`  23, 24, 770, 771: ONE generated ring and glossy dome (the idle Minus of the sheet `pm`, drawn large and reduced, its bar taken out) for every face of both sizes, and the sign drawn over it by rule (owner 2026-11-26:
-  the generated stroke was too thin): one stroke, `SIGN_LENGTH` and `SIGN_THICKNESS` of the dome's diameter, in the original's colour of the state (`SIGN`); hover only lights the sign, pressed also darkens the dome and keeps the original's narrow red halo tight to the sign.
+  the generated stroke was too thin): one stroke, `SIGN_LENGTH` and `SIGN_THICKNESS` of the dome's diameter, in the original's colour of the state (`SIGN`; the idle stroke has a soft relief, a little darker towards its lower edge, and its slot's thin shade above it); hover only lights the sign, pressed also darkens the dome and keeps the original's narrow red halo tight to the sign.
 * `marker` 145 to 148: the symbol cut from the generated marker sheet of the map markers 141 to 144 (#3207, one source for both places), on the set's own ring and dome (the idle Minus with its bar taken out); the idle symbol is
   dimmed as the original's frame 0 is dimmer than frame 1.
 * `wedge`  757, 758: that same plate, a straight-edged triangle by rule fitted to the original's red cells (the method of arts 827 and 828, #3272).
@@ -16,7 +16,6 @@ Every ring is brought to the accepted brass (`BRASS`, #3259 and #3260, `hardware
 
     python3 -B tools/steamwoven_ui/ring_kit.py codex-inbox                                       (the inbox of batch B-BUTTONS-RING: prompt and references)
     python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS-RING                             (the owner's Codex subscription: one sheet)
-    python3 -B tools/steamwoven_ui/ring_kit.py codex-place                                       (the sheet's discs registered onto the arts' circles -> work/B-BUTTONS-RING/placed)
     python3 -B tools/steamwoven_ui/ring_kit.py build [--only NAME,...] [--out DIR] [--dry-run]   (the parts -> masters/ and provenance/rule/)
     python3 -B tools/steamwoven_ui/ring_kit.py check [--only NAME,...]                           (every input of every state is there; the circles lie in the arts)
     python3 -B tools/steamwoven_ui/ring_kit.py sheet --out FILE [--real FILE] [--only NAME,...]  (original | new with the shadow; --real: all buttons at their size on a 2560 x 1440 screen; English labels)
@@ -50,10 +49,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 try:
-    from . import button_kit, hardware_build, pngio, prompt_library, school_kit
+    from . import button_kit, hardware_build, marker_kit, pngio, prompt_library, school_kit
 except ImportError:  # run as a script
     sys.path.insert(0, str(HERE.parents[1]))
-    from tools.steamwoven_ui import button_kit, hardware_build, pngio, prompt_library, school_kit  # type: ignore
+    from tools.steamwoven_ui import button_kit, hardware_build, marker_kit, pngio, prompt_library, school_kit  # type: ignore
 
 Image = pngio.Image
 TOOL_VERSION = 2            # 1 was the pack-first build of all sixteen (superseded by the owner on 2026-11-26)
@@ -271,36 +270,24 @@ def without_bar(frame: Image, circle: school_kit.Circle) -> Image:
 
 def empty_plate(local_root: Path, ring: Ring) -> Image:
     """The plate of the buttons that carry a drawn or cut symbol: the SAME ring and glossy dome as the plus and minus (the idle Minus of the generated set, its bar taken out), brought to the accepted brass and cut to this circle."""
-    placed = placed_frame_of(local_root, ring_named("char_minus"), "idle", ring.circle)
+    placed = placed_minus(local_root, ring.circle)
     frame = without_bar(centred(placed, ring.circle, symbol_offset(placed, ring.circle)), ring.circle)
     return toned(part_of(ring, frame), ring.circle, INNER["codex"])
 
 
-MARKER_BATCH = "B-BUTTONS-3207-markers"     # the generated sheet of the map markers (#3207): magenta ground, 3 x 2 cells
-MARKER_CELLS = {"mmb_chest": (0, 0), "mmb_note": (1, 0), "mmb_ques": (2, 0), "mmb_skull": (0, 1)}
 SYMBOL_BOXES = {"mmb_chest": (5, 4, 17, 17), "mmb_note": (5, 3, 16, 18), "mmb_ques": (7, 4, 15, 16), "mmb_skull": (4, 5, 19, 17)}   # the symbol's cells in the original's frames (x0, y0, x1, y1)
 IDLE_DIM = {"mmb_chest": 0.77, "mmb_note": 0.67, "mmb_ques": 0.78, "mmb_skull": 0.66}   # frame 0's symbol lightness as a share of frame 1's, measured on the originals
 
 
-MARKER_REDRAWN = {"mmb_skull": "skull-neutral"}   # symbols #3207 redrew as an item of their own (the owner asked for a neutral skull): the whole picture, not a cell of the sheet
+def marker_name(name: str) -> str:
+    """The map marker (`marker_kit.py`, #3207) whose drawing a message button shows."""
+    return "mm_" + name.removeprefix("mmb_")
 
 
-def marker_sheet(local_root: Path, name: str | None = None) -> Path:
-    """The picture a symbol is cut from: the marker sheet, or the item of its own that replaced the symbol's cell."""
-    return local_root / "outbox" / MARKER_BATCH / f"{MARKER_REDRAWN.get(name, 'marker-sheet')}.png"
-
-
-def keyed_magenta(picture: Image) -> Image:
-    """The magenta ground of a generated sheet made clear (a pixel's magenta share is how far red and blue stand above green), the ground's colour taken out of the soft edge."""
-    out = Image(picture.w, picture.h, bytearray(picture.data))
-    for i in range(picture.w * picture.h):
-        r, g, b = picture.data[i * 4:i * 4 + 3]
-        a = 1.0 - max(0.0, min(1.0, (min(r, b) - g - 40) / 180.0))
-        if a < 0.02:
-            out.data[i * 4:i * 4 + 4] = bytes((0, 0, 0, 0))
-        elif a < 1.0:
-            out.data[i * 4:i * 4 + 4] = bytes((*(max(0, min(255, int(round((v - (1 - a) * m) / a)))) for v, m in ((r, 255), (g, 0), (b, 255))), int(round(a * 255))))
-    return out
+def marker_sheet(local_root: Path, name: str) -> Path:
+    """The picture a symbol is cut from, as `marker_kit.py` reads it: the marker sheet, or the item of its own that replaced the marker's cell."""
+    item = marker_kit.REDRAWN.get(marker_name(name), marker_kit.MARKER_ITEM)
+    return local_root / "outbox" / marker_kit.MARKER_BATCH / f"{item}.png"
 
 
 def cropped(picture: Image, x0: int, y0: int, x1: int, y1: int) -> Image:
@@ -312,15 +299,13 @@ def cropped(picture: Image, x0: int, y0: int, x1: int, y1: int) -> Image:
 
 
 def marker_symbol(local_root: Path, name: str) -> Image:
-    """The symbol of a message button: its cell of the marker sheet (or the picture that replaced it), keyed and cropped to what is drawn."""
+    """The symbol of a message button: its marker's cell of the sheet (or the picture that replaced it), cut and keyed by `marker_kit.py`, cropped to what is drawn."""
+    marker = marker_name(name)
     try:
-        sheet = pngio.read(marker_sheet(local_root, name))
+        picture = pngio.read(marker_sheet(local_root, name))
     except (OSError, pngio.PngError) as error:
         raise RingError(f"the marker drawing of #3207 cannot be read: {error}") from error
-    if name not in MARKER_REDRAWN:
-        column, row = MARKER_CELLS[name]
-        sheet = cropped(sheet, column * sheet.w // 3, row * sheet.h // 2, (column + 1) * sheet.w // 3, (row + 1) * sheet.h // 2)
-    cell = keyed_magenta(sheet)
+    cell = marker_kit.keyed(picture if marker in marker_kit.REDRAWN else marker_kit.sheet_cell(picture, marker))
     on = [i for i in range(cell.w * cell.h) if cell.data[i * 4 + 3] > 40]
     if not on:
         raise RingError(f"{name}: the marker sheet's cell is empty")
@@ -432,22 +417,23 @@ class Arrow:
 
 def fit_arrow(cells: dict[tuple[int, int], tuple[int, int, int]]) -> Arrow:
     """The arrow of a frame's symbol cells (all of them): the shaft is what the second column holds, the head begins where a column grows past it and ends after the last column."""
-    body = cells
-    if len(body) < 12:
+    if len(cells) < 12:
         raise RingError("no arrow in the frame")
-    xs = sorted({x for x, _ in body})
+    xs = sorted({x for x, _ in cells})
     left = xs[0]
-    shaft = sorted(y for x, y in body if x == (xs[1] if len(xs) > 1 else left))
-    neck = next((x for x in xs if min(y for i, y in body if i == x) < shaft[0] or max(y for i, y in body if i == x) > shaft[-1]), None)
+    shaft = sorted(y for x, y in cells if x == (xs[1] if len(xs) > 1 else left))
+    neck = next((x for x in xs if min(y for i, y in cells if i == x) < shaft[0] or max(y for i, y in cells if i == x) > shaft[-1]), None)
     if neck is None:
         raise RingError("no arrow head in the frame")
-    head = [y for x, y in body if x >= neck]
+    head = [y for x, y in cells if x >= neck]
     return Arrow(left, shaft[0], shaft[-1] + 1, neck, xs[-1] + 1.5, min(head) - 0.5, max(head) + 1.5)
 
 
 def arrow_face(local_root: Path, ring: Ring, frame: Image, idle: Image, glow: bool) -> Image:
     """One outline for every state (the idle frame's, so the arrow neither grows nor moves), each state's own cells inside it."""
     cells = symbol_colours(frame)
+    if not cells:
+        raise RingError(f"{ring.name}: no red cells in a frame of the arrow")
     arrow = fit_arrow(symbol_colours(idle))
     body = {k: v for k, v in cells.items() if v[0] >= (LIT if glow else 0)} or cells
 
@@ -571,31 +557,38 @@ def idents(ring: Ring) -> list[tuple[str, str | None]]:
     return [(f"plate.{ring.name}", "idle"), (f"glyph.{ring.name}", None), *((f"plate.{ring.name}_{s}", s) for s in ring.states if s != "idle")]
 
 
-def record_of(local_root: Path, frames: Path, ring: Ring, ident: str, image_path: Path, image: Image) -> dict:
-    """The provenance record of a part (SWI-GEN-6): the method and the hash of everything it was made from."""
-    state = dict(idents(ring))[ident]
+def sources_of(local_root: Path, frames: Path, ring: Ring, state: str) -> dict:
+    """The hash of everything a face is made from; a missing input (a picture or a generated picture's own record) is an error."""
     sources: dict = {}
 
     def add(key: str, path: Path) -> None:
-        sources[key] = {"sha256": button_kit.sha256_file(path)} if path.is_file() else {"sha256": None, "missing": True}
+        if not path.is_file():
+            raise RingError(f"{ring.name} {state}: no input {path}")
+        sources[key] = {"sha256": button_kit.sha256_file(path)}
 
-    if state is not None:
-        if ring.method == "codex":
-            add(f"outbox/{CODEX_BATCH}/{SHEETS[0].ident}.png", sheet_path(local_root))
-            add(f"outbox/{CODEX_BATCH}/{SHEETS[0].ident}.provenance.json", sheet_path(local_root).with_suffix(".provenance.json"))
-        elif ring.method == "pack":
-            path, index_sha = school_kit.pack_path(school_kit.pack_local(local_root), ring.name, STATE_FRAMES[state])
-            add(f"{school_kit.PACK_DIR}/{ring.name}-f{STATE_FRAMES[state]:03d}", path)
-            sources[f"{school_kit.PACK_DIR}/{ring.name}-f{STATE_FRAMES[state]:03d}"]["index_sha12"] = index_sha
-        else:
-            add(f"outbox/{CODEX_BATCH}/{SHEETS[0].ident}.png", sheet_path(local_root))   # the plate under the symbol
-            if ring.method == "marker":
-                picture = marker_sheet(local_root, ring.name)
-                add(f"outbox/{MARKER_BATCH}/{picture.name}", picture)
-                add(f"outbox/{MARKER_BATCH}/{picture.stem}.provenance.json", picture.with_suffix(".provenance.json"))
-            else:
-                for number in sorted({STATE_FRAMES[state], *([0] if ring.method == "arrow" else [])}):   # the arrow's outline is the idle frame's
-                    add(f"census/frames/{ring.folder}/f{number}.png", frames / ring.folder / f"f{number}.png")
+    def generated(batch: str, picture: Path) -> None:
+        add(f"outbox/{batch}/{picture.name}", picture)
+        add(f"outbox/{batch}/{picture.stem}.provenance.json", picture.with_suffix(".provenance.json"))
+
+    if ring.method == "pack":
+        path, index_sha = school_kit.pack_path(school_kit.pack_local(local_root), ring.name, STATE_FRAMES[state])
+        key = f"{school_kit.PACK_DIR}/{ring.name}-f{STATE_FRAMES[state]:03d}"
+        add(key, path)
+        sources[key]["index_sha12"] = index_sha
+        return sources
+    generated(CODEX_BATCH, sheet_path(local_root))   # the ring and dome of every other face
+    if ring.method == "marker":
+        generated(marker_kit.MARKER_BATCH, marker_sheet(local_root, ring.name))
+    elif ring.method in ("wedge", "arrow"):
+        for number in sorted({STATE_FRAMES[state], *([0] if ring.method == "arrow" else [])}):   # the arrow's outline is the idle frame's
+            add(f"census/frames/{ring.folder}/f{number}.png", frames / ring.folder / f"f{number}.png")
+    return sources
+
+
+def record_of(local_root: Path, frames: Path, ring: Ring, ident: str, image_path: Path, image: Image) -> dict:
+    """The provenance record of a part (SWI-GEN-6): the method and the hash of everything it was made from."""
+    state = dict(idents(ring))[ident]
+    sources = {} if state is None else sources_of(local_root, frames, ring, state)
     c = ring.circle
     return {"part": ident, "rule": "ring_kit", "tool_version": TOOL_VERSION, "date": datetime.date.today().isoformat(), "source": "none (empty layer)" if state is None else ring.method, "sources": sources,
             "empty": not any(image.data[3::4]), "parameters": {"circle_units": {"cx": c.cx, "cy": c.cy, "radius": c.radius, "trim": c.trim, "art_size": [c.width, c.height]}, "brass_target": list(BRASS), "master": [image.w, image.h]},
@@ -609,50 +602,29 @@ CELL_SHARE = 0.4             # the disc's radius on a sent sheet, as a share of 
 PLACE_SCALE = 12             # px per art unit of the placed frame: the generated disc registered onto the circle, before the reduction to the master
 
 
-@dataclass(frozen=True)
-class Sheet:
-    """One generated sheet: its buttons, the states in the original's order, whether the buttons are the columns (else the rows), the pixel size asked, and the prompt's own words."""
-    ident: str
-    names: tuple[str, ...]
-    states: tuple[str, ...]
-    by_column: bool
-    size: tuple[int, int]
-    what: str
-
-    @property
-    def grid(self) -> tuple[int, int]:
-        return (len(self.names), len(self.states)) if self.by_column else (len(self.states), len(self.names))
-
-    def cells(self) -> list[tuple[int, int, str, str]]:
-        """(column, row, button, state) of every cell, row by row."""
-        out = []
-        columns, rows = self.grid
-        for row in range(rows):
-            for column in range(columns):
-                name, state = (self.names[column], self.states[row]) if self.by_column else (self.names[row], self.states[column])
-                out.append((column, row, name, state))
-        return out
+SHEET_ITEM = "pm"                                       # the one generated sheet: its rows are the buttons, its columns the states in the original's order
+SHEET_NAMES, SHEET_STATES = ("char_minus", "char_plus"), ("idle", "pressed", "hover")
+SHEET_SIZE = (1536, 1024)
+SHEET_WHAT = ("the small Minus (top row) and Plus (bottom row) buttons of a character sheet. Symbol: a red enamel Minus (one straight horizontal bar) or Plus (two equal straight bars), small, in the middle of the dome, in a shallow dark slot. "
+          "Columns, left to right: IDLE (deep red symbol), PRESSED (the symbol lit, pale pink-red core, a soft red light on the dome round it, as in image 1), HOVER (bright pure red symbol).")
 
 
-_THREE = ("idle", "pressed", "hover")
-SHEETS = (
-    Sheet("pm", ("char_minus", "char_plus"), _THREE, False, (1536, 1024),
-          "the small Minus (top row) and Plus (bottom row) buttons of a character sheet. Symbol: a red enamel Minus (one straight horizontal bar) or Plus (two equal straight bars), small, in the middle of the dome, in a shallow dark slot. "
-          "Columns, left to right: IDLE (deep red symbol), PRESSED (the symbol lit, pale pink-red core, a soft red light on the dome round it, as in image 1), HOVER (bright pure red symbol)."),
-)
+def sheet_cells() -> list[tuple[int, int, str, str]]:
+    """(column, row, button, state) of every cell, row by row."""
+    return [(column, row, name, state) for row, name in enumerate(SHEET_NAMES) for column, state in enumerate(SHEET_STATES)]
 
 
-def sheet_prompt(sheet: Sheet) -> str:
-    columns, rows = sheet.grid
+def sheet_prompt() -> str:
+    columns, rows = len(SHEET_STATES), len(SHEET_NAMES)
     return (f"Image 1 is the ORIGINAL low-resolution game art, enlarged with hard pixels: a grid of {columns} columns and {rows} rows of small round buttons on a flat mid-grey ground. It is the truth for the layout, for what each symbol is, where it stands, how big it is, and for the colour of every state. "
             "Image 2 shows the same buttons in the same grid from a blurry earlier upscale; use it ONLY as a hint of the materials and colours. Its blur and smeared edges are wrong and must not be copied.\n\n"
-            f"TASK: redraw image 1 as one clean, sharp, high-definition sheet of the same {columns} x {rows} grid. The buttons are {sheet.what}\n\n"
+            f"TASK: redraw image 1 as one clean, sharp, high-definition sheet of the same {columns} x {rows} grid. The buttons are {SHEET_WHAT}\n\n"
             "EVERY BUTTON: a perfectly circular button seen straight from the front: a thin ring of aged darkened brass with a crisp bevel (a light edge at the upper left, a dark lower right, a thin dark outline), and inside it a smooth convex glossy dome with one narrow curved reflection at the upper left, as in image 1. "
             "The ring keeps the same width relative to the button as in image 1. All buttons of the sheet share exactly the same ring, dome, light and size relative to image 1; the states of one button differ only in the way image 1 shows, and the symbol keeps exactly the same shape, size and place in all of them. "
             "Late-1800s steampunk-gothic game interface, painted, muted dusty palette and the brightness of image 1.\n\n"
             "FRAMING: every button in the same place and at the same size as in image 1. Nothing outside the round buttons: NO drop shadow, no dark crescent, no halo, no stone, no parchment, no frame, no grid lines; the ground stays one perfectly flat mid-grey (RGB 128, 128, 128). "
             "No text, no letters, no watermark, no added ornament, no rivets, no studs, no noise, no grain that looks like dirt, no lens blur.\n\n"
-            f"Output one PNG {sheet.size[0]} x {sheet.size[1]} px. It is reduced about six times afterwards, so every edge must be perfectly clean, sharp and even.\n")
+            f"Output one PNG {SHEET_SIZE[0]} x {SHEET_SIZE[1]} px. It is reduced about six times afterwards, so every edge must be perfectly clean, sharp and even.\n")
 
 
 def staged_cell(source: Image, circle: school_kit.Circle, side: int, smooth: bool) -> Image:
@@ -689,15 +661,9 @@ def paste(target: Image, picture: Image, ox: int, oy: int) -> None:
         target.data[o:o + picture.w * 4] = picture.data[y * picture.w * 4:(y + 1) * picture.w * 4]
 
 
-def cell_of(sheet_image: Image, sheet: Sheet, column: int, row: int) -> Image:
-    columns, rows = sheet.grid
-    x0, x1 = round(column * sheet_image.w / columns), round((column + 1) * sheet_image.w / columns)
-    y0, y1 = round(row * sheet_image.h / rows), round((row + 1) * sheet_image.h / rows)
-    out = Image(x1 - x0, y1 - y0, bytearray((x1 - x0) * (y1 - y0) * 4))
-    for y in range(out.h):
-        i = ((y0 + y) * sheet_image.w + x0) * 4
-        out.data[y * out.w * 4:(y + 1) * out.w * 4] = sheet_image.data[i:i + out.w * 4]
-    return out
+def cell_of(sheet_image: Image, column: int, row: int) -> Image:
+    columns, rows = len(SHEET_STATES), len(SHEET_NAMES)
+    return cropped(sheet_image, round(column * sheet_image.w / columns), round(row * sheet_image.h / rows), round((column + 1) * sheet_image.w / columns), round((row + 1) * sheet_image.h / rows))
 
 
 def registered(cell: Image, circle: school_kit.Circle, scale: int = PLACE_SCALE) -> Image:
@@ -737,25 +703,22 @@ def codex_dirs(local_root: Path) -> tuple[Path, Path]:
 
 
 def sheet_path(local_root: Path) -> Path:
-    return codex_dirs(local_root)[1] / f"{SHEETS[0].ident}.png"
+    return codex_dirs(local_root)[1] / f"{SHEET_ITEM}.png"
 
 
-_SHEET_CACHE: dict[tuple[str, int], Image] = {}
+_PLACED_CACHE: dict[tuple, Image] = {}
 
 
-def placed_frame_of(local_root: Path, source: Ring, state: str, circle: school_kit.Circle) -> Image:
-    """The generated disc of `source`'s state registered onto `circle` (the sheet's cell of that button and state)."""
-    sheet, path = SHEETS[0], sheet_path(local_root)
+def placed_minus(local_root: Path, circle: school_kit.Circle) -> Image:
+    """The generated idle Minus (the sheet's first cell, the only one a part uses) registered onto `circle`."""
+    path = sheet_path(local_root)
     try:
-        key = (str(path), path.stat().st_mtime_ns)
-        if key not in _SHEET_CACHE:
-            _SHEET_CACHE[key] = pngio.read(path)
+        key = (str(path), path.stat().st_mtime_ns, circle)
+        if key not in _PLACED_CACHE:
+            _PLACED_CACHE[key] = registered(cell_of(pngio.read(path), 0, 0), circle)
     except (OSError, pngio.PngError) as error:
         raise RingError(f"no generated sheet {path} (run codex-inbox, then codex_batch.py run {CODEX_BATCH}): {error}") from error
-    for column, row, name, cell_state in sheet.cells():
-        if name == source.name and cell_state == state:
-            return registered(cell_of(_SHEET_CACHE[key], sheet, column, row), circle)
-    raise RingError(f"the sheet {sheet.ident} has no cell of {source.name} {state}")
+    return _PLACED_CACHE[key]
 
 
 def cmd_codex_inbox(args: argparse.Namespace) -> int:
@@ -763,30 +726,27 @@ def cmd_codex_inbox(args: argparse.Namespace) -> int:
     local = school_kit.pack_local(local_root)
     frames = args.frames or local_root / "census" / "frames"
     inbox, outbox = codex_dirs(local_root)
-    (inbox / "prompts").mkdir(parents=True, exist_ok=True)
-    items = []
-    for sheet in SHEETS:
-        columns, rows = sheet.grid
-        side = sheet.size[0] // columns
-        refs = inbox / "refs" / sheet.ident
-        refs.mkdir(parents=True, exist_ok=True)
-        pictures = {slot: Image(side * columns, side * rows, bytearray(side * columns * side * rows * 4)) for slot in ("original", "style")}
-        for column, row, name, state in sheet.cells():
-            ring = ring_named(name)
-            paste(pictures["original"], staged_cell(original_frame(frames, ring, state), ring.circle, side, False), column * side, row * side)
-            paste(pictures["style"], staged_cell(state_frame(local, ring, state)[0], ring.circle, side, True), column * side, row * side)
-        ref_rows = []
-        for slot, picture in pictures.items():
-            path = refs / f"{slot}.png"
-            pngio.write(path, picture)
-            ref_rows.append({"slot": slot, "file": f"refs/{sheet.ident}/{slot}.png", "sha256": button_kit.sha256_file(path)})
-        prompt = inbox / "prompts" / f"{sheet.ident}.txt"
-        prompt.write_text(sheet_prompt(sheet), encoding="ascii")
-        items.append({"id": sheet.ident, "title": f"small brass-ringed buttons, sheet {sheet.ident}", "prompt_file": f"prompts/{sheet.ident}.txt", "prompt_sha256": hashlib.sha256(prompt.read_bytes()).hexdigest(),
-                      "size": list(sheet.size), "references": ref_rows, "outbox_file": f"outbox/{CODEX_BATCH}/{sheet.ident}.png"})
-    (inbox / "batch.json").write_text(json.dumps({"batch": CODEX_BATCH, "after": None, "items": items}, indent=2) + "\n", encoding="utf-8")
-    outbox.mkdir(parents=True, exist_ok=True)
-    print(f"RING KIT codex-inbox PASS: {len(items)} sheet(s) in {inbox}")
+    refs = inbox / "refs" / SHEET_ITEM
+    for folder in (inbox / "prompts", refs, outbox):
+        folder.mkdir(parents=True, exist_ok=True)
+    columns, rows = len(SHEET_STATES), len(SHEET_NAMES)
+    side = SHEET_SIZE[0] // columns
+    pictures = {slot: Image(side * columns, side * rows, bytearray(side * columns * side * rows * 4)) for slot in ("original", "style")}
+    for column, row, name, state in sheet_cells():
+        ring = ring_named(name)
+        paste(pictures["original"], staged_cell(original_frame(frames, ring, state), ring.circle, side, False), column * side, row * side)
+        paste(pictures["style"], staged_cell(state_frame(local, ring, state)[0], ring.circle, side, True), column * side, row * side)
+    ref_rows = []
+    for slot, picture in pictures.items():
+        path = refs / f"{slot}.png"
+        pngio.write(path, picture)
+        ref_rows.append({"slot": slot, "file": f"refs/{SHEET_ITEM}/{slot}.png", "sha256": button_kit.sha256_file(path)})
+    prompt = inbox / "prompts" / f"{SHEET_ITEM}.txt"
+    prompt.write_text(sheet_prompt(), encoding="ascii")
+    item = {"id": SHEET_ITEM, "title": "small brass-ringed buttons: the plus and minus sheet", "prompt_file": f"prompts/{SHEET_ITEM}.txt", "prompt_sha256": hashlib.sha256(prompt.read_bytes()).hexdigest(),
+            "size": list(SHEET_SIZE), "references": ref_rows, "outbox_file": f"outbox/{CODEX_BATCH}/{SHEET_ITEM}.png"}
+    (inbox / "batch.json").write_text(json.dumps({"batch": CODEX_BATCH, "after": None, "items": [item]}, indent=2) + "\n", encoding="utf-8")
+    print(f"RING KIT codex-inbox PASS: 1 sheet in {inbox}")
     return 0
 
 
@@ -816,6 +776,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         for state in ring.states:
             try:
                 face_of(local_root, frames, ring, state)
+                sources_of(local_root, frames, ring, state)
             except (RingError, school_kit.SchoolError) as error:
                 bad.append(f"{ring.name} {state}: {error}")
     for line in bad:
@@ -830,6 +791,9 @@ def cmd_build(args: argparse.Namespace) -> int:
     out = args.out or local_root / "masters"
     records = local_root / "provenance" / "rule" if args.out is None else out / "records"
     built = [(ring, ring_parts(local_root, frames, ring)) for ring in selected(args)]
+    for ring, _ in built:
+        for state in ring.states:
+            sources_of(local_root, frames, ring, state)   # every input is there before anything is written
     total = 0
     for ring, parts in built:
         for ident, image in parts.items():

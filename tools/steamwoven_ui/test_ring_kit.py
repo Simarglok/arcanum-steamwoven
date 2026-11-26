@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 import math
@@ -9,6 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from . import marker_kit as mk
 from . import pngio
 from . import ring_kit as rk
 from . import school_kit as sk
@@ -76,7 +78,14 @@ WEDGE_CELLS = {(x, y): RED for x, half in zip(range(9, 15), (6, 5, 4, 3, 2, 1)) 
 ARROW_CELLS = {**{(x, y): RED for x in range(7, 12) for y in range(9, 14)}, **{(x, y): RED for x, half in zip(range(12, 18), (4, 4, 3, 2, 1, 0)) for y in range(11 - half, 12 + half)}}
 
 
-def tree(folder: str) -> Path:
+def generated(path: Path, picture: pngio.Image) -> None:
+    """A generated picture and the record the batch runner leaves beside it."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pngio.write(path, picture)
+    path.with_suffix(".provenance.json").write_text("{}", encoding="utf-8")
+
+
+def tree(folder: str, bar_shift: int = 7) -> Path:
     """`<folder>/local/` with every input: the pack frames of the pack buttons, the generated sheet, the marker sheet and the original frames; returns `<folder>/local/steamwoven-ui`."""
     local = Path(folder) / "local"
     root = local / "steamwoven-ui"
@@ -94,17 +103,15 @@ def tree(folder: str) -> Path:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 pngio.write(path, original(ring, WEDGE_CELLS if ring.method == "wedge" else ARROW_CELLS))
     (pack / "index.tsv").write_text("".join(rows), encoding="utf-8")
-    sheet = rk.sheet_path(root)
-    sheet.parent.mkdir(parents=True)
-    pngio.write(sheet, generated_sheet())
+    generated(rk.sheet_path(root), generated_sheet(bar_shift))
     markers = pngio.Image(192, 128, bytearray(bytes((255, 0, 255, 255)) * (192 * 128)))
-    for column, row in rk.MARKER_CELLS.values():
-        box(markers, column * 64 + 16, row * 64 + 12, column * 64 + 48, row * 64 + 52, (240, 240, 240))
-    rk.marker_sheet(root).parent.mkdir(parents=True)
-    pngio.write(rk.marker_sheet(root), markers)
+    for index, colour in enumerate(((240, 240, 240), (200, 220, 90), (240, 240, 240), (240, 240, 240))):   # the cells in `marker_kit.SHEET_ORDER`
+        column, row = index % 3, index // 3
+        box(markers, column * 64 + 16, row * 64 + 12, column * 64 + 48, row * 64 + 52, colour)
+    generated(rk.marker_sheet(root, "mmb_chest"), markers)
     skull = pngio.Image(64, 64, bytearray(bytes((255, 0, 255, 255)) * (64 * 64)))
     box(skull, 8, 8, 56, 56, (250, 250, 250))
-    pngio.write(rk.marker_sheet(root, "mmb_skull"), skull)
+    generated(rk.marker_sheet(root, "mmb_skull"), skull)
     return root
 
 
@@ -192,14 +199,14 @@ class PartTests(unittest.TestCase):
         self.assertAlmostEqual(math.hypot(a, bb), rk.BRASS[1], delta=3)
         self.assertAlmostEqual(math.degrees(math.atan2(bb, a)), rk.BRASS[2], delta=4)
 
-    def test_the_magenta_ground_is_keyed_out_and_its_colour_leaves_the_soft_edge(self):
-        picture = pngio.Image(3, 1, bytearray(bytes((255, 0, 255, 255)) + bytes((10, 10, 10, 255)) + bytes((135, 5, 135, 255))))
-        out = rk.keyed_magenta(picture)
-        self.assertEqual(pixel(out, 0, 0)[3], 0)
-        self.assertEqual(pixel(out, 1, 0), (10, 10, 10, 255))
-        soft = pixel(out, 2, 0)
-        self.assertTrue(0 < soft[3] < 255)
-        self.assertLess(soft[0], 135)
+    def test_a_message_buttons_symbol_is_its_markers_drawing(self):
+        self.assertEqual([rk.marker_name(r.name) for r in rk.RINGS if r.method == "marker"], list(mk.SHEET_ORDER[:4]))
+        with tempfile.TemporaryDirectory() as folder:
+            root = tree(folder)
+            symbol = rk.marker_symbol(root, "mmb_note")                                   # the second cell of the sheet, its ground keyed out
+            self.assertEqual((symbol.w, symbol.h, pixel(symbol, 0, 0)), (32, 40, (200, 220, 90, 255)))
+            self.assertEqual(pixel(rk.marker_symbol(root, "mmb_skull"), 0, 0)[:3], (250, 250, 250))   # the redrawn skull, not the sheet's cell
+            self.assertEqual(rk.marker_sheet(root, "mmb_skull").name, "skull-neutral.png")
 
     def test_a_triangle_is_fitted_to_the_red_cells_with_its_tip_at_the_short_end(self):
         wedge = rk.fit_wedge(original(rk.ring_named("mpcyclerightbutton"), WEDGE_CELLS))
@@ -238,17 +245,25 @@ class ArrowStateTests(unittest.TestCase):
 
 
 class FaceTests(unittest.TestCase):
-    def test_the_generated_set_gets_one_ring_and_a_centred_symbol(self):
+    def test_every_plus_and_minus_stands_on_the_idle_minus_ring(self):
         with tempfile.TemporaryDirectory() as folder:
             root = tree(folder)
             frames = root / "census" / "frames"
             minus, plus = rk.ring_named("char_minus"), rk.ring_named("char_htftplus")
             a, b = rk.face_of(root, frames, minus, "idle"), rk.face_of(root, frames, plus, "hover")
             ring_a, ring_b = at(minus, a, minus.circle.cx - 0.9 * minus.circle.cut, minus.circle.cy), at(plus, b, plus.circle.cx - 0.9 * plus.circle.cut, plus.circle.cy)
-            self.assertLess(max(abs(x - y) for x, y in zip(ring_a, ring_b)), 6)       # the Plus's own blue ring is replaced by the Minus's brass one
+            self.assertLess(max(abs(x - y) for x, y in zip(ring_a, ring_b)), 6)       # the sheet's blue Plus ring is never used
             self.assertGreater(ring_b[0], ring_b[2])
-            reds = [x for x in range(a.w) if pixel(a, x, int(minus.circle.cy * a.h / minus.circle.height))[0] > 120 and pixel(a, x, int(minus.circle.cy * a.h / minus.circle.height))[1] < 60]
-            self.assertAlmostEqual((min(reds) + max(reds) + 1) / 2, minus.circle.cx * a.w / minus.circle.width, delta=1.5)
+
+    def test_a_bar_drawn_far_beside_the_middle_still_leaves_the_plate_clean(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = tree(folder, bar_shift=17)                                          # past the bar's box unless the dome is centred first
+            ring = rk.ring_named("char_minus")
+            c = ring.circle
+            plate = rk.empty_plate(root, ring)
+            reds = [(i % plate.w, i // plate.w) for i in range(plate.w * plate.h)
+                    if plate.data[i * 4] > 90 and plate.data[i * 4 + 1] < 40 and math.hypot((i % plate.w + 0.5) * c.width / plate.w - c.cx, (i // plate.w + 0.5) * c.height / plate.h - c.cy) < 0.7 * c.cut]
+            self.assertEqual(reds, [])
 
     def test_one_thick_stroke_for_every_plus_and_minus_and_a_pressed_halo_tight_to_it(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -290,8 +305,11 @@ class FaceTests(unittest.TestCase):
     def test_a_missing_input_is_a_ring_error(self):
         with tempfile.TemporaryDirectory() as folder:
             root = tree(folder)
-            self.assertEqual(pixel(rk.marker_symbol(root, "mmb_skull"), 0, 0)[:3], (250, 250, 250))   # the redrawn skull, not the sheet's cell
-            rk.marker_sheet(root).unlink()
+            arrow = rk.ring_named("sm_rightarrow")
+            pngio.write(root / "census" / "frames" / arrow.folder / "f1.png", original(arrow, {}))
+            with self.assertRaises(rk.RingError):
+                rk.face_of(root, root / "census" / "frames", arrow, "pressed")            # a state with no red cells
+            rk.marker_sheet(root, "mmb_chest").unlink()
             with self.assertRaises(rk.RingError):
                 rk.face_of(root, root / "census" / "frames", rk.ring_named("mmb_chest"), "idle")
             rk.sheet_path(root).unlink()
@@ -321,13 +339,45 @@ class CommandTests(unittest.TestCase):
             self.assertEqual((record["rule"], record["source"]), ("ring_kit", "pack"))
             self.assertEqual([(k, v["index_sha12"]) for k, v in record["sources"].items()], [("hd-packs/interface-redraw-4x/tiny_butt-f001", "abc123def451")])
             wedge = json.loads((root / "provenance" / "rule" / "plate.mpcycleleftbutton.json").read_text(encoding="utf-8"))
-            self.assertEqual(sorted(wedge["sources"]), ["census/frames/757-MPCycleLeftButton/f0.png", "outbox/B-BUTTONS-RING/pm.png"])
+            plate = ["outbox/B-BUTTONS-RING/pm.png", "outbox/B-BUTTONS-RING/pm.provenance.json"]
+            self.assertEqual(sorted(wedge["sources"]), ["census/frames/757-MPCycleLeftButton/f0.png", *plate])
+            self.assertEqual(run("build", "--local-root", str(root), "--only", "mmb_skull")[0], 0)
+            skull = json.loads((root / "provenance" / "rule" / "plate.mmb_skull.json").read_text(encoding="utf-8"))
+            self.assertEqual(sorted(skull["sources"]), ["outbox/B-BUTTONS-3207-markers/skull-neutral.png", "outbox/B-BUTTONS-3207-markers/skull-neutral.provenance.json", *plate])
             glyph = json.loads((root / "provenance" / "rule" / "glyph.tiny_butt.json").read_text(encoding="utf-8"))
             self.assertEqual((glyph["empty"], glyph["sources"]), (True, {}))
             self.assertEqual(run("check", *only)[0], 0)
+            record_beside = rk.sheet_path(root).with_suffix(".provenance.json")
+            record_beside.unlink()
+            self.assertEqual((run("check", *only)[0], run("build", *only)[0]), (1, 2))     # a picture without its record is a missing input
+            record_beside.write_text("{}", encoding="utf-8")
             rk.sheet_path(root).unlink()
             self.assertEqual(run("check", *only)[0], 1)
             self.assertEqual(run("build", *only)[0], 2)
+
+    def test_the_inbox_holds_the_one_sheet_with_its_hashes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = tree(folder)
+            pack = sk.pack_local(root.parent.parent / "local" / "steamwoven-ui") / sk.PACK_DIR
+            rows = (pack / "index.tsv").read_text(encoding="utf-8")
+            for ring in (rk.ring_named(n) for n in rk.SHEET_NAMES):
+                for state in rk.SHEET_STATES:
+                    number = rk.STATE_FRAMES[state]
+                    pngio.write(pack / "interface" / f"{ring.name}-f{number:03d}.png", pack_frame(ring))
+                    rows += f"x\tbuttons\t{ring.name}\t{number}\tinterface/{ring.name}-f{number:03d}.png\t1\t1\t1\t1\ts\tmasked\tunreviewed\tabc123def45{number}\n"
+                    path = root / "census" / "frames" / ring.folder / f"f{number}.png"
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    pngio.write(path, original(ring, {}))
+            (pack / "index.tsv").write_text(rows, encoding="utf-8")
+            code, text = run("codex-inbox", "--local-root", str(root))
+            self.assertEqual(code, 0, text)
+            inbox = root / "inbox" / "B-BUTTONS-RING"
+            batch = json.loads((inbox / "batch.json").read_text(encoding="utf-8"))
+            self.assertEqual([i["id"] for i in batch["items"]], ["pm"])
+            item = batch["items"][0]
+            self.assertEqual(item["prompt_sha256"], hashlib.sha256((inbox / item["prompt_file"]).read_bytes()).hexdigest())
+            self.assertEqual([(r["slot"], r["sha256"]) for r in item["references"]], [(r["slot"], hashlib.sha256((inbox / r["file"]).read_bytes()).hexdigest()) for r in item["references"]])
+            self.assertEqual(item["outbox_file"], "outbox/B-BUTTONS-RING/pm.png")
 
     def test_an_unknown_button_or_a_missing_folder_is_an_input_error(self):
         with tempfile.TemporaryDirectory() as folder:
