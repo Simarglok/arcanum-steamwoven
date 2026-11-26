@@ -126,6 +126,8 @@ public partial class TerrainViewerApp : Node
         GD.Print($"ARC-DEV-059 viewer start mode={ModeName(arguments.Mode)} map={arguments.AreaMapName ?? "-"} main-menu={arguments.MainMenu} smoke={_nativeSmoke}");
         // ARC-DEV-2279: the soak run's counters (ARC_SOAK_LOG), when asked for.
         StartSoak();
+        // ARC-DEV-3389: the Ctrl+F performance overlay and, where the system can switch it, the Metal HUD.
+        StartPerfOverlay();
         // ARC-DEV-372: the viewer's readers share one index of the game folder per run (a self-test has no game folder and reads none).
         Arcanum.Data.Content.ContentStack.EnableSharing(!SelfTestBootstrap);
         // ARC-DEV-350: the game settings come first, the HD pack source is one of them.
@@ -197,7 +199,7 @@ public partial class TerrainViewerApp : Node
                         bool Stage(string name) => only!.Stage(name); // "!": the ?. tests below make the compiler see a captured non-null `only` as maybe null
                         if (_readyMapName is not null)
                         {
-                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunSceneryAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaHeroKnockdownSmokeAsync(result); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); RunAreaDoorCloseSmoke(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); RunAreaFrameClockSmoke(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); await RunAreaContainerLootSmokeAsync(); await RunAreaJunkPileSmokeAsync(); await RunAreaHoverWindowSmokeAsync(); await RunAreaBugReportSmokeAsync(); await RunAreaOwnerQaSmokeAsync(); await RunAreaQuitSmokeAsync(); }
+                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunSceneryAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaHeroKnockdownSmokeAsync(result); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); RunAreaDoorCloseSmoke(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); RunAreaFrameClockSmoke(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); await RunAreaContainerLootSmokeAsync(); await RunAreaJunkPileSmokeAsync(); await RunAreaHoverWindowSmokeAsync(); await RunAreaBugReportSmokeAsync(); await RunAreaOwnerQaSmokeAsync(); await RunAreaPerfOverlaySmokeAsync(); await RunAreaQuitSmokeAsync(); }
                             // ARC-MAGIC-015: the cast stage alone, for a quick first-cast observation (the map battery runs it too).
                             else
                             {
@@ -372,7 +374,7 @@ public partial class TerrainViewerApp : Node
                                 // ARC-UI-057: the hovered object's highlight and message-window description alone (the map battery runs it too).
                                 if (Stage("hover")) await RunAreaHoverWindowSmokeAsync();
                                 // ARC-DEV-051: the bug report alone (the map battery runs it last).
-                                if (Stage("report")) { await RunAreaBugReportSmokeAsync(); await RunAreaOwnerQaSmokeAsync(); await RunAreaQuitSmokeAsync(); }
+                                if (Stage("report")) { await RunAreaBugReportSmokeAsync(); await RunAreaOwnerQaSmokeAsync(); await RunAreaPerfOverlaySmokeAsync(); await RunAreaQuitSmokeAsync(); }
                                 // ARC-DEV-209 (MIG14 S3, GT49): only when named, an NPC the AI host walks across a closed door opens it first, and it runs last of the window stages because it leaves a door open (AI on, --hero, --sector 1409,1314).
                                 if (only?.Contains("npc-door") == true) await RunAreaNpcDoorSmokeAsync();
                                 // ARC-WORLD-2792: only when named, the roof covers an AI-walked NPC by the tile it stands on now (main map, --sector 1450,1323).
@@ -1164,6 +1166,15 @@ public partial class TerrainViewerApp : Node
     }
 
     public override void _Process(double delta)
+    {
+        // ARC-DEV-3389: only the shown performance panel times the viewer's update; hidden, this is a null test (and, while the Metal
+        // HUD is up, a look at the window's size).
+        if (_perfMeter is null) ProcessViewerFrame(delta);
+        else ProcessTimedViewerFrame(delta);
+        if (_perfMode == PerfOverlayMode.MetalHud) FollowMetalHud();
+    }
+
+    private void ProcessViewerFrame(double delta)
     {
         RecordFrameCost(); // ARC-DEV-3128
         PaceFrames();

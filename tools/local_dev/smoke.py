@@ -142,7 +142,7 @@ STAGE_PASS = {
 # (`follower-far`, `teleport-follow`) check it there too (led-far).
 STAGE_ALSO_PASS = {"transfer": ("ARC-DEV-065 native-smoke visitor-fight PASS", "ARC-AI-1695 native-smoke led-carry PASS", "ARC-AI-1695 native-smoke led-home PASS"),
                    "follower-far": ("ARC-AI-1695 native-smoke led-far PASS",), "teleport-follow": ("ARC-AI-1695 native-smoke led-far PASS",),
-                   "report": ("ARC-DEV-2190 native-smoke owner-qa PASS",)}
+                   "report": ("ARC-DEV-2190 native-smoke owner-qa PASS", "ARC-DEV-3389 native-smoke perf-overlay PASS")}
 BATTERY_STAGES = ("map", "resources")
 # The stages a hero must play: without a session hero the viewer skips them (the AI stages silently). The map battery
 # plays the hero's stages too (cast, turn-based, ranged, container, junk ...). `transfer` is one (ARC-DEV-1547): its visitor-fight

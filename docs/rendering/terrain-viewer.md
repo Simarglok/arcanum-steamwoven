@@ -3277,6 +3277,56 @@ not a contract): first opening to the next drawn frame, cold against warmed-up, 
 opening is the panel's own cost (inventory 39 ms, sheet 50 ms, logbook 27 ms inside the opening call). The self-test case `ARC-DEV-369 self-test prepared HD frames`
 checks that a prepared frame draws the pixels of a lazily resolved one, that refusals stay refusals, and that a stale or dropped frame resolves at the draw.
 
+
+## Performance overlay (ARC-DEV-3389)
+
+**Ctrl+F** steps through three states in the WORLD and AREA modes, in play, in the main menu and over the game's windows:
+off, the game's own panel (at the right edge, below the top interface bar) and Apple's **Metal Performance HUD**, then off
+again. It is off at every start and is not saved. It is a diagnostic of this project, no part of the original: Ctrl+F has no action there (F under Ctrl is a
+control code the game ignores, ARC-INPUT-004). It does not toggle while a tool or modal box that takes every key is up (the bug
+report, the owner-checks overlay, the quit question, the HD pack problem box) or on a press while a load is pending. The pointer passes through it, and it reads only: the session and the save do not
+change. Because it is drawn with the game, a bug report taken while it is shown has it on the screenshot.
+
+**The Metal HUD step.** The first time the cycle reaches the step the game asks the system's tool
+(`/usr/bin/metalperftrace setup --enable hud --pid <own process>`) to load the HUD, so nothing is loaded into the game until
+then, and it works however the game was started. From then on the window's Metal layer
+(`CAMetalLayer.developerHUDProperties`) holds whether it is shown and where. It stands where the panel does: at the right
+edge, below the top interface bar, and moves with the window's size. It has no size to read, so its left edge comes from the
+width measured on macOS 27.2 (a fifth of the window's pixels, at least 300); the margin may differ on another macOS. This
+place overrides `MTL_HUD_ALIGNMENT` and `MTL_HUD_POSITION_X`/`Y` of the start's environment. The HUD comes up a moment after
+the first request. Where the tool is missing (Windows, a macOS without it) the cycle is off, panel, off. A start with
+`MTL_HUD_ENABLED=1` ([Mac performance monitoring](../workflow/mac-performance-monitoring.md)) shows the HUD from the start; where
+the tool exists (macOS 27) the game puts it in the same place and the first Ctrl+F then turns it off. The game cannot see whether the HUD is on screen: the log line
+`ARC-DEV-3389 performance overlay mode=` names a failed request to the tool only (a tool that failed is asked again at the
+next step; one that did not answer in 2 s is not). The HUD's own figures are Apple's; the rows below are the panel's.
+
+The text is written twice a second. Frame, update and collection figures cover the last 3 s.
+
+| Row | Meaning |
+| --- | --- |
+| FPS, cap | 1000 divided by the average frame time of the window. The viewer paces itself: `cap` is its current target (the screen's rate while there is input or movement, 60 when idle), so a rate near the cap is not slowness; automated runs have no cap |
+| frame ms | time from one frame's start to the next: average, 95th percentile, longest. With vsync it does not go below the screen's refresh interval |
+| update ms | time the viewer's own per-frame update took on the main thread (its `_Process`; input handling and other nodes are not in it): average, longest |
+| main step ms | Godot's process-time monitor: the longest main-loop step of the last second, render submission included (and any wait inside it) |
+| render ms | render time of the main viewport: CPU (frame setup included) and GPU; `n/a` where the driver reports none |
+| draw calls, objects, prims | Godot's render counters of the last frame, the overlay's own draws included |
+| memory | the process's resident memory and Godot's video memory (the texture counter is left out: it is broken on Metal, issue #3333) |
+| .NET | managed heap (garbage not yet collected included) and the bytes allocated per second |
+| GC per s | collections per second of generations 0, 1 and 2 |
+| CPU | processor time of all threads, in percent of one core; the node and Godot object counts |
+| window | the window's size in pixels |
+
+**Cost.** Hidden, it is one null test per frame. Shown, a frame records its times into a fixed buffer without allocating; twice a
+second the text is built and the process read (a few KiB of allocations, which the allocation row includes), the panel adds its
+own draw calls, and the renderer's time measurement is on. For monitoring from outside the game (Metal HUD, Instruments) see
+[Mac performance monitoring](../workflow/mac-performance-monitoring.md).
+
+**Smoke.** Stage `report` (also in the map battery): `ARC-DEV-3389 native-smoke perf-overlay PASS`; a window run on a Mac with
+the tool goes through the HUD step too (it asks for the HUD; it does not look at the screen). With
+`ARC_PERF_OVERLAY_CAPTURE=<folder>` a window run saves `before.png` and `shown.png` of the viewport and, with the HUD step,
+`window-*.png` captures of the window itself (the HUD is not in the viewport's image; the window is raised for them;
+`window-start.png` only for a start with `MTL_HUD_ENABLED=1`).
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)
