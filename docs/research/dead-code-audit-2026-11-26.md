@@ -30,6 +30,8 @@ Result in one line: the repository is clean of old-iteration markers (no `[Obsol
 
 Filed issues (all children of #3377): #3382, #3383, #3384, #3385, #3386, #3387, #3388.
 
+The rows of #3386 and #3387 that PR #3403 kept are decided by the [disputed-code ADR](../architecture/disputed-code-adr.md) (#3404): keep, move, test seam or delete, per group.
+
 ## Findings
 
 Confidence: **certain** = no reference anywhere (by name, strings, scenes, docs, role tables); **probably** = no production reference, but a judgement or a tool (Mac) is still needed. Size is lines or files. "Issue" is the removal or decision issue.
