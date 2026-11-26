@@ -67,7 +67,7 @@ INV = ("G01", "G17")
 INV_FAMILY = ("G01", "G02", "G03", "G04", "G17", "M10")
 FIXTURES: tuple[Fixture, ...] = (
     Fixture("grid.inventory_cells", 32, 32, INV_FAMILY, "one cell well of the item grids (black, thin line on its last column and row); the pack's 10 x 12, the doll's 10 x 9 and the holder's 10 x 7 or 10 x 8 are copies of it"),
-    Fixture("fixture.pack_pit", 324, 388, INV_FAMILY, "the pack's pit at 366, 6 under the 10 x 12 grid at 368, 8"),
+    Fixture("fixture.pack_pit", 324, 388, INV_FAMILY, "the pack's pit at 366, 6 under the 10 x 12 grid at 368, 8; deviation: its ground is black, art 221 has 8, 8, 8 (owner 2026-11-26)"),
     Fixture("fixture.doll_pit", 330, 300, INV, "the paper doll's pit at 18, 100 under the 10 x 9 grid at 23, 107"),
     Fixture("fixture.holder_pit_loot", 324, 260, ("G02", "G04"), "the body's or container's grid pit at 6, 134 (10 x 8 cells at 8, 136)"),
     Fixture("fixture.holder_pit_barter", 324, 228, ("G03", "M10"), "the merchant's grid pit at 6, 166 (10 x 7 cells at 8, 168)"),
