@@ -66,6 +66,12 @@ public sealed class LauncherSettingsTests
         Assert.AreEqual(noHold, Read(LauncherSettingsCodec.Serialize(noHold)), "the hold-to-quit choice round-trips");
         Assert.IsTrue(Read("""{"schema":1}""").HoldToQuit, "an older file without the key reads as on");
         Assert.IsTrue(LauncherSettingsCodec.Deserialize("""{"schema":1,"holdToQuit":"no"}""").Defaulted.Contains("holdToQuit"), "a bad value is defaulted and named");
+        Assert.IsFalse((bool)JsonNode.Parse(LauncherSettingsCodec.Serialize(LauncherSettings.Defaults))!["separateRenderThread"]!, "ARC-RENDER-3420: off by default");
+        var threaded = LauncherSettings.Defaults with { SeparateRenderThread = true };
+        Assert.AreEqual(threaded, Read(LauncherSettingsCodec.Serialize(threaded)), "the render thread choice round-trips");
+        Assert.IsFalse(Read("""{"schema":1}""").SeparateRenderThread, "an older file without the key reads as off");
+        var bad = LauncherSettingsCodec.Deserialize("""{"schema":1,"separateRenderThread":1}""");
+        Assert.IsTrue(!bad.Settings.SeparateRenderThread && bad.Defaulted.Contains("separateRenderThread"), "a bad value is off and named");
 
         // ARC-UI-2771: a first start (no file, or a file without a display line) is fullscreen; a stored choice is kept.
         Assert.AreEqual(LauncherWindowMode.Fullscreen, LauncherSettings.Defaults.Display.WindowMode);

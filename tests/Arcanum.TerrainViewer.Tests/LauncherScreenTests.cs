@@ -75,6 +75,9 @@ public sealed class LauncherScreenTests
         Assert.IsTrue(screen.Settings.HoldToQuit, "ARC-DEV-2270: holding the quit key quits at once by default");
         screen.SetHoldToQuit(false);
         Assert.IsFalse(screen.Play()!.HoldToQuit, "Play stores the hold-to-quit choice");
+        Assert.IsFalse(screen.Settings.SeparateRenderThread, "ARC-RENDER-3420: the separate rendering thread is off by default");
+        screen.SetSeparateRenderThread(true);
+        Assert.IsTrue(screen.Play()!.SeparateRenderThread, "Play stores the render thread choice");
         var played = screen.Play()!;
         Assert.AreEqual((detected, RuleMode.Original, true, GameSource.Other, true), (played.GameRoot, played.Rules, played.ShowAtStart, played.GameSource, played.DebugMode));
         Assert.IsTrue(played.GameIdentity!.SameAs(startup.Folder!.Identity), "Play stores the identity, so a later change is noticed");
