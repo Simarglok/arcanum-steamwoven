@@ -95,6 +95,34 @@ public partial class TerrainViewerApp
             host.Movers.Restore(npc.Entity, npc.Row.Key, npc.Origin, npc.Origin, host.Movers.FacingOf(npc.Entity, NeighborDirection.XPlus));
             var here = (await WithAreaSmokeCameraHeld(() => Look(home)))?.CarriedLattice(pair);
             Require(here is not null && Holds(here, home), "and back at its place when the mover stands it there");
+            // ARC-DEV-3363 (ARC-RENDER-3126 review): the session's revision moves with every AI tick, and an unchanged hidden set keeps its reference, so the view is not submitted again for it. A light still
+            // follows its NPC: with the camera held where it is, a push of the moved bodies alone (what the AI's frame does after a step) submits the view again, and that submission places the light on the new cell.
+            await WithAreaSmokeCameraHeld(async () =>
+            {
+                await Look(home);
+                var view = GetViewport().GetCanvasTransform();
+                SyncAreaInventory();
+                var hidden = _canvas.AreaHidden;
+                var bumped = _areaSession.SetMapChange(_areaSession.Version, new Arcanum.Session.SessionMapId(host.Scene.RuntimeMap),
+                    Arcanum.Session.MapChangeKey.ForEntity(npc.Entity, "smoke.revision"), 1);
+                Require(bumped.Disposition == Arcanum.Session.GameSessionDisposition.Changed, "the session's revision moves: " + bumped.Failure);
+                SyncAreaInventory();
+                Require(InventoryActive && _inventoryHiddenStamp?.Revision == _areaSession.Version.Revision, "the hidden set was made again for the new revision");
+                Require(hidden is not null && ReferenceEquals(_canvas.AreaHidden, hidden), "an unchanged hidden set keeps its reference");
+                async Task<bool> StepTo(CellCoord cell, CellCoord lit)
+                {
+                    host.Movers.Restore(npc.Entity, npc.Row.Key, npc.Origin, cell, host.Movers.FacingOf(npc.Entity, NeighborDirection.XPlus));
+                    _canvas.SetAreaMovingBodies(AreaMovingCommands());
+                    for (var i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    var expected = AreaCritterLights.Place(light, host.Movers.Poses(host.NowMs).Where(p => p.Key == npc.Row.Key).Select(p => (AreaCritterPose?)p).FirstOrDefault());
+                    var drawn = _canvas.AreaCarriedForSelfTest?.CarriedPlacements.Where(p => p.Light.Owner == light.Object && p.Light.Slot == light.Slot).ToArray() ?? [];
+                    return (expected.X, expected.Y) == (lit.X, lit.Y) && drawn.Length == 1 && (drawn[0].Light.X, drawn[0].Light.Y, drawn[0].Light.OffsetX, drawn[0].Light.OffsetY) == (expected.X, expected.Y, expected.OffsetX, expected.OffsetY);
+                }
+                Require(await StepTo(elsewhere, elsewhere), "the light follows the NPC's step with the camera held");
+                Require(await StepTo(npc.Origin, home), "and follows the step back");
+                Require(view == GetViewport().GetCanvasTransform(), "the camera did not move");
+                return true;
+            });
             // ARC-MAGIC-1561 (ledger RM3c, IE5): a magick point write makes the session recalculate the NPC's light (the rewield 0x465530 runs 0x467E80). The NPC that carries a saved light stays lit at its place whether the recalculation
             // keeps the saved light (no light item worn now or at load), gives the size of its worn items, or clears it (a size of None: the light goes with the item); the stage boundary loads the baseline again (ARC-DEV-408).
             var map = new Arcanum.Session.SessionMapId(host.Scene.RuntimeMap);

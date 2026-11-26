@@ -183,6 +183,35 @@ public sealed class AreaCombatRecordTests
         CollectionAssert.AreEqual(new[] { 1 }, source.Asked, "the home map was read once");
     }
 
+    // ARC-DEV-3363: the one holder the combat host keeps (ARC-RENDER-3126) is dropped when the session's revision moves and when the host is asked about another session, even one at the same revision.
+    [TestMethod]
+    public void A_kept_holder_is_read_again_after_a_change_of_the_session_and_for_another_session()
+    {
+        var inventory = new AreaInventoryHost([Home(), Shown()]);
+        var session = Session(inventory);
+        var combat = new AreaCombatHost(inventory, session: () => session);
+        var virgil = Entity(1, 0);
+        var item = Entity(1, 2);
+        string[] Items(GameSessionOwner asked) => combat.Holder(asked, virgil)!.Items.Select(held => held.Entity).ToArray();
+
+        var kept = combat.Holder(session, virgil);
+        CollectionAssert.AreEqual(new[] { item }, Items(session));
+        Assert.AreSame(kept, combat.Holder(session, virgil), "an unchanged session is not read again");
+
+        var (pc, npc) = (AreaConversationState.PcParticipant, new Arcanum.Scripting.Dialog.DialogParticipantId(2));
+        var port = inventory.DialogPort(session, id => id == npc ? virgil : null);
+        Assert.AreEqual(Arcanum.Scripting.Dialog.DialogCommandResult.Applied, port.Execute(new Arcanum.Scripting.Dialog.GiveItemCommand(npc, pc, Healing.Name)));
+        CollectionAssert.AreEqual(System.Array.Empty<string>(), Items(session), "the item he gave is gone from the next answer");
+
+        // Another session (a load) brought to the same revision by an unrelated change: it still lists the item.
+        var other = Session(inventory);
+        for (var step = 0; other.Version.Revision < session.Version.Revision; step++)
+            Assert.AreEqual(GameSessionDisposition.Changed, other.SetMapChange(other.Version, new(2), MapChangeKey.ForEntity(Entity(2, 0), "test.step"), step).Disposition);
+        Assert.AreEqual(session.Version.Revision, other.Version.Revision, "the two sessions differ only by identity");
+        CollectionAssert.AreEqual(new[] { item }, Items(other));
+        CollectionAssert.AreEqual(System.Array.Empty<string>(), Items(session), "and the first session's answer is its own");
+    }
+
     [TestMethod]
     public void Maps_the_run_left_behind_answer_first_and_the_item_questions_by_identity_follow_the_holder_to_its_home_map()
     {

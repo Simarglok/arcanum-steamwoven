@@ -27,6 +27,29 @@ public sealed class AreaAiObjectAttackerTests
         return (f, f.Build(scene));
     }
 
+    // ARC-DEV-3363: the heartbeat's cheap question (ARC-RENDER-3126) answers as Find does for an id that is no NPC of the host: a damageable object the scene describes, one that is destroyed and one the scene does not know.
+    [TestMethod]
+    public void Knows_answers_as_Find_does_for_an_object_the_scene_describes()
+    {
+        var facts = new Dictionary<string, AreaAiObjectFacts> { [Shooter] = new(3, ShooterCell), ["oid:wreck"] = new(0, ShooterCell) { Destroyed = true } };
+        var f = AreaAiHostRebindTests.Open();
+        using var _ = f;
+        var host = f.Build(f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [new(f.A, f.RowA, Far)]) with { ObjectFacts = id => facts.GetValueOrDefault(id) });
+
+        foreach (var id in new[] { Shooter, "oid:wreck" })
+        {
+            Assert.IsNotNull(host.Find(id), id);
+            Assert.IsTrue(host.Knows(id), id);
+        }
+        Assert.IsNull(host.Find("oid:nobody"));
+        Assert.IsFalse(host.Knows("oid:nobody"));
+
+        // The answer is the scene's as it is now, not one kept from an earlier question.
+        facts.Remove(Shooter);
+        Assert.IsNull(host.Find(Shooter));
+        Assert.IsFalse(host.Knows(Shooter));
+    }
+
     [TestMethod]
     public void An_npc_victim_of_a_shooter_object_goes_to_combat_focus_on_it_and_the_event_returns()
     {
