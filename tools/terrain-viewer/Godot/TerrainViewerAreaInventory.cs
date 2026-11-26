@@ -154,27 +154,28 @@ public partial class TerrainViewerApp
         // ARC-DEV-323: the window no longer clears a theft in progress, so a replaced session drops its "trying" note here.
         _pickPocketTrying = false;
         UnbindAreaCombat();
-        _inventoryHost = null; _inventoryHiddenStamp = null; _inventoryHidden = null;
+        _inventoryHost = null; _inventoryHiddenStamp = null; _inventoryHidden = null; _mapInventoryNow = null;
         _canvas?.SetAreaHidden(null);
         _inventoryStatus = "inventory: not loaded";
     }
 
-    /// <summary>Per frame: the taken items of the current map are neither drawn nor picked.</summary>
-    private (GameSessionOwner Session, long Revision, int Map, SessionMapInventory View)? _mapInventoryNow;
+    private (GameSessionOwner Session, long Revision, long Seed, int Map, SessionMapInventory View)? _mapInventoryNow;
 
     /// <summary>
     /// ARC-RENDER-3362: the shown map's inventory at the session's revision, made once for the frame's readers that are keyed on it (the hidden set and the ground bodies): every AI tick moves the
-    /// revision, and each of them made the whole map's lists again. A map not attached yet is asked every time.
+    /// revision, and each of them made the whole map's lists again. A seed attach (a window move) changes the view without moving the revision, so its generation is part of the key. A map not attached yet is asked every time.
     /// </summary>
     private SessionMapInventory? AreaMapInventoryNow(GameSessionOwner session, int map)
     {
         var revision = session.Version.Revision;
-        if (_mapInventoryNow is { } known && ReferenceEquals(known.Session, session) && known.Revision == revision && known.Map == map) return known.View;
+        var seed = session.QueryInventorySeedGeneration();
+        if (_mapInventoryNow is { } known && ReferenceEquals(known.Session, session) && known.Revision == revision && known.Seed == seed && known.Map == map) return known.View;
         var view = session.QueryMapInventory(new SessionMapId(map));
-        _mapInventoryNow = view is null ? null : (session, revision, map, view);
+        _mapInventoryNow = view is null ? null : (session, revision, seed, map, view);
         return view;
     }
 
+    /// <summary>Per frame: the taken items of the current map are neither drawn nor picked.</summary>
     private void SyncAreaInventory()
     {
         if (_canvas is null) return;
