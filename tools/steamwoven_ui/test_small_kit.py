@@ -1,4 +1,4 @@
-"""ARC-UI-3206, ARC-UI-3323: tests of the small button kit tool (pack frames, the wedge and round dome by rule, Codex sheets) on synthetic pictures (no art)."""
+"""ARC-UI-3206, ARC-UI-3323: tests of the small button kit tool (pack frames, the parchment, ink and wedge parts, the round dome by rule, Codex sheets) on synthetic pictures (no art)."""
 from __future__ import annotations
 
 import json
@@ -315,14 +315,36 @@ class WedgeTest(unittest.TestCase):
 
     def test_the_face_keeps_the_plate_and_draws_a_straight_triangle(self):
         for left in (True, False):
-            face = sk.wedge_face(self.stair(left), (48, 76))
-            self.assertEqual(face.pixel(2, 2), (*self.PLATE, 255))
+            plate = flat_frame(48, 76, (7, 8, 9))
+            face = sk.wedge_face(self.stair(left), plate)
+            self.assertEqual(face.pixel(2, 2), (7, 8, 9, 255))
             self.assertEqual(face.pixel(24, 38), (*self.RED, 255))
             covered = sum(1 for y in range(76) for x in range(48) if face.pixel(x, y)[:3] == self.RED)
             self.assertAlmostEqual(covered / 16, 49, delta=4)
-            heights = [sum(1 for y in range(76) if face.pixel(x, y)[0] > 61) for x in (range(10, 34) if left else range(37, 13, -1))]
+            heights = [sum(1 for y in range(76) if face.pixel(x, y)[0] > 50) for x in (range(10, 34) if left else range(37, 13, -1))]
             self.assertEqual(heights, sorted(heights))
             self.assertLess(max(b - a for a, b in zip(heights, heights[1:])), 4, "no stair of a whole cell (4 px) is left")
+
+    def test_the_empty_plate_keeps_the_corners_and_covers_the_whole_shape(self):
+        cell = flat_frame(584, 449, (40, 40, 10))
+        for y in range(20):
+            for x in range(20):
+                cell.data[(y * 584 + x) * 4:(y * 584 + x) * 4 + 4] = bytes((200, 100, 0, 255))
+        plate = sk.empty_plate(cell, (12, 19), (42, 66))
+        self.assertEqual((plate.w, plate.h), (42, 66))
+        self.assertEqual(plate.pixel(0, 0), (200, 100, 0, 255))
+        self.assertEqual(plate.pixel(21, 33), (40, 40, 10, 255))
+        self.assertEqual(set(plate.data[3::4]), {255})
+        with self.assertRaises(sk.SmallError):
+            sk.empty_plate(flat_frame(150, 150, (1, 1, 1)), (12, 19), (42, 66))
+
+    def test_the_pressed_plate_darkens_only_where_the_original_does(self):
+        idle = flat_frame(12, 19, self.PLATE)
+        pressed = pngio.Image(12, 19, bytearray(idle.data))
+        pressed.data[:19 * 0 + 12 * 4] = bytes((0, 0, 0, 255)) * 12
+        shaded = sk.pressed_shade(idle, pressed, flat_frame(48, 76, (100, 100, 100)))
+        self.assertLess(shaded.pixel(24, 1)[0], 20)
+        self.assertEqual(shaded.pixel(24, 40), (100, 100, 100, 255))
 
     def test_the_parts_are_full_faces_with_an_empty_glyph(self):
         b = sk.button_named("followercycleleft")
@@ -330,7 +352,7 @@ class WedgeTest(unittest.TestCase):
             (Path(tmp) / b.folder).mkdir()
             for number in b.frames.values():
                 pngio.write(Path(tmp) / b.folder / f"f{number}.png", self.stair(True))
-            parts = sk.wedge_parts(Path(tmp), [b])
+            parts = sk.wedge_parts(Path(tmp), flat_frame(584, 449, (40, 40, 10)), [b])
         self.assertEqual(set(parts), {f"plate.{b.name}", f"plate.{b.name}_hover", f"plate.{b.name}_pressed", f"glyph.{b.name}"})
         self.assertEqual(sk.face(parts, b, "hover").data, parts[f"plate.{b.name}_hover"].data)
         self.assertEqual(sum(parts[f"glyph.{b.name}"].data[3::4]), 0)
@@ -346,23 +368,85 @@ class WedgeTest(unittest.TestCase):
         shifted.data[12 * 4:] = frame.data[:-12 * 4]
         self.assertEqual((sk.fit_wedge(shifted).axis, sk.fit_wedge(shifted).half), (10.5, 7.0))
 
-    def test_the_build_path_and_records_name_the_original_frames(self):
+    def test_the_build_path_and_records_name_the_plate_sheet_and_the_frames(self):
         b = sk.button_named("followercycleleft")
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / b.folder).mkdir()
             for number in b.frames.values():
                 pngio.write(Path(tmp) / b.folder / f"f{number}.png", self.stair(True))
+            pngio.write(Path(tmp) / "ol.png", flat_frame(1752, 898, (40, 40, 10)))
             args = ARGS()
-            args.pack, args.local_root, args.frames, args.sheets, args.sp_variant = Path(tmp) / "none", Path(tmp), Path(tmp), None, "sp-b"
+            args.pack, args.local_root, args.frames, args.sheets, args.sp_variant = Path(tmp) / "none", Path(tmp), Path(tmp), Path(tmp), "sp-b"
             parts, sources = sk.build_parts(args, [b])
             self.assertEqual(set(sources), set(parts))
-            self.assertTrue(all(v is None for v in sources.values()))
             path = Path(tmp) / "part.png"
             pngio.write(path, parts[f"plate.{b.name}"])
-            self.assertEqual(sk.record_of(f"plate.{b.name}", b, None, path, args)["source"], {"frames": b.folder})
-            glyph = sk.record_of(f"glyph.{b.name}", b, None, path, args)
+            source = sk.record_of(f"plate.{b.name}", b, sources[f"plate.{b.name}"], path, args)["source"]
+            self.assertEqual((source["sheet"], source["frames"], len(source["sha256"])), ("ol.png", b.folder, 64))
+            glyph = sk.record_of(f"glyph.{b.name}", b, sources[f"glyph.{b.name}"], path, args)
             self.assertIsNone(glyph["source"])
             self.assertIn("empty glyph", glyph["rule"])
+
+
+class CutOutTest(unittest.TestCase):
+    """The parchment and ink families on synthetic sheets (no art)."""
+
+    def frames(self, tmp: Path, b: sk.Small, paint) -> None:
+        (tmp / b.folder).mkdir()
+        for state, number in b.frames.items():
+            pngio.write(tmp / b.folder / f"f{number}.png", paint(state))
+
+    @staticmethod
+    def block(image: pngio.Image, x0: int, y0: int, x1: int, y1: int, rgb: tuple) -> pngio.Image:
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                image.data[(y * image.w + x) * 4:(y * image.w + x) * 4 + 4] = bytes((*rgb, 255))
+        return image
+
+    def test_the_parchment_is_cut_into_the_originals_place_and_pressed_moves_it_down(self):
+        b = sk.button_named("char_schem_skills")
+        sheet = flat_frame(240, 120, (255, 0, 255))
+        for k, symbol in enumerate(((90, 45, 10), (230, 20, 10))):
+            self.block(sheet, k * 120 + 20, 20, k * 120 + 100, 100, (170, 140, 100))
+            self.block(sheet, k * 120 + 50, 45, k * 120 + 70, 65, symbol)
+        sheet.data[(119 * 240) * 4:(119 * 240) * 4 + 4] = bytes((90, 90, 90, 255))   # a stray corner pixel is not the parchment's edge
+        with tempfile.TemporaryDirectory() as tmp:
+            self.frames(Path(tmp), b, lambda state: self.block(flat_frame(32, 32, (80, 80, 82)), 6, 4, 26, 28, (170, 140, 100)))
+            parts = sk.paper_parts(Path(tmp), sheet, b)
+        idle, hover, pressed = (parts[f"plate.{b.name}{s}"] for s in ("", "_hover", "_pressed"))
+        solid = [(x, y) for y in range(114) for x in range(114) if idle.pixel(x, y)[3] >= 128]
+        self.assertAlmostEqual(min(x for x, _ in solid), 6 * 114 / 32, delta=1.5)
+        self.assertAlmostEqual(max(y for _, y in solid), 28 * 114 / 32, delta=1.5)
+        self.assertEqual(idle.pixel(2, 2)[3], 0)
+        self.assertEqual(hover.data[3::4], idle.data[3::4])
+        self.assertEqual(pressed.data[3::4], idle.data[3::4])
+        red_top = lambda image: min(y for y in range(114) if image.pixel(60, y)[0] > 200 and image.pixel(60, y)[1] < 60)  # noqa: E731
+        self.assertEqual(red_top(pressed) - red_top(hover), 4)
+
+    def test_a_parchment_sheet_without_the_magenta_ground_is_an_error(self):
+        with self.assertRaises(sk.SmallError):
+            sk.cut_from_magenta(flat_frame(60, 60, (255, 255, 255)))
+
+    def test_the_arrow_is_one_shape_in_the_two_ink_colours(self):
+        b = sk.button_named("schm_larrow")
+        w, h = sk.INK_SHEET_SIZE
+        sheet = pngio.Image(w, h, bytearray(b"\xff" * (w * h * 4)))
+        self.block(sheet, 100, 200, 700, 800, (30, 5, 0))
+        with tempfile.TemporaryDirectory() as tmp:
+            self.frames(Path(tmp), b, lambda state: self.block(flat_frame(18, 22, (170, 150, 110)), 2, 3, 16, 20, (120, 85, 30) if state == "idle" else (30, 5, 0)))
+            parts = sk.ink_parts(Path(tmp), sheet, b)
+            with self.assertRaises(sk.SmallError):
+                sk.ink_parts(Path(tmp), flat_frame(100, 100, (255, 255, 255)), b)
+        idle, pressed = parts[f"plate.{b.name}"], parts[f"plate.{b.name}_pressed"]
+        self.assertEqual(idle.data[3::4], pressed.data[3::4])
+        self.assertEqual(idle.pixel(33, 39)[:3], (120, 85, 30))
+        self.assertEqual(pressed.pixel(33, 39)[:3], (30, 5, 0))
+        self.assertEqual(idle.pixel(1, 1)[3], 0)
+
+    def test_the_trim_clears_only_above_the_edge(self):
+        black = flat_frame(20, 20, (0, 0, 0))
+        out = sk.trimmed(black, (5, 10, 5, 10, -1.0))
+        self.assertEqual((out.pixel(5, 9)[0], out.pixel(5, 10)[0], out.pixel(9, 5)[0], out.pixel(9, 6)[0], out.pixel(4, 0)[0], out.pixel(10, 0)[0]), (255, 0, 255, 0, 0, 0))
 
 
 class TableTest(unittest.TestCase):
@@ -378,9 +462,9 @@ class TableTest(unittest.TestCase):
     def test_names_are_unique_and_the_families_are_known(self):
         names = [b.name for b in (*sk.SMALL, *sk.GENERATED)]
         self.assertEqual(len(names), len(set(names)))
-        self.assertTrue(all(b.family in ("rect", "wedge", "dome") for b in sk.SMALL))
-        self.assertEqual({b.name for b in sk.SMALL if b.family == "rect"}, {"spelltech_add", "spelltech_minus", "followerarrow_dwn", "followerarrow_up", "char_schem_skills", "schm_larrow", "schm_rarrow"})   # the pack frames kept
-        self.assertEqual({b.name for b in sk.SMALL if b.family == "wedge"}, {"followercycleleft", "followercycleright"})
+        self.assertTrue(all(b.family in ("rect", "paper", "ink", "wedge", "dome") for b in sk.SMALL))
+        self.assertEqual({b.name for b in sk.SMALL if b.family == "rect"}, {"spelltech_add", "spelltech_minus", "followerarrow_dwn", "followerarrow_up"})   # the pack frames kept
+        self.assertEqual({b.name for b in sk.SMALL if b.family in ("paper", "ink", "wedge")}, {"char_schem_skills", "schm_larrow", "schm_rarrow", "followercycleleft", "followercycleright"})
         self.assertTrue(all(b.family == "codex" for b in sk.GENERATED))
         self.assertTrue(all("idle" in b.frames for b in (*sk.SMALL, *sk.GENERATED)))
 

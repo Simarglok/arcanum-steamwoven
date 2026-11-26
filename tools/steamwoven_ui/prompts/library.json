@@ -63,6 +63,7 @@
       ],
       "after": null
     },
+    "B-BUTTONS-PARCHMENT": {"prompts": ["plate-schem-skills", "glyph-schem-arrows", "plate-follow-cycle"], "after": null},
     "B-GAUGES": {
       "prompts": [
         "gauge-bars",
@@ -900,6 +901,9 @@
       "screen": null,
       "batch": "B-HARDWARE-MENU",
       "notes": "slice 2 of #2481 (ARC-UI-3260): one Codex item, two details cut from the original on a transparent ground; hardware_build.py refs / cut"
-    }
+    },
+    {"id": "plate-schem-skills", "group": "part", "kind": "plate", "title": "Schematics skill button, a torn parchment with the gear and bolt, normal and lit (art 568)", "file": "plate-schem-skills.txt", "size": [1776, 888], "references": ["original", "sheet"], "screen": null, "batch": "B-BUTTONS-PARCHMENT", "notes": "ARC-UI-3272 (owner 2026-11-26): parchment only, cut from magenta along its edge; hover and pressed by rule from the lit cell (small_kit.py)"},
+    {"id": "glyph-schem-arrows", "group": "part", "kind": "glyph", "title": "Schematics page arrows, ink only (arts 372, 373)", "file": "glyph-schem-arrows.txt", "size": [1620, 990], "references": ["original", "sheet"], "screen": null, "batch": "B-BUTTONS-PARCHMENT", "notes": "ARC-UI-3272 (owner 2026-11-26): ink on white, the alpha is the ink; the light idle ink by rule (small_kit.py)"},
+    {"id": "plate-follow-cycle", "group": "part", "kind": "plate", "title": "Follower cycle button, empty dark plate, normal and pressed (arts 827, 828)", "file": "plate-follow-cycle.txt", "size": [1440, 1140], "references": ["original", "sheet"], "screen": null, "batch": "B-BUTTONS-PARCHMENT", "notes": "ARC-UI-3272 (owner 2026-11-26): both arrows share it; the triangle by rule (small_kit.py)"}
   ]
 }
