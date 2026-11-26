@@ -905,6 +905,8 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(0, ((HomeSource)HomeSources[^1]).Reads, "nothing read the home map before the AI host asked");
         Assert.IsNotNull(host.Find(companion));
         Assert.AreEqual(1, ((HomeSource)HomeSources[^1]).Reads, "the AI host's own question read the home map once");
+        // ARC-RENDER-3126: the heartbeat's cheap question answers as Find does.
+        foreach (var id in new[] { AiSchedulerRules.Pc, enemy, companion, "oid:nobody" }) Assert.AreEqual(host.Find(id) is not null, host.Knows(id), id);
         host.HeroAttacked(enemy);
         Assert.AreEqual(DangerState.CombatFocus, session.QueryDanger(companion).State, $"{host.TraceOf(companion)?.Event}");
         CollectionAssert.Contains(host.Square(enemy, 20).ToList(), companion);
@@ -916,6 +918,7 @@ public sealed class AreaAiFollowerTests
         // The ARC-DEV-065 fault (the follower rule met an object the world could not describe) stays closed for the one case left: no record.
         var (session, host, _, enemy, companion) = Open(visitor: true, homeless: true);
         Assert.IsNull(host.Find(companion), "no reachable map lists him");
+        Assert.IsFalse(host.Knows(companion), "ARC-RENDER-3126: Knows answers as Find does");
         Assert.AreEqual(1, host.RunCompanions.Count, "his walk is still the host's follower walk");
         host.PerformAttack(enemy, Pc);
         Assert.IsTrue(Run(host, enemy).Any(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == enemy), "the enemy struck at the hero");

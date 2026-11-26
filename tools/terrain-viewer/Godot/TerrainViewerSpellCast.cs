@@ -122,7 +122,7 @@ public partial class TerrainViewerApp
         // ARC-MAGIC-1280: a session's first cast host keeps the overlay runs its load restored (their host was built by their first step); a rebuild for a map or its portals does not.
         ClearEyeCandy("the map changed", keepRestoredOverlays: _spellCaster is null || !ReferenceEquals(_spellCaster.Owner, owner));
         var map = new AreaSpellCastMap(owner, area.Snapshot.RuntimeMap, grid.Snapshot, area.Snapshot.Objects, _combatHost!, HeroWorldCell, AreaLineOfFireNow,
-            key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions, HeroHolds, SpellVisitingCompanions,
+            AreaIsRemoved, SpellPlacedCompanions, HeroHolds, SpellVisitingCompanions,
             // ARC-DEV-255: damage to a door, window, container, scenery or trap goes through the object-attack host's baselines.
             row => ObjectTargets()?.Target(owner, row.Key, AreaTrapped),
             // ARC-COMBAT-025: the hero's starting kit, so the items it wears take an acid's damage.

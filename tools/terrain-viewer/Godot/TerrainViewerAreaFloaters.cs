@@ -195,7 +195,7 @@ public partial class TerrainViewerApp
     {
         if (owner == HeroFloater || _areaSession is not { } session) return false;
         if (owner.StartsWith(SessionCreatedObject.CritterPrefix, StringComparison.Ordinal)) return session.QueryCreatedObject(owner) is null;
-        return _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is { } map && map.TryGetRow(owner, out var row) && AreaRemovedObjects().Contains(row.Key);
+        return _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is { } map && map.TryGetRow(owner, out var row) && AreaIsRemoved(row.Key);
     }
 
     /// <summary>ARC-UI-2034 (TB16): an object destroyed or switched off takes its bubble with it (the original's object teardown and off-flag setter call the bubble remove, ledger TB16); death removes nothing.</summary>

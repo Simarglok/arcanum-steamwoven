@@ -785,10 +785,14 @@ internal sealed class InventoryDomain
                 .Select(entity => new SessionGroundItem(new(entity, WithAmmo(entity, seed.Items[entity].Facts)), moved?.Invoke(entity) ?? dropped(entity)!.Value))))
             .Concat(Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind, PlacedComplexity(item)))), item.Cell)))
             .ToArray(),
-        seed.Source.Holders.Select(holder => new SessionHolderInventory(holder.Entity, holder.Kind,
+        seed.Source.Holders.Select(holder => HolderView(seed, holder, killed, spilled, dropped)).ToArray());
+
+    /// <summary>One holder as the map's inventory lists it.</summary>
+    internal SessionHolderInventory HolderView(Seed seed, SessionSeedHolder holder, Func<string, bool> killed, Func<string, CellCoord?> spilled,
+        Func<string, CellCoord?> dropped) => new(holder.Entity, holder.Kind,
             holder.Dead || holder.Kind == SessionHolderKind.Npc && killed(holder.Entity),
             holder.Kind == SessionHolderKind.Container && spilled(holder.Entity) is not null ? Array.Empty<SessionInventoryItem>()
-                : Array.AsReadOnly(Current(seed, holder, dropped).ToArray()))).ToArray());
+                : Array.AsReadOnly(Current(seed, holder, dropped).ToArray()));
 
     /// <summary>The holder's list in its order without the taken and deleted items and the items a critical dropped
     /// (<paramref name="dropped"/>); an NPC's list is followed by the made items the session added to it (ARC-WORLD-055), a container's
