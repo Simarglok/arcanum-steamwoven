@@ -5,7 +5,7 @@ cycle arrows and the small right arrow, the three inventory "lil" buttons and th
 How each is made (owner decisions of 2026-11-26 in the issue's thread; every part is a full face cut to the ring's circle by an analytic round alpha, no shadow baked):
 
 * `codex`  23, 24, 770, 771: ONE generated ring and glossy dome (the idle Minus of the sheet `pm`, drawn large and reduced, its bar taken out) for every face of both sizes, and the sign drawn over it by rule (owner 2026-11-26:
-  the generated stroke was too thin): one stroke, `SIGN_LENGTH` and `SIGN_THICKNESS` of the dome's diameter, in the original's colour of the state (`SIGN`); hover only lights the sign, pressed also darkens the dome, with no glow.
+  the generated stroke was too thin): one stroke, `SIGN_LENGTH` and `SIGN_THICKNESS` of the dome's diameter, in the original's colour of the state (`SIGN`); hover only lights the sign, pressed also darkens the dome and keeps the original's narrow red halo tight to the sign.
 * `marker` 145 to 148: the symbol cut from the generated marker sheet of the map markers 141 to 144 (#3207, one source for both places), on the set's own ring and dome (the idle Minus with its bar taken out); the idle symbol is
   dimmed as the original's frame 0 is dimmer than frame 1.
 * `wedge`  757, 758: that same plate, a straight-edged triangle by rule fitted to the original's red cells (the method of arts 827 and 828, #3272).
@@ -478,8 +478,10 @@ def arrow_face(local_root: Path, ring: Ring, frame: Image, idle: Image, glow: bo
 
 
 SIGN = {"idle": (169, 0, 0), "hover": (255, 0, 0), "pressed": (255, 94, 94)}   # the original's own colours of the plus and minus sign in the three states
-DOME_PRESSED, DOME_PRESSED_LIGHT = 0.55, 18.0   # a pressed dome keeps this share of its colour and no pixel lighter than this (the original's highlight arc goes out); no glow round the sign (owner 2026-11-26)
-SIGN_LENGTH, SIGN_THICKNESS = 0.42, 0.145        # the sign's length (both ways of the plus) and the stroke's thickness as shares of the dome's diameter: the original's look at actual size (owner 2026-11-26: twice as thick as the generated one, a little shorter)
+DOME_PRESSED, DOME_PRESSED_LIGHT = 0.55, 18.0   # a pressed dome keeps this share of its colour and no pixel lighter than this (the original's highlight arc goes out)
+HALO_PEAK, HALO_SPREAD = 142.0, 1.8       # the narrow red halo of a pressed sign: peak x exp(-((units from the sign's edge + 0.5) / spread)^2), fitted to the original's pressed cells (mean about 96 in the cells next to the sign, 42 one further, 10 to 20, the dome's own, beyond)
+HALO_GREEN, HALO_BLUE = 0.17, 0.012       # the halo's green and blue as shares of its red
+SIGN_LENGTH, SIGN_THICKNESS = 0.45, 0.115        # the sign's length (both ways of the plus) and the stroke's thickness as shares of the dome's diameter: 1.5 times the original's thickness, which makes up for the weight of its hard cells (owner 2026-11-26)
 SIGN_ROUND = 0.22                                # the radius of the stroke's corners, as a share of its thickness
 SIGN_SHADE_UP, SIGN_SHADE = 0.40, 0.75           # the shade of the sign's slot: moved up by this many units, this dark (the original draws the slot's dark upper edge)
 SIGN_SAMPLES = 4                                 # a pixel's coverage by the sign is sampled on a SIGN_SAMPLES x SIGN_SAMPLES grid
@@ -491,19 +493,19 @@ def sign_size(circle: school_kit.Circle) -> tuple[float, float]:
     return SIGN_LENGTH * dome, SIGN_THICKNESS * dome
 
 
-def sign_covers(u: float, v: float, plus: bool, length: float, thickness: float) -> bool:
-    """Whether the point (u, v) units from the button's middle lies on the sign: one horizontal stroke with rounded corners, and for the plus the same stroke upright."""
+def sign_distance(u: float, v: float, plus: bool, length: float, thickness: float) -> float:
+    """How far the point (u, v) units from the button's middle lies outside the sign (0 or less: on it): one horizontal stroke with rounded corners, and for the plus the same stroke upright."""
     r = SIGN_ROUND * thickness
+    best = math.inf
     for a, b in ((u, v), (v, u)) if plus else ((u, v),):
         qa, qb = abs(a) - (length / 2 - r), abs(b) - (thickness / 2 - r)
-        if math.hypot(max(qa, 0.0), max(qb, 0.0)) + min(max(qa, qb), 0.0) <= r:
-            return True
-    return False
+        best = min(best, math.hypot(max(qa, 0.0), max(qb, 0.0)) + min(max(qa, qb), 0.0) - r)
+    return best
 
 
 def codex_face(local_root: Path, ring: Ring, state: str) -> Image:
     """The ONE generated ring and dome of the set (the idle Minus, its bar taken out, in the accepted brass) with the sign drawn by rule over it: the same stroke for every plus and minus, in the original's colour of the state; a
-    pressed button's dome is darkened, with no glow."""
+    pressed button's dome is darkened and the sign has the original's narrow red halo."""
     face = empty_plate(local_root, ring)
     circle, plus = ring.circle, "plus" in ring.name
     ux, uy = face.w / circle.width, face.h / circle.height
@@ -522,11 +524,14 @@ def codex_face(local_root: Path, ring: Ring, state: str) -> Image:
                 light = 0.3 * dark[0] + 0.59 * dark[1] + 0.11 * dark[2]
                 if light > DOME_PRESSED_LIGHT:
                     dark = [c * DOME_PRESSED_LIGHT / light for c in dark]
+                away = max(0.0, sign_distance(u, v, plus, length, thickness))
+                red = HALO_PEAK * math.exp(-(((away + 0.5) / HALO_SPREAD) ** 2))
+                dark = [max(d, red * share) for d, share in zip(dark, (1.0, HALO_GREEN, HALO_BLUE))]
                 colour = [d * dome + c * (1 - dome) for d, c in zip(dark, colour)]   # soft into the ring, no stepped edge
             if abs(u) <= length / 2 + 0.6 and abs(v) <= length / 2 + 0.6:
                 points = [((x + i) / ux - circle.cx, (y + j) / uy - circle.cy) for i in steps for j in steps]
-                on = sum(sign_covers(a, b, plus, length, thickness) for a, b in points) / len(points)
-                shade = sum(sign_covers(a, b + SIGN_SHADE_UP, plus, length, thickness) for a, b in points) / len(points) * SIGN_SHADE
+                on = sum(sign_distance(a, b, plus, length, thickness) <= 0 for a, b in points) / len(points)
+                shade = 0.0 if state == "pressed" else sum(sign_distance(a, b + SIGN_SHADE_UP, plus, length, thickness) <= 0 for a, b in points) / len(points) * SIGN_SHADE   # the halo takes the slot's shade away, as in the original
                 lit = max(0.88, min(1.0, 0.96 - 0.12 * v / thickness))   # a soft relief: a little darker towards the stroke's lower edge
                 colour = [c * (1 - shade) * (1 - on) + SIGN[state][n] * (lit if state == "idle" else 1.0) * on for n, c in enumerate(colour)]
             face.data[k:k + 3] = bytes(int(round(min(255.0, c))) for c in colour)

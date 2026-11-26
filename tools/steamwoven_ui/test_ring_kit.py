@@ -250,7 +250,7 @@ class FaceTests(unittest.TestCase):
             reds = [x for x in range(a.w) if pixel(a, x, int(minus.circle.cy * a.h / minus.circle.height))[0] > 120 and pixel(a, x, int(minus.circle.cy * a.h / minus.circle.height))[1] < 60]
             self.assertAlmostEqual((min(reds) + max(reds) + 1) / 2, minus.circle.cx * a.w / minus.circle.width, delta=1.5)
 
-    def test_one_thick_stroke_for_every_plus_and_minus_and_a_pressed_dome_with_no_glow(self):
+    def test_one_thick_stroke_for_every_plus_and_minus_and_a_pressed_halo_tight_to_it(self):
         with tempfile.TemporaryDirectory() as folder:
             root = tree(folder)
             frames = root / "census" / "frames"
@@ -259,14 +259,16 @@ class FaceTests(unittest.TestCase):
                 c = ring.circle
                 idle, hover, pressed = (rk.face_of(root, frames, ring, s) for s in ("idle", "hover", "pressed"))
                 length, thickness = rk.sign_size(c)
-                self.assertAlmostEqual(thickness / (2 * rk.INNER["codex"] * c.cut), 0.145)
+                self.assertAlmostEqual(thickness / (2 * rk.INNER["codex"] * c.cut), 0.115)
                 self.assertAlmostEqual(at(ring, idle, c.cx, c.cy)[0], 163, delta=8)
                 self.assertGreater(at(ring, hover, c.cx, c.cy)[0], 240)
                 self.assertGreater(at(ring, pressed, c.cx, c.cy)[1], 85)                       # the pink of the pressed sign
                 inside, outside = (c.cx + 0.3 * length, c.cy + 0.35 * thickness), (c.cx + 0.3 * length, c.cy + 0.5 * thickness + 0.7)
                 self.assertGreater(at(ring, hover, *inside)[0], 240)                           # the stroke is that thick
                 self.assertEqual(at(ring, hover, *outside), at(ring, idle, *outside))          # nothing but the sign changes on hover
-                self.assertLessEqual(at(ring, pressed, *outside)[0], at(ring, idle, *outside)[0])   # no glow round a pressed sign
+                self.assertGreater(at(ring, pressed, *outside)[0], at(ring, idle, *outside)[0] + 40)   # the red halo beside a pressed sign
+                far = (c.cx + 0.45 * c.cut, c.cy + 0.45 * c.cut)
+                self.assertLessEqual(at(ring, pressed, *far)[0], at(ring, idle, *far)[0])      # the dome further out stays dark
                 upright = (c.cx, c.cy + 0.4 * length)
                 self.assertEqual(at(ring, hover, *upright)[0] > 240, "plus" in name)
 
