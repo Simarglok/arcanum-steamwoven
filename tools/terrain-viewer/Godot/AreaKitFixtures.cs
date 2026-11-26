@@ -35,16 +35,26 @@ internal static class AreaKitFixtures
     }
 
     /// <summary>Draws the fixture <paramref name="id"/> with its corner at (<paramref name="x"/>, <paramref name="y"/>) units; false when the kit has none (the caller draws the stand-in). <paramref name="scale"/> is the device pixels of one unit.</summary>
-    internal static bool Draw(CanvasItem canvas, float scale, string id, float x, float y, float cutRight = 0, float cutBottom = 0)
+    internal static bool Draw(CanvasItem canvas, float scale, string id, float x, float y)
     {
-        if (!Held.TryGetValue(id, out var texture) || !SteamwovenKitTable.FixtureUnits.TryGetValue(id, out var units)) return false;
+        if (!Held.TryGetValue(id, out var texture) || SteamwovenKitTable.PartUnits(id) is not { } units) return false;
         // ARC-UI-3299: a canvas item with the premultiplied-alpha material (the sheet's, for its text, <see cref="AreaArtTextDraw"/>) blends every texture as premultiplied: a straight-alpha part with soft edges (the lettering) would come out bold and bright, so it is drawn from a premultiplied copy there.
         if (canvas.Material is CanvasItemMaterial { BlendMode: CanvasItemMaterial.BlendModeEnum.PremultAlpha }) texture = Premultiplied(id, texture);
-        // ARC-UI-3342: a part cut short on the right or below keeps its pixels' places: only the units that show are drawn, from the same part of the texture.
-        float width = units.Width - cutRight, height = units.Height - cutBottom;
-        var target = new Rect2(x * scale, y * scale, width * scale, height * scale);
-        if (cutRight == 0 && cutBottom == 0) canvas.DrawTextureRect(texture, target, false);
-        else canvas.DrawTextureRectRegion(texture, target, new Rect2(0, 0, texture.GetWidth() * width / units.Width, texture.GetHeight() * height / units.Height));
+        canvas.DrawTextureRect(texture, new Rect2(x * scale, y * scale, units.Width * scale, units.Height * scale), false);
+        Drawn.Add(id);
+        return true;
+    }
+
+    /// <summary>
+    /// ARC-UI-3321: draws the region of the fixture <paramref name="id"/> that starts at (<paramref name="fromX"/>, <paramref name="fromY"/>) and is <paramref name="width"/> x <paramref name="height"/> units, with its corner at
+    /// (<paramref name="x"/>, <paramref name="y"/>) units; false when the kit has none.
+    /// </summary>
+    internal static bool DrawRegion(CanvasItem canvas, float scale, string id, float x, float y, float fromX, float fromY, float width, float height)
+    {
+        if (!Held.TryGetValue(id, out var texture) || SteamwovenKitTable.PartUnits(id) is not { } units) return false;
+        if (canvas.Material is CanvasItemMaterial { BlendMode: CanvasItemMaterial.BlendModeEnum.PremultAlpha }) texture = Premultiplied(id, texture);
+        float across = texture.GetWidth() / (float)units.Width, down = texture.GetHeight() / (float)units.Height;
+        canvas.DrawTextureRectRegion(texture, new Rect2(x * scale, y * scale, width * scale, height * scale), new Rect2(fromX * across, fromY * down, width * across, height * down));
         Drawn.Add(id);
         return true;
     }
