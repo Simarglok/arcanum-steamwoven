@@ -11,13 +11,12 @@ namespace Arcanum.TerrainViewer;
 /// last message. Clicking an item selects it and shows its quote; clicking the selected item again pays and does the service (the original's two
 /// clicks, ledger IS4). It renders an <see cref="AreaItemServiceView"/>; the app runs every click through the model.
 /// ARC-UI-1765: with the game's art the window draws the original look instead (the inventory window's modes 5 and 6: <see cref="AreaInventoryGridArea"/> in its service look,
-/// <see cref="AreaServiceArtLayout"/>): the hero's grid and wear slots, the NPC's image and its quote line, the round view; a press on an item is the click. A switch below the frame shows
+/// <see cref="AreaServiceArtLayout"/>): the hero's grid and wear slots, the NPC's image and its quote line, the round view; a press on an item is the click. In the debug mode a key (AreaDebugBlock) shows
 /// the diagnostic window and back.
 /// </summary>
 public partial class AreaItemServicePanel : CanvasLayer
 {
     private PanelContainer _panel = null!;
-    private AreaZoneRows _rows = null!;
     private Label _header = null!;
     private VBoxContainer _items = null!;
     private Label _message = null!;
@@ -52,8 +51,10 @@ public partial class AreaItemServicePanel : CanvasLayer
     public AreaItemServiceView? View { get; private set; }
     internal AreaInventoryGridArea GridAreaForSelfTest => _area;
     internal Button LookToggleForSelfTest => _lookToggle;
+    private AreaDebugBlock _debugBlock = null!;
+    internal AreaDebugBlock DebugBlockForSelfTest => _debugBlock;
 
-    /// <summary>ARC-UI-2764: the "Diagnostic view" switch is a debug and self-test path; false (the default) draws none in play.</summary>
+    /// <summary>ARC-UI-2764: the switch to the diagnostic view is a debug and self-test path (ARC-UI-2615: the debug block's key outside the window); false (the default) gives none in play.</summary>
     public bool DiagnosticSwitch
     {
         get => _diagnosticSwitch;
@@ -104,15 +105,10 @@ public partial class AreaItemServicePanel : CanvasLayer
         _area.SoundRequested += id => SoundRequested?.Invoke(id);
         _area.HoleReleased += () => CloseRequested?.Invoke();
         _lookToggle = new Button { Name = "LookToggle", Flat = true, FocusMode = Control.FocusModeEnum.All, Alignment = HorizontalAlignment.Left, Visible = false };
-        _lookToggle.Pressed += () => Callable.From(() =>
-        {
-            if (!_diagnosticSwitch) return;
-            _diagnosticChosen = !_diagnosticChosen;
-            if (View is { } view) Render(view, _art);
-        }).CallDeferred();
+        _lookToggle.Pressed += () => Callable.From(ToggleLook).CallDeferred();
         foreach (var control in new Control[] { _header, _area, _scroll, _message, _close, _hint, _lookToggle }) contents.AddChild(control);
-        _rows = new(_panel, contents, [], [_lookToggle, _message]);
         _roundView = new AreaRoundView(); AddChild(_roundView);
+        _debugBlock = AreaDebugBlock.For(DescribeDebug, () => Callable.From(ToggleLook).CallDeferred()); AddChild(_debugBlock);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
@@ -153,15 +149,28 @@ public partial class AreaItemServicePanel : CanvasLayer
         ResizePanel(); UpdateRoundView();
     }
 
-    /// <summary>ARC-UI-1765: the original look hides the diagnostic list, buttons and texts (a press on an item of the frame is the click); the switch below the frame changes to the diagnostic window and back.</summary>
+    /// <summary>ARC-UI-2615: the debug mode can change this window between the original look and the diagnostic one.</summary>
+    private bool LookSwitchable => _diagnosticSwitch && _look is not null && _art is not null;
+
+    private void ToggleLook()
+    {
+        if (!LookSwitchable) return;
+        _diagnosticChosen = !_diagnosticChosen;
+        if (View is { } view) Render(view, _art);
+    }
+
+    private AreaDebugNote? DescribeDebug() => IsOpen && LookSwitchable
+        ? new($"{AreaDebugBlock.KeyName}: {(ArtMode ? "diagnostic view" : "original look")}", null, _panel.Position.X) : null;
+
+    /// <summary>ARC-UI-1765: the original look hides the diagnostic list, buttons and texts (a press on an item of the frame is the click); ARC-UI-2615: the debug block's key changes to the diagnostic window and back.</summary>
     private void ApplyLook()
     {
         var art = ArtMode;
         _area.SetLook(art ? _look : null);
         _area.Visible = art;
         foreach (var control in new Control[] { _header, _scroll, _message, _close, _hint }) control.Visible = !art;
-        _lookToggle.Visible = _diagnosticSwitch && _look is not null && _art is not null;
-        _lookToggle.Text = art ? "Diagnostic view" : "Original look";
+        _lookToggle.Visible = !art && LookSwitchable;
+        _lookToggle.Text = "Original look";
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
         // ARC-UI-3136: the diagnostic look (Godot's default font) is developer-only; the original look carries the art grid and stays.
         _panel.Modulate = art || AreaFallbackLook.Allowed ? Colors.White : new Color(1, 1, 1, 0);
@@ -200,8 +209,8 @@ public partial class AreaItemServicePanel : CanvasLayer
 
     private List<Button> Focusable()
     {
-        // ARC-UI-1765: in the original look the switch to the diagnostic buttons is the one focusable control.
-        if (ArtMode) return _diagnosticSwitch ? [_lookToggle] : [];
+        // ARC-UI-1765: the original look's diagnostic buttons are hidden (ARC-UI-2615: the debug switch is a key).
+        if (ArtMode) return [];
         var list = _buttons.ToList();
         list.Add(_close);
         if (_lookToggle.Visible) list.Add(_lookToggle);
@@ -209,7 +218,7 @@ public partial class AreaItemServicePanel : CanvasLayer
     }
 
     // ARC-UI-1765: a pad or the keyboard in the original look: the D-pad steps over the hero's items and quotes the one it lands on (a click on another item only selects it, as the original's
-    // hover quotes), confirm clicks the remembered item (the second click pays) or, with none remembered, the first. The diagnostic switch is the mouse's.
+    // hover quotes), confirm clicks the remembered item (the second click pays) or, with none remembered, the first.
     private void PadMove(int direction)
     {
         if (View is not { Items.Count: > 0 } view) return;
@@ -242,12 +251,11 @@ public partial class AreaItemServicePanel : CanvasLayer
     private void ResizePanel()
     {
         if (_panel is null) return;
-        if (!ArtMode) _rows.Undock();
         if (ArtMode)
         {
-            // ARC-UI-1765: the window's 800 × 400 at its place between the bars, scaled to the free part with room for the switch below it (as the inventory and barter windows' original look).
+            // ARC-UI-1765: the window's 800 × 400 at its place between the bars, scaled to the free part (as the inventory and barter windows' original look).
             // ARC-UI-2575: with the Steamwoven layout the frame lies in the window zone at the layout's unit scale (the loot window hides the bars; the zone is the layout's all the same).
-            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, _rows, GetViewport().GetVisibleRect().Size)) return;
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
             var (top, free) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)

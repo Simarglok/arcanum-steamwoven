@@ -3,6 +3,7 @@ using Arcanum.Data.Written;
 using Arcanum.Presentation.Hud;
 using Arcanum.Presentation.Steamwoven;
 using Arcanum.Session;
+using Arcanum.Simulation.Items;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -491,6 +492,14 @@ public partial class TerrainViewerApp
         return null;
     }
 
+    // ARC-UI-2615: the identify or repair window of the first speaker of the map's talk host whose window opens.
+    private void SteamwovenOpenService(ItemServiceKind kind)
+    {
+        if (_conversationHost is not { } host) return;
+        for (var index = 0; index < host.Speakers.Count && !ItemServiceOpen; index++)
+            OpenItemService(host, kind, AreaConversationState.EntityId(host.Speakers[index].Row), index);
+    }
+
     // ARC-UI-2614: a readable written document without a use script (a book first), null when the map's data has none.
     private WrittenDocument? SteamwovenReading(WrittenSubtype? only = null, int? noteLine = null)
     {
@@ -534,6 +543,10 @@ public partial class TerrainViewerApp
                 () => _inventoryPanel is { } p ? (p.GridAreaForSelfTest.GetGlobalRect().Position, p.GridAreaForSelfTest.FrameScale) : null, ZoneBody, SteamwovenBackdropFamily.Inventory),
             new("barter", () => { if (SteamwovenBarter() is { } barter) OpenBarterWindow(barter); }, () => BarterOpen, CloseBarterByPlayer,
                 () => _barterPanel is { } p ? (p.GridAreaForSelfTest.GetGlobalRect().Position, p.GridAreaForSelfTest.FrameScale) : null, ZoneBody, SteamwovenBackdropFamily.Inventory),
+            // ARC-UI-2615: the identify and repair windows (the inventory's frame), of the first NPC of the map that offers them.
+            .. new[] { (ItemServiceKind.Identify, "identify"), (ItemServiceKind.Repair, "repair") }.Select(kind =>
+                new SteamwovenWindowProbe(kind.Item2, () => SteamwovenOpenService(kind.Item1), () => ItemServiceOpen, EndItemService,
+                    () => _servicePanel is { } p ? (p.GridAreaForSelfTest.GetGlobalRect().Position, p.GridAreaForSelfTest.FrameScale) : null, ZoneBody, SteamwovenBackdropFamily.Inventory)),
             new("reading", () => { if (SteamwovenReading() is { } document) OpenReading(document, "steamwoven", replaceWindows: true); }, () => ReadingOpen, CloseReadingByPlayer,
                 () => _readingPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X) : null, ZoneReading, SteamwovenBackdropFamily.Reading),
             // ARC-UI-2890: the reading window of each other kind the map's data has (a letter, a newspaper, a telegram, a plaque), captured when there is one.
@@ -575,7 +588,7 @@ public partial class TerrainViewerApp
             }
             await CaptureHudAsync("steamwoven-" + tag + "-" + name, frames);
             if (plan is not null) CheckBackdrop(tag, name, window.Family, plan, panel, require);
-            if (plan is not null && name is "inventory" or "loot" or "barter") await CheckWindowRowsAsync(tag, name, plan, frames, waitPainted, require);
+            if (plan is not null && name is "inventory" or "loot" or "barter" or "identify" or "repair") await CheckWindowRowsAsync(tag, name, plan, panel, frames, waitPainted, require);
             // ARC-UI-2694: the lens of the sheet and the map window is a close spot (a mouse-up in its square closes the window): a click on its centre, at the zone place, closes it.
             if (plan is not null && name is "sheet" or "map")
             {
@@ -592,56 +605,75 @@ public partial class TerrainViewerApp
         }
     }
 
-    // ARC-UI-2615: with the debug switch on, the rows the inventory, loot and barter windows show around their frame (the quantity row, drawn while the bottom strip's pane is hidden, the message line and
-    // the look switch) lie inside the window zone, so inside the middle band and under no strip; the capture is steamwoven-VARIANT-WxH-WINDOW-rows.png.
-    // The switch then goes to the diagnostic window (the rows back in the panel's column) and back, where the switch keeps the focus.
-    private async Task CheckWindowRowsAsync(string tag, string name, SteamwovenHudPlan plan, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
+    // ARC-UI-2615: with the debug switch on and a quantity asked while the bottom strip's pane is hidden, nothing of it touches the window: the frame keeps the zone place, the quantity row (inventory, loot) lies
+    // inside the strip's message window, and the debug block (the key's note, the inventory's message) stands at the left above the bottom strip, outside the window where the margin holds it, taking no
+    // pointer. The key (Ctrl+Shift+J) goes to the diagnostic window and back. The capture is steamwoven-VARIANT-WxH-WINDOW-rows.png.
+    private async Task CheckWindowRowsAsync(string tag, string name, SteamwovenHudPlan plan, AreaGameBarPanel panel, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
     {
-        var barter = name == "barter";
-        if (barter) _barterPanel!.DiagnosticSwitch = true;
-        else
+        Action<bool> debug = name switch { "barter" => on => _barterPanel!.DiagnosticSwitch = on, "identify" or "repair" => on => _servicePanel!.DiagnosticSwitch = on, _ => on => _inventoryPanel!.DiagnosticSwitch = on };
+        var asks = name is "inventory" or "loot";
+        AreaDebugBlock Block() => name switch { "barter" => _barterPanel!.DebugBlockForSelfTest, "identify" or "repair" => _servicePanel!.DebugBlockForSelfTest, _ => _inventoryPanel!.DebugBlockForSelfTest };
+        bool Art() => name switch { "barter" => _barterPanel!.ArtMode, "identify" or "repair" => _servicePanel!.ArtMode, _ => _inventoryPanel!.ArtMode };
+        AreaInventoryGridArea Frame() => name switch { "barter" => _barterPanel!.GridAreaForSelfTest, "identify" or "repair" => _servicePanel!.GridAreaForSelfTest, _ => _inventoryPanel!.GridAreaForSelfTest };
+        var place = ZoneBody(plan);
+        void RequireFrame(string when)
         {
-            _inventoryPanel!.DiagnosticSwitch = true;
+            var (origin, scale) = (Frame().GetGlobalRect().Position, Frame().FrameScale);
+            require(Math.Abs(scale - place.Scale) < 0.002 && Math.Abs(origin.X - place.X) <= 1.01 && Math.Abs(origin.Y - place.Y) <= 1.01,
+                $"[{tag}] the {name} window keeps the zone place {when}: ({origin.X:F1}, {origin.Y:F1}) scale {scale:F4}");
+        }
+        debug(true);
+        if (asks)
+        {
             _quantityPaneHiddenForCapture = true;
-            _inventoryPanel.AskQuantity("Arrows", 120, "took 1 item(s)");
+            _inventoryPanel!.AskQuantity("Arrows", 120, "took 1 item(s)");
         }
         try
         {
             await frames(4);
             await waitPainted();
             await CaptureHudAsync("steamwoven-" + tag + "-" + name + "-rows", frames);
-            var rows = (barter ? _barterPanel!.RowsForSelfTest : _inventoryPanel!.RowsForSelfTest).Where(row => row.IsVisibleInTree()).ToList();
-            var zone = plan.WindowZone;
-            var places = string.Join(" ", rows.Select(row => { var r = row.GetGlobalRect(); return $"({r.Position.X:F0},{r.Position.Y:F0},{r.Size.X:F0}x{r.Size.Y:F0})"; }));
-            GD.Print($"ARC-UI-2615 steamwoven rows [{tag}] {name} count={rows.Count} rows={places} zone={zone}");
-            require(rows.Count == (barter ? 1 : 3), $"[{tag}] the {name} window shows its rows around the frame with the debug switch on ({rows.Count})");
-            foreach (var rect in rows.Select(row => row.GetGlobalRect()))
-                require(rect.Position.X >= zone.X - 1 && rect.Position.Y >= zone.Y - 1 && rect.End.X <= zone.Right + 1 && rect.End.Y <= zone.Bottom + 1,
-                    $"[{tag}] a row of the {name} window lies inside the window zone {zone}: {rect}");
-            if (!barter) _inventoryPanel!.CancelQuantity();
-            await frames(2);
-            var toggle = barter ? _barterPanel!.LookToggleForSelfTest : _inventoryPanel!.LookToggleForSelfTest;
+            RequireFrame("with the debug rows");
+            if (asks)
+            {
+                var strip = panel.ScreenFrame(GetViewport().GetVisibleRect().Size);
+                var (x, y, width, height) = AreaMessageLayout.Window;
+                var window = new Rect2(strip.Origin + new Vector2(x, y) * strip.Scale, new Vector2(width, height) * strip.Scale).Grow(1);
+                foreach (var button in _inventoryPanel!.QuantityButtonsForSelfTest.Cast<Control>().Append(_inventoryPanel.QuantityRowForSelfTest))
+                {
+                    var rect = button.GetGlobalTransform() * new Rect2(Vector2.Zero, button.Size);
+                    require(button.IsVisibleInTree() && window.Encloses(rect), $"[{tag}] the {name} quantity row lies in the bottom strip's message window {window}: {button.Name} {rect}");
+                }
+                require(_inventoryPanel.QuantityButtonsForSelfTest[0].HasFocus(), $"[{tag}] the {name} quantity window's first button keeps the focus on the strip");
+                _inventoryPanel.CancelQuantity();
+                await frames(2);
+                require(!_inventoryPanel.QuantityRowForSelfTest.IsVisibleInTree(), $"[{tag}] the {name} quantity row is gone with the question");
+            }
+            var block = Block();
+            var bounds = block.GetGlobalTransform() * new Rect2(Vector2.Zero, block.Size);
+            var view = GetViewport().GetVisibleRect().Size;
+            var margin = place.X >= 96 * place.Scale;
+            GD.Print($"ARC-UI-2615 steamwoven debug block [{tag}] {name} rect={bounds} windowLeft={place.X:F0} bottomStrip={view.Y - AreaGameBarPanel.BottomInset:F0} outside={margin}");
+            require(block.IsVisibleInTree() && block.KeyTextForSelfTest.StartsWith(AreaDebugBlock.KeyName, StringComparison.Ordinal) && bounds.Position.X >= 0 && bounds.End.Y <= view.Y - AreaGameBarPanel.BottomInset + 1
+                && (!margin || bounds.End.X <= place.X + 1), $"[{tag}] the {name} debug block stands at the left above the bottom strip{(margin ? ", outside the window" : "")}: {bounds}");
+            require(new Control[] { block }.Concat(block.GetChildren().OfType<Control>()).All(control => control.MouseFilter == Control.MouseFilterEnum.Ignore), $"[{tag}] the {name} debug block takes no pointer");
             foreach (var art in new[] { false, true })
             {
-                toggle.GrabFocus();
-                toggle.EmitSignal(BaseButton.SignalName.Pressed);
+                foreach (var pressed in new[] { true, false })
+                    GetViewport().PushInput(new InputEventKey { Keycode = AreaDebugBlock.ToggleKey, CtrlPressed = true, ShiftPressed = true, Pressed = pressed });
                 await frames(3);
-                var (shown, docked) = barter ? (_barterPanel!.ArtMode, _barterPanel.RowsDockedForSelfTest) : (_inventoryPanel!.ArtMode, _inventoryPanel.RowsDockedForSelfTest);
-                require(shown == art && docked == art && (!art || toggle.HasFocus()),
-                    $"[{tag}] the {name} switch changes to the {(art ? "original" : "diagnostic")} look, the rows {(art ? "docked with the focus on the switch" : "in the column")} (art {shown}, docked {docked}, focus {toggle.HasFocus()})");
+                require(Art() == art, $"[{tag}] {AreaDebugBlock.KeyName} changes the {name} window to the {(art ? "original" : "diagnostic")} look");
             }
-            var back = toggle.GetGlobalRect();
-            require(back.Position.Y >= zone.Y - 1 && back.End.Y <= zone.Bottom + 1, $"[{tag}] the {name} switch is back inside the window zone {zone}: {back}");
+            RequireFrame("after the key");
         }
         finally
         {
-            if (barter) _barterPanel!.DiagnosticSwitch = false;
-            else
+            if (asks)
             {
                 _inventoryPanel!.CancelQuantity();
                 _quantityPaneHiddenForCapture = false;
-                _inventoryPanel.DiagnosticSwitch = false;
             }
+            debug(false);
             await frames(2);
         }
     }

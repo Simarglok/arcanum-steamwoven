@@ -19,7 +19,6 @@ namespace Arcanum.TerrainViewer;
 public partial class AreaInventoryPanel : CanvasLayer
 {
     private PanelContainer _panel = null!;
-    private AreaZoneRows _rows = null!;
     private Label _header = null!;
     private Label _pc = null!;
     private VBoxContainer _use = null!;
@@ -44,7 +43,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     private readonly List<Button> _buttons = new();
     private AreaInventoryView? _view;
     // ARC-UI-029: the quantity window's row, its buttons (All, +1, −1, Accept, Cancel) and its state while it asks.
-    private HBoxContainer _quantity = null!;
+    private VBoxContainer _quantity = null!;
+    private VBoxContainer _contents = null!;
     private Label _quantityLabel = null!;
     private readonly List<Button> _quantityButtons = new();
     private QuantityBar? _bar;
@@ -126,8 +126,28 @@ public partial class AreaInventoryPanel : CanvasLayer
     }
     internal IReadOnlyList<Button> QuantityButtonsForSelfTest => _quantityButtons;
     internal string QuantityTextForSelfTest => _quantityLabel.Text;
-    internal IReadOnlyList<Control> RowsForSelfTest => [_quantity, _message, _lookToggle];
-    internal bool RowsDockedForSelfTest => _rows.Docked;
+    internal Control QuantityRowForSelfTest => _quantity;
+
+    /// <summary>The quantity row's text size on the bottom strip, in original units: no smaller than the message window's text.</summary>
+    private const int QuantityRowFontSize = 13;
+
+    /// <summary>
+    /// ARC-UI-2615: while the bars show, the quantity row stands on <paramref name="host"/>, the bottom strip's message window (where the original asks the quantity, ledger QW2), never over or around the
+    /// window; null puts it back above the frame (no bars: a self-test). A focused button keeps the focus across the move.
+    /// </summary>
+    internal void HostQuantityRow(Control? host)
+    {
+        var parent = host ?? (Control)_contents;
+        if (_quantity.GetParent() == parent) return;
+        var focus = GetViewport().GuiGetFocusOwner();
+        _quantity.GetParent().RemoveChild(_quantity);
+        parent.AddChild(_quantity);
+        if (host is null) _contents.MoveChild(_quantity, 1);
+        foreach (var control in _quantityButtons.Cast<Control>().Prepend(_quantityLabel))
+            if (host is null) control.RemoveThemeFontSizeOverride("font_size");
+            else control.AddThemeFontSizeOverride("font_size", QuantityRowFontSize);
+        if (focus is not null && focus.IsVisibleInTree() && !focus.HasFocus()) focus.GrabFocus();
+    }
     /// <summary>The looted holder's entity, or null in the plain inventory view.</summary>
     public string? Holder => IsOpen ? _view?.Holder : null;
 
@@ -149,8 +169,10 @@ public partial class AreaInventoryPanel : CanvasLayer
     internal string PcTextForSelfTest => _pc.Text;
     internal AreaInventoryGridArea GridAreaForSelfTest => _area;
     internal Button LookToggleForSelfTest => _lookToggle;
+    private AreaDebugBlock _debugBlock = null!;
+    internal AreaDebugBlock DebugBlockForSelfTest => _debugBlock;
 
-    /// <summary>ARC-UI-2764: the "Diagnostic view" switch and the message line of the original look are a debug and self-test path; false (the default) draws neither in play.</summary>
+    /// <summary>ARC-UI-2764: the switch to the diagnostic view and the original look's message are a debug and self-test path (ARC-UI-2615: both in the debug block outside the window); false (the default) draws neither in play.</summary>
     public bool DiagnosticSwitch
     {
         get => _diagnosticSwitch;
@@ -185,7 +207,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         };
         _panel.AddThemeStyleboxOverride("panel", _diagnosticStyle);
         AddChild(_panel);
-        var contents = new VBoxContainer(); _panel.AddChild(contents);
+        var contents = _contents = new VBoxContainer(); _panel.AddChild(contents);
         _header = new Label { Modulate = new Color(.7f, .75f, .8f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         // 43 items fit the PC's list on real data; the columns scroll inside the window.
         var columns = _columns = new HBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
@@ -221,9 +243,11 @@ public partial class AreaInventoryPanel : CanvasLayer
         _area.SoundRequested += id => SoundRequested?.Invoke(id);
         _area.HoleReleased += () => CloseRequested?.Invoke();
         _area.MapDropRequested += held => MapDropRequested?.Invoke(held);
-        _quantity = new HBoxContainer { Name = "Quantity", Visible = false };
-        _quantityLabel = new Label { Modulate = new Color(1f, .85f, .55f) };
+        _quantity = new VBoxContainer { Name = "Quantity", Visible = false, MouseFilter = Control.MouseFilterEnum.Ignore };
+        _quantityLabel = new Label { Modulate = new Color(1f, .85f, .55f), ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis };
         _quantity.AddChild(_quantityLabel);
+        var quantityLine = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        _quantity.AddChild(quantityLine);
         foreach (var (name, text, action) in new (string, string, Action)[]
         {
             ("QuantityAll", "All", () => PressQuantity(QuantityAction.All)), ("QuantityUp", "+1", () => PressQuantity(QuantityAction.Up)),
@@ -232,18 +256,13 @@ public partial class AreaInventoryPanel : CanvasLayer
         {
             var button = new Button { Name = name, Text = text, FocusMode = Control.FocusModeEnum.All };
             button.Pressed += () => Callable.From(action).CallDeferred();
-            _quantity.AddChild(button); _quantityButtons.Add(button);
+            quantityLine.AddChild(button); _quantityButtons.Add(button);
         }
         _lookToggle = new Button { Name = "LookToggle", Flat = true, FocusMode = Control.FocusModeEnum.All, Alignment = HorizontalAlignment.Left, Visible = false };
-        _lookToggle.Pressed += () => Callable.From(() =>
-        {
-            if (!_diagnosticSwitch) return;
-            _diagnosticChosen = !_diagnosticChosen;
-            if (_view is { } view) Render(view, _message.Text);
-        }).CallDeferred();
+        _lookToggle.Pressed += () => Callable.From(ToggleLook).CallDeferred();
         foreach (var control in new Control[] { _header, _quantity, _area, _scroll, _message, _close, _hint, _lookToggle }) contents.AddChild(control);
-        _rows = new(_panel, contents, [_quantity], [_lookToggle, _message]);
         _roundView = new AreaRoundView(); AddChild(_roundView);
+        _debugBlock = AreaDebugBlock.For(DescribeDebug, () => Callable.From(ToggleLook).CallDeferred()); AddChild(_debugBlock);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
@@ -431,26 +450,32 @@ public partial class AreaInventoryPanel : CanvasLayer
         ResizePanel(); UpdateRoundView();
     }
 
-    /// <summary>ARC-UI-054: the message line is always laid out. In the original look it keeps one line, empty or not, cut with an ellipsis,
-    /// so a message ("took N item(s)") never changes the frame's scale (PROJECT: the original prints none in the window); the frame is
-    /// therefore always one line smaller than with no line at all. The diagnostic window wraps it.</summary>
-    private void ShowMessageLine()
+    /// <summary>ARC-UI-2615: the original look has no message line in the window (the original prints none there; the debug block shows it);
+    /// the diagnostic window wraps it.</summary>
+    private void ShowMessageLine() => _message.Visible = !ArtMode;
+
+    /// <summary>ARC-UI-2615: the debug mode can change this window between the original look and the diagnostic one.</summary>
+    private bool LookSwitchable => _diagnosticSwitch && _look is not null && OriginalAvailable;
+
+    private void ToggleLook()
     {
-        var art = ArtMode;
-        _message.Visible = !art || _diagnosticSwitch;
-        _message.AutowrapMode = art ? TextServer.AutowrapMode.Off : TextServer.AutowrapMode.WordSmart;
-        _message.TextOverrunBehavior = art ? TextServer.OverrunBehavior.TrimEllipsis : TextServer.OverrunBehavior.NoTrimming;
+        if (!LookSwitchable) return;
+        _diagnosticChosen = !_diagnosticChosen;
+        if (_view is { } view) Render(view, _message.Text);
     }
 
+    private AreaDebugNote? DescribeDebug() => IsOpen && LookSwitchable
+        ? new($"{AreaDebugBlock.KeyName}: {(ArtMode ? "diagnostic view" : "original look")}", ArtMode ? _message.Text : null, _panel.Position.X) : null;
+
     /// <summary>ARC-UI-051: the original look hides the diagnostic lists, buttons and texts (their actions stay: the doll, the grid, the
-    /// boxes and a right click); the switch below the frame changes to the diagnostic window and back.</summary>
+    /// boxes and a right click); ARC-UI-2615: the debug block's key changes to the diagnostic window and back.</summary>
     private void ApplyLook()
     {
         var art = ArtMode;
         _area.SetLook(art ? _look : null);
         foreach (var control in new Control[] { _header, _scroll, _close, _hint }) control.Visible = !art;
-        _lookToggle.Visible = _diagnosticSwitch && _look is not null && OriginalAvailable;
-        _lookToggle.Text = art ? "Diagnostic view" : "Original look";
+        _lookToggle.Visible = !art && LookSwitchable;
+        _lookToggle.Text = "Original look";
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
         // ARC-UI-3136: the diagnostic look (Godot's default font) is developer-only; the original look carries the art grid and stays.
         _panel.Modulate = art || AreaFallbackLook.Allowed ? Colors.White : new Color(1, 1, 1, 0);
@@ -460,8 +485,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     {
         // ARC-UI-029: while the quantity window asks only its buttons take focus.
         if (_bar is not null) return _quantityButtons.ToList();
-        // ARC-UI-051: the original look's diagnostic buttons are hidden; the switch to them is the one focusable control.
-        if (ArtMode) return _diagnosticSwitch ? [_lookToggle] : [];
+        // ARC-UI-051: the original look's diagnostic buttons are hidden (ARC-UI-2615: the debug switch is a key).
+        if (ArtMode) return [];
         var list = _useButtons.Concat(_pickButtons).Concat(_repairButtons).Concat(_buttons).ToList();
         if (_takeAll.Visible && !_takeAll.Disabled) list.Add(_takeAll);
         // ARC-UI-015: the doll's buttons come after the earlier ones, so the first focus (a confirm right after opening) stays where it was.
@@ -561,16 +586,15 @@ public partial class AreaInventoryPanel : CanvasLayer
     private void ResizePanel()
     {
         if (_panel is null) return;
-        if (!ArtMode) _rows.Undock();
         // ARC-UI-018: inside the part the interface bars leave free.
         var (top, size) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
         if (ArtMode)
         {
-            // ARC-UI-051: the window's 800 × 400 at its place between the bars, scaled to the free part with room for what the panel
-            // shows besides the frame (the switch, the message line, the quantity row; PROJECT: the original prints no message in the
-            // window). ARC-UI-054: the message line is one line whether a message is shown or not, so a message keeps the scale.
-            // ARC-UI-2575: with the Steamwoven layout the frame lies in the window zone at the layout's unit scale (ARC-UI-2615: the switch, the message line and the quantity row lie over its edges).
-            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, _rows, GetViewport().GetVisibleRect().Size)) return;
+            // ARC-UI-051: the window's 800 × 400 at its place between the bars, scaled to the free part. ARC-UI-2615: the panel holds the frame
+            // alone (the quantity row is on the bottom strip, the debug rows in the debug block); only without bars (a self-test) is the quantity
+            // row above the frame, and the scale leaves room for it.
+            // ARC-UI-2575: with the Steamwoven layout the frame lies in the window zone at the layout's unit scale.
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)
             {
