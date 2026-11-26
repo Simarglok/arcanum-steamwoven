@@ -410,6 +410,20 @@ public partial class TerrainCanvas
     /// <summary>ARC-RENDER-3063: the town-map render draws no critter body (NPCs and monsters, fallen ones included); scenery, doors and items stay.</summary>
     internal bool HideCritters { get => _hideCritters; set { if (_hideCritters == value) return; _hideCritters = value; _areaView = null; QueueRedraw(); } }
     private bool _hideCritters;
+    // ARC-RENDER-3416: the view's shared inputs, and which node's state each slot of a new submission takes.
+    private readonly AreaViewState _areaViewState = new();
+    private readonly AreaSlotAssignment<AreaSlotKey> _areaSlots = new();
+    private readonly List<AreaSlotKey> _areaSlotKeys = new();
+    private AreaItemState[] _areaStates = [];
+    private readonly record struct AreaSlotKey(int Layer, AreaObjectKey? Identity, TerrainRect Place);
+    private void MoveAreaStates()
+    {
+        var source = _areaSlots.Assign(_areaSlotKeys, _areaItems.Count);
+        if (_areaStates.Length < _areaItems.Count) _areaStates = new AreaItemState[Math.Max(_areaItems.Count, 2 * _areaStates.Length)];
+        for (var index = 0; index < _areaItems.Count; index++) _areaStates[index] = _areaItems[index].State;
+        for (var index = 0; index < _areaItems.Count; index++) _areaItems[index].Use(_areaStates[source[index]]);
+        Array.Clear(_areaStates); // no state is held here after its node is freed
+    }
     private void UpdateAreaVisible()
     {
         if (!IsInsideTree() || _area is null || _areaFrames is null || _textures is null || _actorPlan is null || _areaActorPlacement is null) return;
@@ -504,20 +518,33 @@ public partial class TerrainCanvas
         lap?.Step("items");
         while (_areaItems.Count < visible.Length)
         {
-            var item = new AreaDrawItem { TextureFilter = TextureFilterEnum.Nearest, Mappings = _areaMappings };
+            var item = new AreaDrawItem { TextureFilter = TextureFilterEnum.Nearest, Mappings = _areaMappings, View = _areaViewState };
             AddChild(item); _areaItems.Add(item);
         }
+        // ARC-RENDER-3416: each command takes the state it had in the previous submission, wherever it stood in the draw order.
+        _areaSlotKeys.Clear();
+        for (var index = 0; index < visible.Length; index++)
+        {
+            var command = visible[index];
+            var layer = index >= maskStart && index < maskEnd ? 1 : index >= roofStart ? 2 : index == highlightIndex ? 3 : index == ringUnderIndex ? 4 : index == ringOverIndex ? 5 : 0;
+            _areaSlotKeys.Add(new(layer, command.Identity, command.Identity is null ? command.Destination : default));
+        }
+        MoveAreaStates();
         // Hide only items that were shown by the previous submission.
         for (var index = visible.Length; index < _areaActive; index++)
         {
             var item = _areaItems[index];
             item.Hide(); item.FrameTexture = null; item.HdScale = 1; item.ReleaseMapping();
         }
+        // A hidden item beyond those may have been handed a state that a shown one held.
+        for (var index = Math.Max(visible.Length, _areaActive); index < _areaItems.Count; index++)
+            if (_areaItems[index].State.Prepared is not null) _areaItems[index].ReleaseMapping();
         _areaActive = visible.Length;
         // ARC-RES-1978: while the relit look is on, the carried lights stand where they stand now and the shaders read the merged list.
         AreaRelight.SetView(world);
         UploadRelightLights();
         var viewport = GetViewport(); var raster = AreaDrawItem.RasterTransform(viewport); var rasterSize = (Vector2I)viewport.GetVisibleRect().Size;
+        _areaViewState.Write(raster, rasterSize, _areaCarriedBinding?.Lattice ?? Vector4I.Zero);
         for (var index = 0; index < visible.Length; index++)
         {
             var item = _areaItems[index];
@@ -616,7 +643,7 @@ public partial class TerrainCanvas
         // ARC-RENDER-1355: the hover ring's frames live in the repository of the scene just cleared; the viewer sets the ring again from the next scene's own repository.
         _areaRing = null;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
-        _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>(); AreaVisibleCovers = AreaVisibleCovers.None;
+        _areaItems.Clear(); _areaSlots.Reset(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>(); AreaVisibleCovers = AreaVisibleCovers.None;
         _areaMappings.Clear(); // after the items stopped sampling the rows
         _areaChunkTextures.Clear(); _areaChunks = null; _areaChunkCommands.Clear(); AreaChunkCount = 0; _areaChunkChannels.Clear();
         ReleaseAreaHd(); // after the items stopped sampling HD textures
@@ -624,6 +651,7 @@ public partial class TerrainCanvas
     public override void _ExitTree()
     {
         ClearArea();
+        _areaViewState.Dispose(); // after the items that read it
         ReleaseHd(); _hdOwnedSource?.Dispose(); _hdOwnedSource = null;
     }
 }
