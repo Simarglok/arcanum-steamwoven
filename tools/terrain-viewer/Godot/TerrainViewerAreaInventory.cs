@@ -168,11 +168,14 @@ public partial class TerrainViewerApp
         if (!Equals(stamp, _inventoryHiddenStamp))
         {
             _inventoryHiddenStamp = stamp;
+            var shown = _inventoryHidden;
             _inventoryHidden = _inventoryHost!.Taken(_areaSession, CurrentAreaMap);
             // ARC-COMBAT-008: the objects an attack destroyed or switched off are not drawn either.
             if (ObjectTargets()?.Gone(_areaSession) is { Count: > 0 } gone) _inventoryHidden = _inventoryHidden.Concat(gone).ToHashSet();
             // ARC-WORLD-063: a map item swept into a junk pile is drawn as the pile, not where it lay.
             if (_inventoryHost.Piled(_areaSession, CurrentAreaMap) is { Count: > 0 } piled) _inventoryHidden = _inventoryHidden.Concat(piled).ToHashSet();
+            // ARC-RENDER-3126: the session's revision moves with every AI tick; an unchanged hidden set keeps its reference, so the canvas does not submit the view again for it.
+            if (shown is not null && shown.SetEquals(_inventoryHidden)) _inventoryHidden = shown;
         }
         if (!ReferenceEquals(_canvas.AreaHidden, _inventoryHidden)) _canvas.SetAreaHidden(_inventoryHidden);
         // ARC-RENDER-041: a death seen since the last sync leaves its pool of blood first.

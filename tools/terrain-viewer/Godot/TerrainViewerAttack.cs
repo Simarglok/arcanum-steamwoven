@@ -441,6 +441,9 @@ public partial class TerrainViewerApp
         _areaSession is { } session && ObjectTargets() is { } targets ? targets.Gone(session) : NoRemovedObjects;
 
     private static readonly IReadOnlySet<AreaObjectKey> NoRemovedObjects = new HashSet<AreaObjectKey>();
+
+    // ARC-RENDER-3126: one object's membership of AreaRemovedObjects, without walking every object of the map.
+    private bool AreaIsRemoved(AreaObjectKey key) => _areaSession is { } session && ObjectTargets() is { } targets && targets.IsGone(session, key);
     private (IReadOnlySet<AreaObjectKey> Removed, AreaOccupancy Value)? _removedOnlyOccupancy;
 
     /// <summary>ARC-WORLD-016/065: the PC's live overlay: the companions' (which moves the removed objects too), or with no

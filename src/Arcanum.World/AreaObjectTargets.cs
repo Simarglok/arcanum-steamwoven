@@ -39,6 +39,8 @@ public sealed class AreaObjectTargets
     private readonly IReadOnlyDictionary<AreaObjectKey, (string Entity, SessionOpenableBaseline Baseline)> _portals;
     private readonly AreaInventoryMap? _inventory;
     private readonly Dictionary<AreaObjectKey, (AreaObjectRecord Row, string Entity, DamageableObjectKind Kind)> _objects = [];
+    // ARC-RENDER-3126: the sceneries the map data stores off (object flag 0x2), read once: the data does not change, and the removed-object test runs for every row.
+    private readonly HashSet<AreaObjectKey> _dataOff = [];
     // ARC-WORLD-114: the NPC rows by key, with their session entity, which a script can switch off.
     // ARC-SCRIPT-1360: with the map data's object flags, since a toggle state switches an NPC the data stores off on.
     private readonly Dictionary<AreaObjectKey, (string Entity, long Flags, CellCoord Cell)> _npcs = [];
@@ -84,6 +86,7 @@ public sealed class AreaObjectTargets
             }
             else entity = k == DamageableObjectKind.Container && inventory?.TryGetEntity(row.Key, out var holder) == true ? holder : AreaUseScriptHost.EntityId(row);
             _objects[row.Key] = (row, entity, k);
+            if (k == DamageableObjectKind.Scenery && DataOff(row)) _dataOff.Add(row.Key); else _dataOff.Remove(row.Key);
         }
     }
 
@@ -147,7 +150,7 @@ public sealed class AreaObjectTargets
     /// (<see cref="GameSessionOwner.QueryObjectOff"/>). Any other static object type is never asked: only a scenery is toggled and read as off.
     /// </summary>
     private bool SceneryOff(GameSessionOwner session, (AreaObjectRecord Row, string Entity, DamageableObjectKind Kind) found) =>
-        found.Kind == DamageableObjectKind.Scenery && session.QueryObjectOff(_map, found.Entity, DataOff(found.Row));
+        found.Kind == DamageableObjectKind.Scenery && session.QueryObjectOff(_map, found.Entity, _dataOff.Contains(found.Row.Key));
 
     private (GameSessionVersion Version, IReadOnlyDictionary<AreaObjectKey, bool> States)? _sceneryOff;
 
@@ -182,17 +185,31 @@ public sealed class AreaObjectTargets
         ArgumentNullException.ThrowIfNull(session);
         var version = session.Version;
         if (_gone is { } known && known.Version == version) return known.Keys;
-        var keys = _objects.Where(pair => session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) is SessionObjectCondition.Destroyed
-            or SessionObjectCondition.Off || SceneryOff(session, pair.Value)).Select(pair => pair.Key)
-            .Concat(_npcs.Where(pair => AreaUseScriptHost.NpcOff(session, _map.RuntimeMap, pair.Value.Entity, pair.Value.Flags)
-                || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value.Entity)
-                // ARC-WORLD-2039 (FM1): an NPC a script's teleport moved to another map is no object of this map's lists (the original moves its record; this map's away change names where it stands).
-                || session.QueryMapChange(_map, AreaCompanionPlacement.MapKey(pair.Value.Entity)) is { } away and >= 1 && away != _map.RuntimeMap).Select(pair => pair.Key)).ToHashSet();
+        var keys = _objects.Where(pair => ObjectGone(session, pair.Value)).Select(pair => pair.Key)
+            .Concat(_npcs.Where(pair => NpcGone(session, pair.Value.Entity, pair.Value.Flags)).Select(pair => pair.Key)).ToHashSet();
         // An unchanged set keeps its reference, so overlays cached on it stay valid across unrelated revisions.
         IReadOnlySet<AreaObjectKey> result = _gone is { } previous && previous.Keys.SetEquals(keys) ? previous.Keys : keys;
         _gone = (version, result);
         return result;
     }
+
+    /// <summary>ARC-RENDER-3126: whether <paramref name="key"/> is one of <see cref="Gone"/> now, read for that one object. <see cref="Gone"/> walks every object of the map again after each change of the
+    /// session, and every AI tick changes it; a question about one object asks here.</summary>
+    public bool IsGone(GameSessionOwner session, AreaObjectKey key)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return _objects.TryGetValue(key, out var found) && ObjectGone(session, found)
+            || _npcs.TryGetValue(key, out var npc) && NpcGone(session, npc.Entity, npc.Flags);
+    }
+
+    private bool ObjectGone(GameSessionOwner session, (AreaObjectRecord Row, string Entity, DamageableObjectKind Kind) found) =>
+        session.QueryObjectCondition(_map, found.Entity, found.Kind) is SessionObjectCondition.Destroyed or SessionObjectCondition.Off || SceneryOff(session, found);
+
+    private bool NpcGone(GameSessionOwner session, string entity, long flags) =>
+        AreaUseScriptHost.NpcOff(session, _map.RuntimeMap, entity, flags)
+        || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, entity)
+        // ARC-WORLD-2039 (FM1): an NPC a script's teleport moved to another map is no object of this map's lists (the original moves its record; this map's away change names where it stands).
+        || session.QueryMapChange(_map, AreaCompanionPlacement.MapKey(entity)) is { } away and >= 1 && away != _map.RuntimeMap;
 
     private (GameSessionVersion Version, IReadOnlyList<(AreaObjectKey Key, string Entity, CellCoord World)> Npcs)? _switchedOn;
 

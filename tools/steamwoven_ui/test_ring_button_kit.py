@@ -117,6 +117,31 @@ class CutTests(unittest.TestCase):
         self.assertEqual(at(part, part.w - 40, mid)[3], 255)
         self.assertTrue(all(at(part, x, y)[3] == 0 for x in range(90, part.w - 90) for y in range(part.h)))
 
+    def test_the_smoothed_dome_loses_its_grain_and_keeps_its_spot_and_rim(self):
+        circle = rk.DOME.circles[0]
+        frame = discs(rk.DOME, 4, (60, 60, 0))
+        for y in range(frame.h):
+            for x in range(frame.w):
+                r = math.hypot((x + 0.5) / 4 - circle.cx, (y + 0.5) / 4 - circle.cy)
+                spot = math.hypot((x + 0.5) / 4 - 18.0, (y + 0.5) / 4 - 28.0) <= 4.0
+                level = 30 if spot else 60
+                grain = 8 if (x // 2 + y // 2) % 2 else -8
+                if r < rk.SMOOTH_FACE[1]:
+                    frame.data[(y * frame.w + x) * 4:(y * frame.w + x) * 4 + 3] = bytes((level + grain, level + grain, 0))
+                elif r < circle.cut:
+                    frame.data[(y * frame.w + x) * 4:(y * frame.w + x) * 4 + 3] = bytes((250 if (x + y) % 2 else 0,) * 3)
+        smooth = rk.smoothed(frame, circle)
+        flat = [at(smooth, x, y)[0] for y in range(80, 100) for x in range(110, 130)]
+        self.assertLessEqual(max(flat) - min(flat), 2)
+        self.assertLessEqual(abs(at(smooth, 72, 112)[0] - 30), 3)          # the large spot stays
+        self.assertLessEqual(abs(flat[0] - 60), 2)
+        for y in range(frame.h):
+            for x in range(frame.w):
+                r = math.hypot((x + 0.5) / 4 - circle.cx, (y + 0.5) / 4 - circle.cy)
+                if r >= rk.SMOOTH_FACE[1]:
+                    self.assertEqual(at(smooth, x, y), at(frame, x, y))   # the rim and all beyond: the frame's own pixels
+                self.assertEqual(at(smooth, x, y)[3], at(frame, x, y)[3])
+
     def test_the_olive_dome_fills_the_dome_circle(self):
         with tempfile.TemporaryDirectory() as folder:
             root = tree(folder, [rk.DOME])
@@ -322,7 +347,29 @@ class BuildTests(unittest.TestCase):
                 self.assertEqual(rk.main(["check", "--local-root", str(root)]), 2)
         self.assertEqual(hover["source"], "codex")
         self.assertIn(f"work/{rk.CODEX_BATCH}/placed/m_dnbut-f0", hover["sources"])
-        self.assertEqual((dome["source"], dome["parameters"]["dome"]), ("pack", "pack"))
+        self.assertEqual((dome["source"], dome["parameters"]["dome"]), ("pack", "smooth"))
+        self.assertEqual(dome["parameters"]["smoothing_units"]["face"], list(rk.SMOOTH_FACE))
+
+    def test_the_smooth_dome_is_smoothed_in_both_states_and_the_pack_cut_is_not(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = tree(folder, [rk.DOME])
+            for number in rk.DOME.frames.values():
+                path = root.parent / school_kit.PACK_DIR / "interface" / f"{rk.DOME.name}-f{number:03d}.png"
+                frame = pngio.read(path)
+                for y in range(frame.h):
+                    for x in range(frame.w):
+                        if (x // 2 + y // 2) % 2:
+                            frame.data[(y * frame.w + x) * 4] ^= 16
+                pngio.write(path, frame)
+            built = {dome: rk.button_parts(root, root / "census" / "frames", rk.DOME, dome) for dome in ("smooth", "pack")}
+        for ident in ("plate.combinebutt", "plate.combinebutt_pressed"):
+            spread = {}
+            for dome, parts in built.items():
+                red = [at(parts[ident], x, y)[0] for y in range(80, 106) for x in range(80, 106)]
+                spread[dome] = max(red) - min(red)
+            self.assertLessEqual(spread["smooth"], 2, ident)
+            self.assertGreater(spread["pack"], 8, ident)
+            self.assertEqual(at(built["smooth"][ident], 93, 2), at(built["pack"][ident], 93, 2), ident)
 
     def test_the_codex_build_refuses_without_placed_frames(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -53,6 +53,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
     private readonly Dictionary<int, (Dictionary<string, SessionHolderInventory> Holders, Dictionary<string, string> NpcItems)> _holders = [];
     // ARC-MAGIC-1336: per map, the item entity -> its container's entity, read from the same holders as _holders and dropped with them.
     private readonly Dictionary<int, Dictionary<string, string>> _containerItems = [];
+    private readonly Dictionary<(int Map, string Entity), SessionHolderInventory?> _holderNow = [];
+    private readonly HashSet<int> _attachTried = [];
 
     /// <param name="inventory">The maps' seeds and object rows.</param>
     /// <param name="prototypes">ARC-WORLD-106: an item prototype's stored fields (the facts of an item the session made or a regeneration
@@ -110,7 +112,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
         ArgumentNullException.ThrowIfNull(session);
         if (key.RuntimeMap == runtimeMap && CreatedRecord(key) is { } created) return Target(session, created);
         if (!Held(runtimeMap, out var map) || !map.TryGetEntity(key, out var entity)
-            || !Holders(session, runtimeMap).TryGetValue(entity, out var holder) || holder.Kind != SessionHolderKind.Npc)
+            || HolderNow(session, runtimeMap, entity) is not { Kind: SessionHolderKind.Npc } holder)
             return null;
         return new(entity, map.Row(entity), holder.Dead, session.QueryCompanion(entity).LedByPc, Build(session, map, entity));
     }
@@ -131,7 +133,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     private AreaCombatTarget? Target(GameSessionOwner session, ResolvedRecord found)
     {
         var entity = found.Entity;
-        if (Holders(session, found.HomeMap).GetValueOrDefault(entity) is not { Kind: SessionHolderKind.Npc } holder) return null;
+        if (HolderNow(session, found.HomeMap, entity) is not { Kind: SessionHolderKind.Npc } holder) return null;
         return new(entity, found.Row, holder.Dead, session.QueryCompanion(entity).LedByPc, Build(session, found.Map, entity));
     }
 
@@ -156,22 +158,11 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return _resolver.CreatedMap(entity) is { } map && map.TryGetRow(entity, out var row) && row.Key == key ? new ResolvedRecord(entity, map.RuntimeMap, map, row) : null;
     }
 
-    private Dictionary<string, SessionHolderInventory> Holders(GameSessionOwner session, int runtimeMap) => HolderIndex(session, runtimeMap).Holders;
-
     private (Dictionary<string, SessionHolderInventory> Holders, Dictionary<string, string> NpcItems) HolderIndex(GameSessionOwner session, int runtimeMap)
     {
-        if (_holdersStamp is not { } stamp || !ReferenceEquals(stamp.Session, session) || stamp.Revision != session.Version.Revision || _holdersCreated != _resolver.CreatedVersion)
-        {
-            _holders.Clear();
-            _containerItems.Clear();
-            _holdersStamp = (session, session.Version.Revision);
-            _holdersCreated = _resolver.CreatedVersion;
-        }
+        DropStaleHolders(session);
         if (_holders.TryGetValue(runtimeMap, out var cached)) return cached;
-        // ARC-DEV-072: a map the resolver read on demand has no seed in the session until it is first asked about (a given map's was
-        // attached with the host, and a restore attaches them again).
-        if (_inventory.AttachReadMap(session, runtimeMap) is { } refused && _refusedAttach.Add(runtimeMap))
-            Console.WriteLine($"ARC-DEV-072 record-map-attach refused map={runtimeMap} failure={refused}");
+        AttachRead(session, runtimeMap);
         var holders = session.QueryMapInventory(new(runtimeMap))?.Holders.ToDictionary(holder => holder.Entity, StringComparer.Ordinal) ?? [];
         // ARC-DEV-359: the critters the session created on this map are NPC holders (ARC-DEV-386: the session's seed lists them with what it added; one the seed does not list yet, as before the map's seed is
         // attached again, is an NPC holder with an empty list).
@@ -180,6 +171,38 @@ public sealed class AreaCombatHost : IAreaEventObjects
         foreach (var holder in holders.Values.Where(holder => holder.Kind == SessionHolderKind.Npc))
             foreach (var item in holder.Items) npcItems.TryAdd(item.Entity, holder.Entity);
         return _holders[runtimeMap] = (holders, npcItems);
+    }
+
+    private void DropStaleHolders(GameSessionOwner session)
+    {
+        if (_holdersStamp is { } stamp && ReferenceEquals(stamp.Session, session) && stamp.Revision == session.Version.Revision && _holdersCreated == _resolver.CreatedVersion) return;
+        _holders.Clear();
+        _holderNow.Clear();
+        _attachTried.Clear();
+        _containerItems.Clear();
+        _holdersStamp = (session, session.Version.Revision);
+        _holdersCreated = _resolver.CreatedVersion;
+    }
+
+    // ARC-DEV-072: a map the resolver read on demand has no seed in the session until it is first asked about (a given map's was
+    // attached with the host, and a restore attaches them again).
+    private void AttachRead(GameSessionOwner session, int runtimeMap)
+    {
+        // ARC-RENDER-3126: once per map until the session moves, so a refused seed is not checked again for every holder asked.
+        if (_attachTried.Add(runtimeMap) && _inventory.AttachReadMap(session, runtimeMap) is { } refused && _refusedAttach.Add(runtimeMap))
+            Console.WriteLine($"ARC-DEV-072 record-map-attach refused map={runtimeMap} failure={refused}");
+    }
+
+    // ARC-RENDER-3126: one holder as HolderIndex lists it, read alone. Every AI tick moves the session's revision; the index of all the map's holders is for the readers that need them all.
+    private SessionHolderInventory? HolderNow(GameSessionOwner session, int runtimeMap, string entity)
+    {
+        DropStaleHolders(session);
+        if (_holders.TryGetValue(runtimeMap, out var all)) return all.Holders.GetValueOrDefault(entity);
+        if (_holderNow.TryGetValue((runtimeMap, entity), out var known)) return known;
+        AttachRead(session, runtimeMap);
+        var found = session.QueryMapHolder(new(runtimeMap), entity)
+            ?? (_resolver.CreatedOn(runtimeMap).Contains(entity) ? new SessionHolderInventory(entity, SessionHolderKind.Npc, false, []) : null);
+        return _holderNow[(runtimeMap, entity)] = found;
     }
 
     // The map this host holds (given or read on demand), without reading one.
@@ -266,7 +289,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(entity);
-        if (!Held(runtimeMap, out var map) || !Holders(session, runtimeMap).TryGetValue(entity, out var holder) || holder.Kind != SessionHolderKind.Npc)
+        if (!Held(runtimeMap, out var map) || HolderNow(session, runtimeMap, entity) is not { Kind: SessionHolderKind.Npc } holder)
             return [];
         var items = new List<(string, CombatFields)>();
         foreach (var item in holder.Items)
@@ -413,7 +436,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
             _wornStamp = (session, session.Version.Revision);
         }
         if (_wornNow.TryGetValue((runtimeMap, entity), out var known)) return known;
-        if (!Held(runtimeMap, out var map) || !Holders(session, runtimeMap).TryGetValue(entity, out var holder)) return null;
+        if (!Held(runtimeMap, out var map) || HolderNow(session, runtimeMap, entity) is not { } holder) return null;
         var worn = new SortedDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, AreaNpcWornItem>();
         var complete = true;
         IReadOnlyList<AreaNpcWornItem>? Keep(IReadOnlyList<AreaNpcWornItem>? found)
@@ -440,7 +463,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public CombatFields? HeldItemFields(GameSessionOwner session, int runtimeMap, string holder, string item)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (!Held(runtimeMap, out var map) || !Holders(session, runtimeMap).TryGetValue(holder, out var inventory)
+        if (!Held(runtimeMap, out var map) || HolderNow(session, runtimeMap, holder) is not { } inventory
             || inventory.Kind != SessionHolderKind.Npc || session.IsItemDestroyed(item)) return null;
         return inventory.Items.FirstOrDefault(held => held.Entity == item) is { } found && ItemSource(map, found, out var fields) ? fields : null;
     }
@@ -558,7 +581,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public SessionHolderInventory? Holder(GameSessionOwner session, string entity)
     {
         ArgumentNullException.ThrowIfNull(session);
-        return Record(entity) is { } found && Holders(session, found.HomeMap).TryGetValue(entity, out var holder) ? holder : null;
+        return Record(entity) is { } found ? HolderNow(session, found.HomeMap, entity) : null;
     }
 
     /// <summary>ARC-DEV-072: <see cref="Worn(GameSessionOwner, int, string)"/> by identity: the items the NPC wears now, whichever map it
@@ -675,7 +698,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
 
     private SessionCritterCombatBuild Build(GameSessionOwner session, AreaInventoryMap map, string entity)
     {
-        if (!map.TryGetRow(entity, out _) || !Holders(session, map.RuntimeMap).ContainsKey(entity)) return Build(map, entity, session);
+        if (!map.TryGetRow(entity, out _) || HolderNow(session, map.RuntimeMap, entity) is null) return Build(map, entity, session);
         if (!RowFields(map, entity, out var fields) || fields is null) return new(SessionCritterCombatFailure.NotAnNpc, null);
         if (Worn(session, map.RuntimeMap, entity) is not { } worn) return new(SessionCritterCombatFailure.InvalidWornItem, null);
         if (!ReferenceEquals(_buildSession, session)) { _wornBuilds.Clear(); _buildSession = session; }
