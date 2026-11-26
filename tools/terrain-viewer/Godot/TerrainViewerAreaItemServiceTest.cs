@@ -160,7 +160,8 @@ public partial class TerrainViewerApp
                     $"the original look opened in the own window's frame (art {panel.ArtMode}, service {area.ServiceLook}, look {area.Look is not null}, mode {area.LookMode}, frame {area.ServiceFrame})");
                 Require(panel.LookToggleForSelfTest is { Visible: false } && !panel.ButtonsForSelfTest[0].IsVisibleInTree(), "ARC-UI-2764: no Diagnostic view switch in play, the list hidden");
                 panel.DiagnosticSwitch = true;
-                Require(panel.LookToggleForSelfTest is { Visible: true, Text: "Diagnostic view" }, "the debug switch below the frame");
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(!panel.LookToggleForSelfTest.Visible && !panel.DebugBlockForSelfTest.Visible, "ARC-UI-2615: nothing of the debug mode in or around the original look");
                 panel.DiagnosticSwitch = false;
                 var sword = panel.ArtView!.Grid.Single(item => item.Entity == "kit:1");
                 area.PressAt(AreaInventoryGridArea.CellCentre(sword.Slot));

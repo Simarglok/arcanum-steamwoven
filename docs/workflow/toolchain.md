@@ -1538,6 +1538,37 @@ Tests: `python3 -B -m unittest tools.steamwoven_ui.test_school_kit` (in the batc
 
 Viewer (ARC-UI-3320): the kit smoke (`./arcanum smoke pr --stages bar --env ARC_AREA_BAR_STEAMWOVEN=1 --env ARC_HD_PACK=<pack> --env ARC_STEAMWOVEN_VARIANTS=kit --env ARC_STEAMWOVEN_SIZES=2560x1440`) writes the 28 plates, their two overlays and the empty glyphs flat into its synthetic kit, reads back the idle and pressed face on the three pages' round buttons and the circle cut, and repeats the pages with a set that has no round plate (the art's own frames through the layer). A look capture adds `--env ARC_AREA_BAR_CAPTURE=<prefix> --env ARC_STEAMWOVEN_KIT_LOOK=<folder with plate.<name>[_hover|_pressed].png masters>` (the page colour reads of the three pages stay; the plate colour reads are skipped); the pages' captures are `<prefix>-hud-steamwoven-kit-2560x1440-sheet-<page>.png` (kit parts), `...-roundless.png` (kit sheet, the art's own buttons) and `...-own.png` (no kit sheet).
 
+## Steamwoven map markers and empty-slot covers, batch B-BUTTONS slice 7 (ARC-UI-3207)
+
+The kit parts of the eight map markers (arts 141 to 144, 204 to 206, 814) and the nine covers of the empty worn slots (241 to 249): one `glyph.<name>` per art and `glyph.<name>_lit` for the second frame of arts 204, 205, 206 and 814; which part comes from the pack, from Codex or from a rule is in the [TRD](../ui/steamwoven-interface-trd.md#asset-kit). Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for the sheet, no Godot and no `dotnet`, so no launch queue:
+
+```sh
+python3 -B tools/steamwoven_ui/marker_kit.py plan                                     # the 21 parts, their master sizes, sources and the manifest check
+python3 -B tools/steamwoven_ui/marker_kit.py codex-inbox                              # the inboxes of batches B-BUTTONS-3207-markers and -covers (prompts, references)
+python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS-3207-markers              # then B-BUTTONS-3207-covers (--dry-run first); the item skull-neutral joins the markers batch once the sheet exists: codex-inbox again, run --only skull-neutral
+python3 -B tools/steamwoven_ui/marker_kit.py build [--only NAME,...] [--dry-run] [--pack DIR]   # -> masters/ and provenance/rule/ (pack frame or generated picture with its record, original frame hash)
+python3 -B tools/steamwoven_ui/marker_kit.py sheet --out FILE [--parts DIR] [--zoom N] [--only NAME,...]   # the composite original | new; covers over the original's grid lines
+python3 -B tools/steamwoven_ui/marker_kit.py self-test
+```
+
+The originals are `local/steamwoven-ui/census/frames/` (`--frames` names another folder), the pack is the installed `interface-redraw-4x` (`--pack`), both read and never written; the generated pictures are `local/steamwoven-ui/outbox/<batch>/`. `build` prints, per generated part, how well it sits on the original (the outline overlap of a cover, the stretch of a marker). Tests: `python3 -B -m unittest tools.steamwoven_ui.test_marker_kit` (under half a minute; also in `tools/local_dev/run_tests.py`).
+
+## Steamwoven small brass-ringed buttons, batch B-BUTTONS slice 3c (ARC-UI-3270)
+
+The kit parts of the 16 small round buttons in a thin brass ring: arts 23, 24 (19 x 19 units), 770, 771 (21 x 21), 145 to 148, 299, 757, 758 (23 x 23), 338 to 340 (28 x 27), 823 and 824 (28 x 29); how each family is made: [TRD](../ui/steamwoven-interface-trd.md), the 3270 paragraph.
+Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for `sheet`, no Godot and no `dotnet`, so no launch queue. Inputs, all read only: the generated sheet `outbox/B-BUTTONS-RING/pm.png`, the marker drawings `outbox/B-BUTTONS-3207-markers/marker-sheet.png` and `skull-neutral.png` (#3207), the original frames `census/frames` and the pack `local/hd-packs/interface-redraw-4x`.
+
+```sh
+python3 -B tools/steamwoven_ui/ring_kit.py codex-inbox                                       # the inbox of batch B-BUTTONS-RING (one sheet: prompt, original and pack references)
+python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS-RING                             # the owner's Codex subscription, one item
+python3 -B tools/steamwoven_ui/ring_kit.py check [--only NAME,...]                           # a face for every state from its inputs, circles inside the arts
+python3 -B tools/steamwoven_ui/ring_kit.py build [--only NAME,...] [--out DIR] [--dry-run]   # the 57 parts -> masters/ and provenance/rule/
+python3 -B tools/steamwoven_ui/ring_kit.py sheet --out FILE [--real FILE] [--only NAME,...]  # original | new with the shadow; --real: every button at its size on a 2560 x 1440 screen (English labels)
+```
+
+`plate.<name>` is the idle face, `plate.<name>_pressed` and `_hover` the other states in full (two-frame arts have no hover look), `glyph.<name>` an empty layer. The generated disc is registered onto each art's circle (`RINGS`) by its own centre and radius; the plus and minus are drawn over it by rule (`SIGN_LENGTH`, `SIGN_THICKNESS`). Every ring is brought to the accepted brass (`BRASS`). The viewer does not draw these arts from the kit yet ([#3347](https://github.com/Simarglok/arcanum-steamwoven/issues/3347)).
+Tests: `python3 -B -m unittest tools.steamwoven_ui.test_ring_kit` (in the batched `tools/local_dev/run_tests.py`).
+
 ## Controller test evidence summariser (ARC-GPAD-1376)
 
 [`tools/input/evidence_summary.py`](../../tools/input/evidence_summary.py): standard-library Python that reads the opt-in evidence files the

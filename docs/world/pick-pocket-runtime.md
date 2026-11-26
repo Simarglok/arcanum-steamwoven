@@ -69,7 +69,7 @@ catching-thief script through the use-script host (`RunCatchingThief`, its slot 
 the AI host's attack event of the hero on the victim, then the window closes. Since ARC-UI-065 the window shows the original's steal
 window with the game's art (the loot frame without Take all; [steal window](../rendering/terrain-viewer.md#inventory-window-pickup-and-loot-arc-ui-004)):
 there each drag across the two grids, or a right release on an item, is the attempt, and the Steal and Plant buttons stay in the
-debug-only "Diagnostic view" (ARC-UI-2764).
+debug mode's diagnostic view (ARC-UI-2764; Ctrl+Shift+J, ARC-UI-2615).
 
 ## Boundaries (NOT READY)
 

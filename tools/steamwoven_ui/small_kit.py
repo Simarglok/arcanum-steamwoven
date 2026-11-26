@@ -490,7 +490,7 @@ def wedge_parts(frames: Path, cell: Image, group: list[Small]) -> dict[str, Imag
     return parts
 
 
-# --- the paper and ink families (owner 2026-11-26, ARC-UI-3272): Codex draws the object alone, large; it is cut along its own edge and put where the original has it ---------
+# --- the paper and ink families (owner 2026-11-26, ARC-UI-3272): Codex draws large; a loose object is cut along its own edge and put where the original has it ---------------
 
 STRAY = 3              # a lone solid pixel left by the keying (a corner of the ground) is not the object's edge
 PAPER_WARM = 25        # an original cell whose red exceeds its blue by this much is parchment or symbol; the stone round it is grey
