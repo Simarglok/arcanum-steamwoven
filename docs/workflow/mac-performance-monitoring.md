@@ -21,7 +21,7 @@ machine. Read **frame time p95** and **GPU time**, and compare runs doing the sa
     GAME='Arcanum Steamwoven'
 
 The tools below find the running game with `pgrep -nx "$GAME"` (the newest process of that name). A game started from
-Terminal uses the same saves, settings and logs as one started from Finder. While a game from `artifacts/packages/macos`
+Terminal uses the same user folder (saves, settings, logs): its start line names it. While a game from `artifacts/packages/macos`
 runs, the [launch queue](toolchain.md#launch-queue-arc-dev-033) holds the agents' window runs.
 
 ## Which tool for what
@@ -31,7 +31,7 @@ runs, the [launch queue](toolchain.md#launch-queue-arc-dev-033) holds the agents
 | Live fps, GPU time, frame graph on screen | Metal Performance HUD |
 | Numbers for a session that already happened, nothing set up before | `metalperftrace collect` |
 | Per-frame times for a p95 | HUD log |
-| Where the CPU time goes (native code) | Instruments (`xctrace`) |
+| CPU time in macOS libraries (the game's own code is unnamed) | Instruments (`xctrace`) |
 | Memory of the process | `footprint`, `vmmap` |
 | .NET garbage collections | the `Resources` line of the Ctrl+B report, `ARC_PERF_PROBE=1` ([timing probe](toolchain.md#timing-probe-and-the-perf-stages-arc-dev-367)) |
 
@@ -50,7 +50,7 @@ graph. More lines (thermal state, present delay, encoder CPU time):
 
     open -n --env MTL_HUD_ENABLED=1 "$APP"
 
-For a game that is already running, however it was started:
+For a game that is already running (tried on one started without the variable):
 
     metalperftrace setup --enable hud --pid "$(pgrep -nx "$GAME")"
     metalperftrace setup --disable hud --pid "$(pgrep -nx "$GAME")"
@@ -73,8 +73,8 @@ Live, in Terminal:
 
     metalperftrace listen --pid "$(pgrep -nx "$GAME")" -i 1
 
-**You see** every second: FPS, frame time avg/min/max, CPU begin-to-present, GPU time and memory. Piped or redirected
-output arrived only when the tool ended; to keep a file, add `--output listen.txt`.
+**You see** every second: FPS, frame time avg/min/max, CPU begin-to-present, GPU time and memory. Redirected to a
+file, nothing arrived until the tool ended; `--output FILE` keeps a copy (its help: rewritten as a JSON array on exit).
 
 Afterwards (macOS records these figures all the time, also with the HUD off):
 
@@ -93,7 +93,7 @@ test run's log elsewhere, so it does not rotate the game's own logs (works).
 | Flag | Result |
 |---|---|
 | `--print-fps` | **Works**, with `NSUnbufferedIO=YES` (command below). Piped without it, the lines came late in blocks (none in the first 18-25 s of two runs) and buffered ones were lost when the process was killed. |
-| `--disable-vsync` | **No visible effect**: about 60 fps standing, with and without. The viewer's own cap is never above the refresh rate, so this game cannot show whether the flag lifts Metal's vsync. |
+| `--disable-vsync` | **Not determined**: about 60 fps standing, with and without. The viewer's own cap targets 60 there, so the run cannot show whether the flag lifts Metal's vsync. |
 | `--max-fps N` | **Does not work**: `--max-fps 30` still gave about 60, the viewer sets the cap itself every frame. |
 | `--gpu-profile` | **Does not work** on Metal: only empty `GPU PROFILE (total 0.0ms):` blocks. |
 
@@ -109,17 +109,18 @@ The Godot editor's remote Monitors and Visual Profiler need a debug build; the p
 Attaching to the ad-hoc signed release app worked with Developer mode off and no password prompt:
 
     xctrace record --template 'Time Profiler' --attach "$(pgrep -nx "$GAME")" --time-limit 10s --output time.trace
-    xctrace record --template 'Metal System Trace' --attach "$(pgrep -nx "$GAME")" --time-limit 10s --output metal.trace
-    xctrace record --template 'Game Performance' --attach "$(pgrep -nx "$GAME")" --time-limit 10s --output game.trace
+    xctrace record --template 'Metal System Trace' --attach "$(pgrep -nx "$GAME")" --time-limit 5s --no-prompt --output metal.trace
+    xctrace record --template 'Game Performance' --attach "$(pgrep -nx "$GAME")" --time-limit 5s --no-prompt --output game.trace
     open time.trace
 
 **You see** `Output file saved as: ...`, then the timeline in Instruments. Sizes: Time Profiler 17 MB for 10 s; Metal
 System Trace 60 MB and Game Performance 30 MB for 5 s. Limits:
 
-- C# code has **no names** in Time Profiler: no `Arcanum` method was named and about a third of the frame entries were
-  bare addresses (native frameworks and libraries are named). Use `ARC_PERF_PROBE=1` for the C# side.
+- The game's **own code has no names** in Time Profiler: nearly every frame of the app binary (the Godot engine) was a
+  bare address, and so were the frames without a binary (likely the C# just-in-time code); no C# method was named.
+  macOS frameworks and the .NET runtime libraries were named. Use `ARC_PERF_PROBE=1` for the C# side.
 - **Game Memory does not work** as a short attach: a 5 s recording wrote 10 GB and was still saving after 90 s, when it
-  was stopped. Delete such a `.trace`.
+  was stopped (90 s counted from the start of the command). Delete such a `.trace`.
 
 ## Memory (works)
 
@@ -130,11 +131,17 @@ System Trace 60 MB and Game Performance 30 MB for 5 s. Limits:
 `Physical footprint` with its peak and the per-region table. The HUD's app memory and `footprint` differed in one run
 (720 MB on the overlay, 470 MB from `footprint` seconds later), so compare like with like.
 
-## .NET counters (*not run*)
+## .NET counters (does not work)
 
-The packaged app opens the .NET diagnostics socket (`$TMPDIR/dotnet-diagnostic-<pid>-*-socket`) and answered a process
-information request on it, so a diagnostics client can connect. `dotnet-counters` itself is not installed and was not
-run.
+`dotnet-counters` 9.0.661903 listed the packaged game (`ps`) and opened a session on it, but received **no values**:
+`monitor` stayed on `Waiting for initial payload...` (8 s) and `collect` wrote only the CSV header (20 s). The same tool
+read 135 values in 5 s from a plain `dotnet fsi` process. The cause was not examined. For GC rates use the `Resources`
+line of the Ctrl+B report and `ARC_PERF_PROBE=1`. To repeat (the tool needs `DOTNET_ROOT`, or it says
+`You must install .NET`):
+
+    export DOTNET_ROOT="$HOME/.local/share/dotnet"
+    "$DOTNET_ROOT/dotnet" tool install dotnet-counters --version 9.0.661903 --tool-path "$HOME/.arcanum-tools"
+    "$HOME/.arcanum-tools/dotnet-counters" monitor -p "$(pgrep -nx "$GAME")" --counters System.Runtime
 
 ## powermetrics (*not run*: needs your password)
 
