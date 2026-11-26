@@ -2,7 +2,7 @@
 """ARC-UI-3270 (batch B-BUTTONS, slice 3c): the small round buttons in a thin brass ring (16 arts, 19 x 19 to 28 x 29 units): the character sheet's plus and minus (two sizes), the message window's four buttons, the multiplayer
 cycle arrows and the small right arrow, the three inventory "lil" buttons and the small accept and cancel.
 
-How each is made (owner decisions of 2026-11-26 in the issue's thread; every part is a full face cut to the ring's circle by an analytic round alpha, no shadow baked):
+How each is made (owner decisions of 2026-11-26 in the issue's thread; every part is a full face cut to a circle by an analytic round alpha, no shadow baked; the ring's circle, or the socket's inner circle for a socket dome):
 
 * `codex`  23, 24, 770, 771: ONE generated ring and glossy dome (the idle Minus of the sheet `pm`, drawn large and reduced, its bar taken out) for every face of both sizes, and the sign drawn over it by rule (owner 2026-11-26:
   the generated stroke was too thin): one stroke, `SIGN_LENGTH` and `SIGN_THICKNESS` of the dome's diameter, in the original's colour of the state (`SIGN`; the idle stroke has a soft relief, a little darker towards its lower edge, and its slot's thin shade above it); hover only lights the sign, pressed also darkens the dome and keeps the original's narrow red halo tight to the sign.
@@ -13,7 +13,7 @@ How each is made (owner decisions of 2026-11-26 in the issue's thread; every par
 The socket dome (145 to 148, 757, 758; owner 2026-11-26, #3347): these arts have no ring of their own. Each stands in a socket the screen paints, whose gold ring is 22.2 units inside and 26.0 outside (crest 23.9) on all three screens, so a ring of
 the kit's own showed as a second ring. The face is the same glossy dome without any ring, as wide as the socket's inside (`SOCKET_DOME_CUT`), centred in the art's box; the symbol keeps its place relative to the original's dome (`ORIGINAL_DOME`). The
 viewer puts the dome's centre on the socket's centre and casts no shadow for it (`AreaKitRoundParts.SocketShift`).
-* `arrow`  299: that same plate, the arrow by rule: a straight outline fitted to the original's red cells, the original's cells inside as even squares (rule E), a soft glow where the original lights up.
+* `arrow`  299: the plus and minus buttons' ring and dome with the bar taken out, the arrow by rule: a straight outline fitted to the original's red cells, the original's cells inside as even squares (rule E), a soft glow where the original lights up.
 * `pack`   338 to 340, 823, 824: the player's own HD-pack frames, the pack's own alpha not used.
 
 Every ring is brought to the accepted brass (`BRASS`, #3259 and #3260, `hardware_build.brass_match`); the dome inside is not recoloured.
@@ -31,8 +31,8 @@ The parts of a button (TRD SWI-KIT-5; all at the plate's size, the manifest row 
 * `plate.<name>_pressed` the face of frame 1, `plate.<name>_hover` of frame 2 (arts of two frames have no hover look: the original wraps hover to frame 0). Frame 3 of the four plus and minus arts (the empty plate) is never
   drawn by the original (census, ledger OF9), so it has no part.
 
-The circles are this tool's own table (`RINGS`: centre and outer radius in art units, plus `TRIM` for the cut). Those of the plus and minus stand on the sheet's socket centres (#3321). The viewer does not draw these arts from the
-kit yet. The soft shadow under a round part is the run-time layer's; its offset and blur grow with the part's diameter (`shadow_of`, TRD).
+The circles are this tool's own table (`RINGS`: centre and outer radius in art units, plus `TRIM` for the cut). Those of the plus and minus stand on the sheet's socket centres (#3321). The viewer draws all these arts from the kit
+(`AreaKitRoundParts` holds the same circles, #3321 and #3347; art 147 is drawn by no window). The soft shadow under a round part is the run-time layer's; its offset and blur grow with the part's diameter (`shadow_of`, TRD).
 
 Nothing here holds art: every picture is read from and written to the ignored `local/` (the pack is `local/hd-packs/interface-redraw-4x`, read only). Standard library only (`pngio.py`); ImageMagick for `sheet`.
 Exit 0 = done, 1 = a check failed, 2 = an input could not be used.
