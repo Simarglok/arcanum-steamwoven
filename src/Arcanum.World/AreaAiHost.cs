@@ -97,6 +97,8 @@ public sealed record AreaAiScene
     public Func<string, PartyConsentFacts?>? FollowFacts { get; init; }
     /// <summary>The T0 records the session destroyed or switched off.</summary>
     public Func<IReadOnlySet<AreaObjectKey>>? Removed { get; init; }
+    /// <summary>ARC-RENDER-3126: whether one object is among <see cref="Removed"/>, read without making the whole set (the host asks about one critter at a time); null reads the set.</summary>
+    public Func<AreaObjectKey, bool>? IsRemoved { get; init; }
     /// <summary>ARC-WORLD-1436: the NPCs the map data stores off that the session switched on, with the world cell of their map data (<see cref="AreaObjectTargets.SwitchedOn"/>): the T0
     /// evidence lists no blocker for them, so the planners hold their cells while the host has not walked them off (a companion, which the host does not run, is not held).</summary>
     public Func<IReadOnlyList<(AreaObjectKey Key, string Entity, CellCoord World)>>? SwitchedOn { get; init; }
@@ -1442,7 +1444,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public long DistanceToPc(string npc) => Tile(npc) is { } at && Tile(Pc) is { } pc ? AiExecutorRules.Distance(at, pc) : -1;
 
     /// <summary>ARC-AI-2793: whether the host holds the NPC's row (<see cref="Find"/>); <see cref="Rebind"/> forgets a standing NPC the new window does not hold, while its tick chain goes on.</summary>
-    public bool Knows(string npc) => Find(npc) is not null;
+    // ARC-RENDER-3126: true exactly when Find answers (its guards), without reading the critter's whole record: every AI tick asks.
+    public bool Knows(string npc) => npc == Pc ? _session.QueryHeroLife() is not null
+        : !_npcs.ContainsKey(npc) && CompanionCell(npc) is null ? ObjectFound(npc) is not null
+        : Fields(npc) is { Critter: not null, Npc: not null } && Build(npc) is not null;
 
     /// <summary>ARC-WORLD-114: the first-heartbeat and heartbeat points run the NPC's script through the scene's
     /// <see cref="AreaAiScene.Heartbeat"/> (true: continue). ARC-SCRIPT-2820: the start-combat and end-combat points run through <see cref="AreaAiScene.CombatScript"/> and always continue (the original ignores their answer);
@@ -1938,7 +1943,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (id == Pc) return false;
         // A map row or companion the host runs is told by its key; only an id that is none of those (and no created critter) can be an object of the scene, which the cast map answers at some cost.
-        if (Key(id) is { } key) return _scene.Removed?.Invoke().Contains(key) == true;
+        if (Key(id) is { } key) return _scene.IsRemoved is { } one ? one(key) : _scene.Removed?.Invoke().Contains(key) == true;
         return !id.StartsWith(SessionCreatedObject.CritterPrefix, StringComparison.Ordinal) && _scene.ObjectFacts?.Invoke(id) is { } facts && (facts.Destroyed || facts.Off);
     }
 
@@ -4191,6 +4196,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var pcLeader = PcLeader(id);
         var npcConcealed = _session.IsConcealed(SessionCombatant.Critter(id));
         var effects = EffectsOf(id);
+        var mind = build.EffectiveStats(CharacterStat.Perception, CharacterStat.Intelligence, state);
         return new HostilityCritter
         {
             Id = id, Kind = HostilityKind.Npc,
@@ -4208,7 +4214,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             InCombatMode = _session.QueryCombatMode(SessionCombatant.Critter(id)),
             Guard = npc.SocialClass == GuardClass, WaitingHere = (npc.Flags & WaitingHereNpc) != 0 || Waiting(id),
             KillOnSight = (npc.Flags & KillOnSightNpc) != 0, KosOverride = (NpcFlagsOf(id, npc.Flags) & KosOverrideNpc) != 0,
-            Perception = build.EffectiveStat(CharacterStat.Perception, state), Intelligence = build.EffectiveStat(CharacterStat.Intelligence, state),
+            Perception = mind.First, Intelligence = mind.Second,
             // ARC-AI-2155: every hostility, flee and party reader takes the level (stat 17) and alignment (stat 19) through the stat getter 0x4B0490, the effect list's changes included.
             Level = LevelOf(id, effects) ?? build.Level, Alignment = AlignmentOf(id, effects) ?? 0,
             HealthPercent = status is null ? 0 : Percent(status), Leader = leader, PcLeader = pcLeader,

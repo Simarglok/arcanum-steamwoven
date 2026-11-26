@@ -32,11 +32,13 @@ internal static class AreaKitStandIns
         if (edge) canvas.DrawRect(rect, Edge, false);
     }
 
-    private static void Lines(CanvasItem canvas, float scale, float x, float y, int columns, int rows, float cell, Color colour)
+    /// <summary>The lines after the cells of a grid with its corner at (<paramref name="x"/>, <paramref name="y"/>), none before the first cell; without <paramref name="farEdges"/> none after the last column and row either.</summary>
+    private static void Lines(CanvasItem canvas, float scale, float x, float y, int columns, int rows, float cell, Color colour, bool farEdges)
     {
         var width = Math.Max(1f, scale * .5f);
-        for (var column = 0; column <= columns; column++) canvas.DrawLine(new Vector2((x + column * cell) * scale, y * scale), new Vector2((x + column * cell) * scale, (y + rows * cell) * scale), colour, width);
-        for (var row = 0; row <= rows; row++) canvas.DrawLine(new Vector2(x * scale, (y + row * cell) * scale), new Vector2((x + columns * cell) * scale, (y + row * cell) * scale), colour, width);
+        var skip = farEdges ? 0 : 1;
+        for (var column = 1; column <= columns - skip; column++) canvas.DrawLine(new Vector2((x + column * cell) * scale, y * scale), new Vector2((x + column * cell) * scale, (y + rows * cell) * scale), colour, width);
+        for (var row = 1; row <= rows - skip; row++) canvas.DrawLine(new Vector2(x * scale, (y + row * cell) * scale), new Vector2((x + columns * cell) * scale, (y + row * cell) * scale), colour, width);
     }
 
     private static readonly Color Brass = new(.72f, .55f, .2f), Parchment = new(.8f, .74f, .58f), RedInk = new(.72f, .12f, .1f), Grey = new(.45f, .45f, .5f), DarkWood = new(.2f, .14f, .1f), Pale = new(.72f, .72f, .62f);
@@ -84,20 +86,25 @@ internal static class AreaKitStandIns
         }
     }
 
-    /// <summary>One element: the kit's fixture <paramref name="id"/> at (<paramref name="x"/>, <paramref name="y"/>) units, else <paramref name="standIn"/>.</summary>
-    private static void Part(CanvasItem canvas, float scale, string id, float x, float y, Action standIn)
+    /// <summary>One element: the kit's fixture <paramref name="id"/> at (<paramref name="x"/>, <paramref name="y"/>) units, else <paramref name="standIn"/>; true when the kit's part was drawn.</summary>
+    private static bool Part(CanvasItem canvas, float scale, string id, float x, float y, Action standIn)
     {
-        if (!AreaKitFixtures.Draw(canvas, scale, id, x, y)) standIn();
+        if (AreaKitFixtures.Draw(canvas, scale, id, x, y)) return true;
+        standIn();
+        return false;
     }
 
-    /// <summary>A grid of <paramref name="columns"/> x <paramref name="rows"/> cells of 32 units with its corner at (<paramref name="x"/>, <paramref name="y"/>): copies of the kit's cell well, else the stand-in's lines over the black pit.</summary>
-    internal static void Cells(CanvasItem canvas, float scale, float x, float y, int columns, int rows)
+    /// <summary>A grid of <paramref name="columns"/> x <paramref name="rows"/> cells of 32 units with its corner at (<paramref name="x"/>, <paramref name="y"/>): copies of the kit's cell well, else the stand-in's lines over the black pit. The lines lie where the original's do (ARC-UI-3342): on the last unit of a cell, none before the first; <paramref name="farEdges"/> false (the paper doll, whose frame takes that place) leaves none after the last column and row.</summary>
+    internal static void Cells(CanvasItem canvas, float scale, float x, float y, int columns, int rows, bool farEdges = true)
     {
         if (AreaKitFixtures.Has("grid.inventory_cells"))
         {
-            for (var row = 0; row < rows; row++) for (var column = 0; column < columns; column++) AreaKitFixtures.Draw(canvas, scale, "grid.inventory_cells", x + column * 32, y + row * 32);
+            // The well carries its lines on its far edges: without them the last column and row are drawn a unit short, and the pit's trim shows there.
+            var cut = farEdges ? 0 : 1;
+            for (var row = 0; row < rows; row++) for (var column = 0; column < columns; column++)
+                AreaKitFixtures.DrawRegion(canvas, scale, "grid.inventory_cells", x + column * 32, y + row * 32, 0, 0, column == columns - 1 ? 32 - cut : 32, row == rows - 1 ? 32 - cut : 32);
         }
-        else Lines(canvas, scale, x, y, columns, rows, 32, Edge);
+        else Lines(canvas, scale, x - .5f, y - .5f, columns, rows, 32, Edge, farEdges);
     }
 
     /// <summary>The pack's pit with its 10 x 12 grid, the five count pits and their five signs (art 221, shared by the inventory, loot, steal and barter windows).</summary>
@@ -136,7 +143,7 @@ internal static class AreaKitStandIns
         Pack(canvas, scale);
         Part(canvas, scale, "fixture.name_pit", 124, 25, () => Field(canvas, scale, 124, 25, 223, 55));
         Part(canvas, scale, "fixture.doll_pit", 18, 100, () => Field(canvas, scale, 18, 100, 330, 300));
-        Cells(canvas, scale, 23, 107, 10, 9);
+        Cells(canvas, scale, 23, 107, 10, 9, farEdges: false);
         Part(canvas, scale, "fixture.weapon_frame", 10, 303, () => QuarterFrame(canvas, scale, 10, 400, 97, true, new(.2f, .05f, .05f)));
         Part(canvas, scale, "fixture.shield_frame", 244, 303, () => QuarterFrame(canvas, scale, 358, 400, 97, false, new(.04f, .05f, .2f)));
         // The arrange legend (690, 192, 78, 32): scattered dots, a red arrow, a small grid.
@@ -171,28 +178,38 @@ internal static class AreaKitStandIns
             if (!leftPart) yield return (left[r], 131, 115 + 40 * r, gold);
             if (!rightPart) yield return (right[r], 263, 115 + 40 * r, gold);
         }
-        // The alignment dial's two ends (evil, good) and the magic-technology ruler's divisions: 75, 50, 25, 0, 25, 50, 75 at 32 units a step round the centre line (221).
+        // The alignment dial's two ends (evil, good) and the magic-technology ruler's divisions: 75, 50, 25, 0, 25, 50, 75 at 32 units a step round the centre line (221). ARC-UI-3321: the kit's ruler part carries the divisions (cut from the old HD frame with the ticks; digits carry no language), so the text is written only where the part is missing.
         if (!dialPart) { yield return ("E", 38, 146, ink); yield return ("G", 66, 146, ink); }
+        if (drawnParts?.Contains(RulerPart) == true) yield break;
         string[] steps = ["75", "50", "25", "0", "25", "50", "75"];
         for (var i = 0; i < steps.Length; i++) yield return (steps[i], 766, 120 + 32 * i, ink);
     }
 
+    /// <summary>ARC-UI-3321: the kit part that carries the ruler's divisions.</summary>
+    internal const string RulerPart = "fixture.mt_ruler";
+    /// <summary>ARC-UI-3321: the alignment needle's frames; it has no stand-in (the art's own needle is drawn where the kit has none).</summary>
+    internal const string NeedlePart = "fixture.align_needle";
+
     /// <summary>The character sheet's main page (art 22): the name and info box, the eight stat ovals, the alignment dial, the health disc with its heart and the fatigue disc with its cross, the magic-technology ruler with its ticks and its two end signs, and the derived-stats box (the letters and the ruler's numbers are written by the sheet, <see cref="SheetLabels"/>).</summary>
-    internal static void CharacterSheet(CanvasItem canvas)
+    internal static IReadOnlySet<string> CharacterSheet(CanvasItem canvas)
     {
         Drawn.Add(SteamwovenKitWindow.Character);
-        Part(canvas, 1, "fixture.sheet_name_box", 119, 9, () => Field(canvas, 1, 119, 9, 360, 87));
-        Part(canvas, 1, "fixture.sheet_derived_box", 24, 278, () => Field(canvas, 1, 24, 278, 452, 113));
+        var drawn = new HashSet<string>();
+        void Draw(string id, float x, float y, Action standIn) { if (Part(canvas, 1, id, x, y, standIn)) drawn.Add(id); }
+        Draw("fixture.sheet_name_box", 106, 2, () => Field(canvas, 1, 119, 9, 360, 87));
+        Draw("fixture.sheet_derived_box", 10, 270, () => Field(canvas, 1, 24, 278, 452, 113));
+        // ARC-UI-3321: the two boxes, the ovals, the dial, the discs and the ruler are cut from the old HD frame and carry their cast shadow, so a part's box is a little larger than the object: the oval's box starts at 167, 105 (its sockets reach 170.6 and 243.1), the rows 40 apart (the boxes overlap by 4 units, the shadow only fades inside them).
         for (var r = 0; r < 4; r++)
         {
-            var y = 111 + 40 * r;
-            Part(canvas, 1, "fixture.stat_oval", 172, y, () => Field(canvas, 1, 172, y, 70, 31));
-            Part(canvas, 1, "fixture.stat_oval", 315, y, () => Field(canvas, 1, 315, y, 70, 31));
+            var y = 105 + 40 * r;
+            Draw("fixture.stat_oval", 167, y, () => Field(canvas, 1, 172, y + 6, 70, 31));
+            Draw("fixture.stat_oval", 310, y, () => Field(canvas, 1, 315, y + 6, 70, 31));
         }
-        Part(canvas, 1, "fixture.align_dial", 6, 131, () => DialStandIn(canvas));
-        Part(canvas, 1, "fixture.health_disc", 411, 127, () => HeartStandIn(canvas));
-        Part(canvas, 1, "fixture.fatigue_disc", 411, 197, () => CrossStandIn(canvas));
-        Part(canvas, 1, "fixture.mt_ruler", 747, 60, () => RulerStandIn(canvas));
+        Draw("fixture.align_dial", 3, 128, () => DialStandIn(canvas));
+        Draw("fixture.health_disc", 405, 122, () => HeartStandIn(canvas));
+        Draw("fixture.fatigue_disc", 405, 192, () => CrossStandIn(canvas));
+        Draw(RulerPart, 740, 60, () => RulerStandIn(canvas));
+        return drawn;
     }
 
     // The alignment dial: a brass ring, a parchment half face with its tick marks, the number pit under the hub.

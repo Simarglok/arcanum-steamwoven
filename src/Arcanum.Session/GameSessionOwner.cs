@@ -1160,6 +1160,20 @@ public sealed partial class GameSessionOwner : IDisposable
             ? _inventory.View(map, seed, KilledNpc, holder => SpillCell(map, seed, holder), item => DroppedCell(map, seed, item), item => MovedCell(map, item)) : null;
     }
 
+    /// <summary>ARC-RENDER-3126: whether the map's inventory is attached, without making the view <see cref="QueryMapInventory"/> makes.</summary>
+    public bool HasMapInventory(SessionMapId map) { ThrowIfDisposed(); return _inventory.Seeds.ContainsKey(map); }
+
+    /// <summary>ARC-RENDER-3126: the one holder <paramref name="holder"/> as <see cref="QueryMapInventory"/> lists it now, or null when the map's inventory is not attached or lists no such holder.
+    /// For a reader of one NPC, which would otherwise build every list and ground item of the map after each change of the session.</summary>
+    public SessionHolderInventory? QueryMapHolder(SessionMapId map, string holder)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(holder);
+        return _inventory.Seeds.TryGetValue(map, out var seed) && seed.Holders.TryGetValue(holder, out var listed)
+            ? _inventory.HolderView(seed, listed, KilledNpc, entity => SpillCell(map, seed, entity), item => DroppedCell(map, seed, item))
+            : null;
+    }
+
     /// <summary>ARC-SCRIPT-2020: how often the attached map seeds changed (an attach, a window move, a created holder); a seed change moves no revision, so a reader that caches a <see cref="QueryMapInventory"/> view keys it by this too.</summary>
     public long QueryInventorySeedGeneration() { ThrowIfDisposed(); return _inventory.SeedGeneration; }
 

@@ -104,6 +104,20 @@ public static class AreaCharacterSheetArtLayout
 
     public static (int X, int Y) Plus(int row) => (Column(row, 465, 224, 367), RowY(row));
 
+    /// <summary>
+    /// ARC-UI-3321: the centre of the socket of a row's + or − button, where the kit's oval and disc fixtures carry it: the button's corner and the knob of the art the kit draws there (<see cref="Knob"/>). The kit's button lies at the same
+    /// corner as the original's, and its hit area stays the original art's.
+    /// </summary>
+    public static (double X, double Y) Socket(int row, bool plus)
+    {
+        var (x, y) = plus ? Plus(row) : Minus(row);
+        var knob = Knob(row, plus);
+        return (x + knob.X, y + knob.Y);
+    }
+
+    /// <summary>The centre of the knob in the art the kit draws for a row's button, from its corner: arts 23 and 24 (19 x 19) on the stat rows, 770 and 771 (21 x 21) on the two discs.</summary>
+    public static (double X, double Y) Knob(int row, bool plus) => row < 2 ? (10.5, 10.0) : (plus ? 10.5 : 9.5, 9.5);
+
     /// <summary>The hover message of a row's buttons (106 health, 107 fatigue, 109..116 the stats).</summary>
     public static int RowHint(int row) => row switch
     {
@@ -162,6 +176,12 @@ public static class AreaCharacterSheetArtLayout
 
     /// <summary>The alignment gauge's place: its frame lands with its hot point on the window's (56, 181) (0x55ED31 subtracts the hot point).</summary>
     public static (int X, int Y) AlignmentTopLeft(int hotX, int hotY) => (56 - hotX, 181 - hotY);
+
+    /// <summary>ARC-UI-3321: the corner, in the kit part <c>fixture.align_needle</c>, of a needle frame's cell (35 units, 7 across; <c>sheet_parts.py</c>); the cell holds the frame from its corner with the needle's soft shadow down and to the right, and the whole cell is drawn at the original's hot point.</summary>
+    public static (int X, int Y) NeedleCell(int frame) => (NeedleCellUnits * (frame % 7), NeedleCellUnits * (frame / 7));
+
+    /// <summary>The side of a needle frame's cell in the kit part, in units.</summary>
+    public const int NeedleCellUnits = 35;
 
     /// <summary>The aptitude marker art 255's top-left: x 775, y 221 less the aptitude × 128 / 100 (truncating).</summary>
     public static (int X, int Y) AptitudeMarker(int aptitude) => (775, 221 - aptitude * 128 / 100);

@@ -30,7 +30,6 @@ except ImportError:  # run as a script
     import prompt_library  # type: ignore
 
 
-
 def default_out() -> Path:
     """`local/steamwoven-ui/masters` of the MAIN checkout (ARC-DEV-3277: a worktree has no `local/`; masters written there
     are never seen by `bake.py` and `kit_check.py` and are lost with the worktree)."""
@@ -56,7 +55,7 @@ class Fixture:
     height: int
     windows: tuple[str, ...]  # census windows that draw it
     note: str
-    cut: bool = False  # not drawn here: a picture cut from the player's own HD frame by `label_parts.py` (ARC-UI-3299)
+    cut: bool = False  # not drawn here: a picture cut from the player's own HD frame by `label_parts.py` (ARC-UI-3299) or `sheet_parts.py` (ARC-UI-3321)
 
     @property
     def master(self) -> tuple[int, int]:
@@ -66,9 +65,9 @@ class Fixture:
 INV = ("G01", "G17")
 INV_FAMILY = ("G01", "G02", "G03", "G04", "G17", "M10")
 FIXTURES: tuple[Fixture, ...] = (
-    Fixture("grid.inventory_cells", 32, 32, INV_FAMILY, "one cell well of the item grids (black, thin line on its top and left edges); the pack's 10 x 12, the doll's 10 x 9 and the holder's 10 x 7 or 10 x 8 are copies of it"),
-    Fixture("fixture.pack_pit", 324, 388, INV_FAMILY, "the pack's pit at 366, 6 with its inner line round the 10 x 12 grid at 368, 8"),
-    Fixture("fixture.doll_pit", 330, 300, INV, "the paper doll's pit at 18, 100 with its inner line round the 10 x 9 grid at 23, 107"),
+    Fixture("grid.inventory_cells", 32, 32, INV_FAMILY, "one cell well of the item grids (black, thin line on its last column and row); the pack's 10 x 12, the doll's 10 x 9 and the holder's 10 x 7 or 10 x 8 are copies of it"),
+    Fixture("fixture.pack_pit", 324, 388, INV_FAMILY, "the pack's pit at 366, 6 under the 10 x 12 grid at 368, 8; deviation: its ground is black, art 221 has 8, 8, 8 (owner 2026-11-26)"),
+    Fixture("fixture.doll_pit", 330, 300, INV, "the paper doll's pit at 18, 100 under the 10 x 9 grid at 23, 107"),
     Fixture("fixture.holder_pit_loot", 324, 260, ("G02", "G04"), "the body's or container's grid pit at 6, 134 (10 x 8 cells at 8, 136)"),
     Fixture("fixture.holder_pit_barter", 324, 228, ("G03", "M10"), "the merchant's grid pit at 6, 166 (10 x 7 cells at 8, 168)"),
     Fixture("fixture.name_pit", 223, 55, INV, "the plate behind the weights and speed text at 124, 25"),
@@ -78,13 +77,14 @@ FIXTURES: tuple[Fixture, ...] = (
     Fixture("fixture.weapon_frame", 112, 97, INV, "the quarter-disc frame of the weapon slot at 10, 303"),
     Fixture("fixture.shield_frame", 114, 97, INV, "the quarter-disc frame of the shield slot at 244, 303"),
     Fixture("fixture.arrange_legend", 78, 32, INV, "the arrange button's legend at 690, 192: scattered dots, an arrow, a grid"),
-    Fixture("fixture.sheet_name_box", 360, 87, ("G05",), "the name and info box of the character sheet at 119, 9"),
-    Fixture("fixture.sheet_derived_box", 452, 113, ("G05",), "the derived-stats and resistance box at 24, 278 with its divider"),
-    Fixture("fixture.stat_oval", 70, 31, ("G05",), "the oval behind a stat number, eight of them at 172 and 315, 111 + 40 r"),
-    Fixture("fixture.align_dial", 100, 100, ("G05",), "the alignment dial at 6, 131: brass ring, face with its divisions, hub, the number pit (the letters E and G are written by the sheet)"),
-    Fixture("fixture.health_disc", 76, 56, ("G05",), "the health disc with its red heart at 411, 127"),
-    Fixture("fixture.fatigue_disc", 76, 56, ("G05",), "the fatigue disc with its blue cross at 411, 197"),
-    Fixture("fixture.mt_ruler", 46, 330, ("G05",), "the magic and technology ruler at 747, 60: ticks, the magic sign, the technology gear, two number pits (the divisions 75 50 25 0 25 50 75 are written by the sheet)"),
+    Fixture("fixture.sheet_name_box", 390, 102, ("G05",), "the name and info box of the character sheet at 106, 2 in the old HD version's look: the figured brass frame with its curls and the black field (ARC-UI-3321)", cut=True),
+    Fixture("fixture.sheet_derived_box", 488, 128, ("G05",), "the derived-stats and resistance box at 10, 270 in the old HD version's look: the figured brass frame with its curls, the black field and the divider (ARC-UI-3321)", cut=True),
+    Fixture("fixture.stat_oval", 80, 44, ("G05",), "the brass oval round a stat number, two sockets and the black pit, in the old HD look: eight of them, the first at 167, 105, then 143 right and 40 down", cut=True),
+    Fixture("fixture.align_dial", 109, 111, ("G05",), "the alignment dial at 3, 128 in the old HD look: brass bezel, paper face with ticks, hub, number pit (E and G are the label part; needle and number are live)", cut=True),
+    Fixture("fixture.align_needle", 245, 105, ("G05",), "art 254's 21 needle frames from the HD pack, the baked grey shadow replaced by the soft shadow (#3249, 1.2 blur), 35-unit cells (#3312)", cut=True),
+    Fixture("fixture.health_disc", 87, 68, ("G05",), "the health disc, red heart, two sockets, at 405, 122, old HD look; kit +/- are 21 units, centred (original 19: minus 1 left, both 0.5 up)", cut=True),
+    Fixture("fixture.fatigue_disc", 87, 67, ("G05",), "the fatigue disc, blue cross, two sockets, at 405, 192, old HD look; kit +/- are 21 units, centred (original 19: minus 1 left, both 0.5 up)", cut=True),
+    Fixture("fixture.mt_ruler", 60, 332, ("G05",), "the magic and technology ruler at 740, 60 in the old HD look: parchment strip with ticks and divisions 75 50 25 0 25 50 75, magic sign, gear, two number caps", cut=True),
     Fixture("fixture.sheet_stat_names_l", 50, 160, ("G05",), "the stat names ST CN DX BE of the sheet at 131, 115 + 40 r in the old HD version's look (the part's corner is 120, 108)", cut=True),
     Fixture("fixture.sheet_stat_names_r", 55, 160, ("G05",), "the stat names IN WP PE CH of the sheet at 263, 115 + 40 r in the old HD version's look (the part's corner is 255, 108)", cut=True),
     Fixture("fixture.sheet_dial_letters", 65, 25, ("G05",), "the alignment dial's E&G with its two curls at 45..70, 153 (the part's corner is 25, 146)", cut=True),
@@ -97,20 +97,23 @@ FIXTURES: tuple[Fixture, ...] = (
 )
 BY_ID = {fixture.ident: fixture for fixture in FIXTURES}
 
+# ARC-UI-3342: the original paints a grid line one unit wide on the last column and row of units of a 32-unit cell, and none before a grid's first cell; the kit's 2 px line is centred there.
+LINE_AT = -0.5
+# The grid pits: the grid's visible units inside each part (x, y, w, h). The paper doll's stops a unit short on the right and below, where the original's frame stands.
+GRID_PITS = {"fixture.pack_pit": (2, 2, 320, 384), "fixture.doll_pit": (5, 7, 319, 287), "fixture.holder_pit_loot": (2, 2, 320, 256), "fixture.holder_pit_barter": (2, 2, 320, 224)}
 Colour = tuple[int, int, int]
 BLACK: Colour = (4, 5, 9)
+GRID_GROUND: Colour = (0, 0, 0)  # the item grids' ground, the original's pure black, as under its empty-slot covers (ARC-UI-3342, owner 2026-11-26)
 EDGE: Colour = (62, 74, 98)
 BRASS: Colour = (184, 146, 62)
 BRASS_DARK: Colour = (104, 76, 28)
 BRASS_LIGHT: Colour = (226, 192, 104)
-PARCHMENT: Colour = (214, 198, 158)
 PAPER: Colour = (238, 226, 188)
 RULE: Colour = (206, 184, 132)
 INK: Colour = (62, 46, 26)
 DARK_WOOD: Colour = (48, 34, 24)
 PALE: Colour = (190, 190, 168)
 RED: Colour = (190, 30, 26)
-BLUE: Colour = (34, 56, 214)
 STEEL: Colour = (122, 124, 134)
 STEEL_DARK: Colour = (58, 60, 68)
 
@@ -228,12 +231,21 @@ def _trim(c: Canvas, x0: float, y0: float, x1: float, y1: float, variant: str) -
         c.frame(x0, y0, x1, y1, 2, EDGE)
 
 
-def _pit(c: Canvas, variant: str, inner: tuple[float, float, float, float] | None = None) -> None:
+def _pit(c: Canvas, variant: str) -> None:
     c.rect(0, 0, c.w, c.h, BLACK)
     _trim(c, 0, 0, c.w, c.h, variant)
-    if inner:
-        x, y, w, h = inner
-        c.frame(c.X(x), c.Y(y), c.X(x + w), c.Y(y + h), 2, EDGE)
+
+
+def _grid_pit(c: Canvas, variant: str, x: float, y: float, w: float, h: float) -> None:
+    """An item grid's pit (ARC-UI-3342): the ground under the grid's visible units (x, y, w, h of the part) and the trim round them, hugging the grid as the original's frame does, so the grid's lines reach it; clear outside the trim."""
+    x0, y0, x1, y1 = round(c.X(x)), round(c.Y(y)), round(c.X(x + w)), round(c.Y(y + h))
+    c.rect(x0, y0, x1, y1, GRID_GROUND)
+    if variant == "brass":
+        brass = max(3, round(c.s * 0.9))
+        c.frame(x0 - 1, y0 - 1, x1 + 1, y1 + 1, 1, BRASS_DARK)
+        c.frame(x0 - 1 - brass, y0 - 1 - brass, x1 + 1 + brass, y1 + 1 + brass, brass, BRASS)
+    else:
+        c.frame(x0 - 2, y0 - 2, x1 + 2, y1 + 2, 2, EDGE)
 
 
 def _quarter(c: Canvas, right: bool, fill: Colour, variant: str) -> None:
@@ -295,55 +307,6 @@ def _legend(c: Canvas) -> None:
             c.rect(c.X(51 + gx * 5), c.Y(5 + gy * 5), c.X(55 + gx * 5), c.Y(9 + gy * 5), PALE)
 
 
-def _dial(c: Canvas) -> None:
-    cx, cy, r = c.X(50), c.Y(50), c.s * 50
-    c.disc(cx, cy, r, BRASS)
-    c.disc(cx, cy, r, BRASS_DARK, ring=2)
-    c.disc(cx, cy, c.s * 45, PARCHMENT)
-    c.disc(cx, cy, c.s * 45, BRASS_DARK, ring=2)
-    for i in range(13):  # divisions over the upper half, a long one at each end and in the middle
-        angle = math.pi + math.pi * i / 12
-        inner = c.s * (34 if i % 6 == 0 else 38)
-        c.segment(cx + math.cos(angle) * inner, cy + math.sin(angle) * inner, cx + math.cos(angle) * c.s * 43, cy + math.sin(angle) * c.s * 43, max(2.0, c.s * 0.5), INK)
-    c.rect(c.X(34), c.Y(67), c.X(68), c.Y(84), BLACK)
-    c.frame(c.X(34), c.Y(67), c.X(68), c.Y(84), 2, EDGE)
-    c.disc(cx, cy, c.s * 8, DARK_WOOD)
-    c.disc(cx, cy, c.s * 8, BRASS, ring=2)
-
-
-def _status_disc(c: Canvas, heart: bool, variant: str) -> None:
-    cx, cy = c.X(38), c.Y(28)
-    c.disc(cx, cy, c.s * 24, BLACK)
-    c.disc(cx, cy, c.s * 26, BRASS, ring=c.s * 2.4)
-    for dx in (7, 69):  # the two knobs at the sides
-        c.disc(c.X(dx), cy, c.s * 5, BRASS_DARK)
-        c.disc(c.X(dx), cy, c.s * 3.6, BRASS_LIGHT)
-    if heart:
-        for dx in (-7, 7):
-            c.disc(cx + dx * c.s, cy - 5 * c.s, 7.4 * c.s, RED)
-        c.polygon([(cx - 13.6 * c.s, cy - 2 * c.s), (cx + 13.6 * c.s, cy - 2 * c.s), (cx, cy + 15 * c.s)], RED)
-    else:
-        c.rect(cx - 6.5 * c.s, cy - 14.5 * c.s, cx + 6.5 * c.s, cy + 14.5 * c.s, BLUE)
-        c.rect(cx - 14.5 * c.s, cy - 6.5 * c.s, cx + 14.5 * c.s, cy + 6.5 * c.s, BLUE)
-
-
-def _ruler(c: Canvas, variant: str) -> None:
-    c.rect(c.X(0), c.Y(0), c.w, c.h, DARK_WOOD)
-    c.rect(c.X(3), c.Y(2), c.X(43), c.Y(326), PARCHMENT)
-    c.frame(c.X(3), c.Y(2), c.X(43), c.Y(326), 2, BRASS_DARK)
-    for i in range(-17, 18):  # a tick every 6.4 units, a long one at each division (every 5th, 32 units)
-        y = c.Y(163 + i * 6.4)
-        c.rect(c.X(9), y - 1, c.X(21 if i % 5 == 0 else 15), y + 1, INK)
-    cx, cy = c.X(24), c.Y(35)
-    c.disc(cx, cy, c.s * 12, (26, 40, 150), ring=c.s * 3)
-    c.disc(cx, cy, c.s * 4, (26, 40, 150))
-    c.gear(c.X(24), c.Y(292), c.s * 12, 8, (204, 128, 14))
-    c.disc(c.X(24), c.Y(292), c.s * 4, DARK_WOOD)
-    for y0, y1 in ((6, 22), (306, 323)):
-        c.rect(c.X(9), c.Y(y0), c.X(39), c.Y(y1), BLACK)
-        c.frame(c.X(9), c.Y(y0), c.X(39), c.Y(y1), 2, EDGE)
-
-
 def _gear_sign(c: Canvas, cx_u: float, hat: bool) -> None:
     cx, cy = c.X(cx_u), c.Y(35 if hat else 36)
     c.disc(cx, cy, c.s * 35, DARK_WOOD)
@@ -365,32 +328,21 @@ def _gear_sign(c: Canvas, cx_u: float, hat: bool) -> None:
 
 
 def draw(ident: str, variant: str = "brass") -> pngio.Image:
-    """The master of one fixture. Raises KeyError for an unknown id, and for a cut one (`label_parts.py` makes those from the player's HD frame)."""
+    """The master of one fixture. Raises KeyError for an unknown id, and for a cut one (`label_parts.py` and `sheet_parts.py` make those from the player's HD frame)."""
     fixture = BY_ID[ident]
     if fixture.cut:
-        raise KeyError(f"{ident} is cut from the player's HD frame by label_parts.py, not drawn here")
+        raise KeyError(f"{ident} is cut from the player's HD frame by label_parts.py or sheet_parts.py, not drawn here")
     width, height = fixture.master
     c = Canvas(width, height, (fixture.width, fixture.height))
     if ident == "grid.inventory_cells":
-        c.rect(0, 0, width, height, BLACK)
-        c.rect(0, 0, width, 2, EDGE)
-        c.rect(0, 0, 2, height, EDGE)
-    elif ident == "fixture.pack_pit":
-        _pit(c, variant, (2, 2, 320, 384))
-    elif ident == "fixture.doll_pit":
-        _pit(c, variant, (5, 7, 320, 288))
-    elif ident == "fixture.holder_pit_loot":
-        _pit(c, variant, (2, 2, 320, 256))
-    elif ident == "fixture.holder_pit_barter":
-        _pit(c, variant, (2, 2, 320, 224))
-    elif ident in ("fixture.name_pit", "fixture.quote_field", "fixture.count_pit", "fixture.sheet_name_box", "fixture.schem_channel"):
+        c.rect(0, 0, width, height, GRID_GROUND)
+        x, y = c.X(fixture.width + LINE_AT), c.Y(fixture.height + LINE_AT)
+        c.rect(x - 1, 0, x + 1, height, EDGE)
+        c.rect(0, y - 1, width, y + 1, EDGE)
+    elif ident in GRID_PITS:
+        _grid_pit(c, variant, *GRID_PITS[ident])
+    elif ident in ("fixture.name_pit", "fixture.quote_field", "fixture.count_pit", "fixture.schem_channel"):
         _pit(c, variant)
-    elif ident == "fixture.sheet_derived_box":
-        _pit(c, variant)
-        c.rect(c.X(284), c.Y(16), c.X(287), c.Y(100), EDGE)
-    elif ident == "fixture.stat_oval":
-        c.round_rect(0, 0, width, height, c.Y(10), EDGE if variant == "flat" else BRASS)
-        c.round_rect(2, 2, width - 2, height - 2, c.Y(10) - 2, BLACK)
     elif ident == "fixture.count_icons":
         _icons(c)
     elif ident == "fixture.weapon_frame":
@@ -399,14 +351,6 @@ def draw(ident: str, variant: str = "brass") -> pngio.Image:
         _quarter(c, False, (10, 14, 54), variant)
     elif ident == "fixture.arrange_legend":
         _legend(c)
-    elif ident == "fixture.align_dial":
-        _dial(c)
-    elif ident == "fixture.health_disc":
-        _status_disc(c, True, variant)
-    elif ident == "fixture.fatigue_disc":
-        _status_disc(c, False, variant)
-    elif ident == "fixture.mt_ruler":
-        _ruler(c, variant)
     elif ident == "fixture.schem_page":
         c.rect(0, 0, width, height, PAPER)
         c.frame(0, 0, width, height, 2, RULE)
@@ -451,7 +395,7 @@ def self_test() -> int:
         if width % GRID or height % GRID:
             problems.append(f"{fixture.ident}: master {width} x {height} is not on the 6 px grid")
     for variant in VARIANTS:
-        for ident in ("fixture.count_pit", "fixture.health_disc", "fixture.gear_scroll"):
+        for ident in ("fixture.count_pit", "fixture.quote_field", "fixture.gear_scroll"):
             first, second = draw(ident, variant), draw(ident, variant)
             fixture = BY_ID[ident]
             if first.data != second.data or (first.w, first.h) != fixture.master:
