@@ -75,8 +75,9 @@ public readonly record struct AreaVisualKey(AreaSourceKind Kind, AreaSectorKey S
 }
 public sealed record AreaEntryIdentity(AreaInputKey Source, int Ordinal, uint Flags, uint StoredBytes, uint DecodedBytes, uint Offset, string NameSha256)
 {
-    /// <summary>ARC-RENDER-3362: from the entry's place in its source; equal identities still give one value (<see cref="AreaKeyHash"/>).</summary>
-    public override int GetHashCode() => HashCode.Combine(Source, Ordinal, Offset, DecodedBytes);
+    /// <summary>ARC-RENDER-3362: from the entry's place in its source and a sample of its name digest (a viewer's loose art is told apart by the name alone);
+    /// equal identities still give one value (<see cref="AreaKeyHash"/>).</summary>
+    public override int GetHashCode() => HashCode.Combine(Source, Ordinal, Offset, DecodedBytes, AreaKeyHash.Sample(NameSha256));
 }
 public sealed record AreaSparseElement(int Key, IReadOnlyList<long> Words);
 public sealed record AreaFieldValue(int Slot, AreaPresence Presence, AreaValueOrigin Origin, long? Number, IReadOnlyList<AreaSparseElement> Elements, string? Fingerprint);

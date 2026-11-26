@@ -160,7 +160,7 @@ public partial class TerrainViewerApp
         lap?.Step("items");
         // The items on the ground away from a T0 body.
         var map = _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == area.Snapshot.RuntimeMap);
-        var current = session.QueryMapInventory(new SessionMapId(CurrentAreaMap));
+        var current = AreaMapInventoryNow(session, CurrentAreaMap);
         if (current is not null)
             foreach (var ground in current.Ground)
             {

@@ -348,6 +348,21 @@ public sealed class AreaInventoryHost
         };
     }
 
+    /// <summary>ARC-RENDER-3362: whether <see cref="Target"/> answers a dead NPC for <paramref name="key"/>, read from its one holder. A frame asks this of every speaker of the map, and
+    /// <see cref="Target"/> makes the whole map's inventory each time.</summary>
+    public bool IsDeadNpc(GameSessionOwner session, int runtimeMap, AreaObjectKey key)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var map = _maps.GetValueOrDefault(runtimeMap);
+        string? entity = null;
+        if (map is null || !map.TryGetEntity(key, out entity!))
+        {
+            map = _resolver.CreatedMapsOn(runtimeMap).FirstOrDefault(created => created.TryGetEntity(key, out _));
+            if (map is null || !map.TryGetEntity(key, out entity!)) return false;
+        }
+        return session.QueryMapHolder(new(runtimeMap), entity) is { Kind: SessionHolderKind.Npc, Dead: true };
+    }
+
     /// <summary>The drawn objects of this map the PC has taken: they are neither drawn nor picked any more. ARC-WORLD-123: so are the seed
     /// items the session deleted by taking them (a key folded into the ring, an ammunition stack merged into a held one). ARC-WORLD-3122: so is
     /// every seed item that lay on the ground and the session's ground no longer lists (the hero took it and then gave it to a companion or
@@ -355,8 +370,15 @@ public sealed class AreaInventoryHost
     public IReadOnlySet<AreaObjectKey> Taken(GameSessionOwner session, int runtimeMap)
     {
         ArgumentNullException.ThrowIfNull(session);
+        return Taken(session, runtimeMap, _maps.ContainsKey(runtimeMap) ? session.QueryMapInventory(new(runtimeMap)) : null);
+    }
+
+    /// <summary>ARC-RENDER-3362: <see cref="Taken(GameSessionOwner, int)"/> over a view the caller already made of the map now (<see cref="GameSessionOwner.QueryMapInventory"/>), so one view
+    /// serves every reader of a frame.</summary>
+    public IReadOnlySet<AreaObjectKey> Taken(GameSessionOwner session, int runtimeMap, SessionMapInventory? current)
+    {
+        ArgumentNullException.ThrowIfNull(session);
         if (!_maps.TryGetValue(runtimeMap, out var map)) return new HashSet<AreaObjectKey>();
-        var current = session.QueryMapInventory(new(runtimeMap));
         return session.QueryPcInventory().Where(item => item.Origin.RuntimeMap == runtimeMap && map.TryGetRow(item.Entity, out _))
             .Select(item => map.Row(item.Entity).Key)
             .Concat(map.Seed.Items.Where(item => session.IsItemDestroyed(item.Entity) && map.TryGetRow(item.Entity, out _)).Select(item => map.Row(item.Entity).Key))
@@ -380,7 +402,13 @@ public sealed class AreaInventoryHost
     public IReadOnlySet<AreaObjectKey> Piled(GameSessionOwner session, int runtimeMap)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (!_maps.TryGetValue(runtimeMap, out var map) || session.QueryMapInventory(new(runtimeMap)) is not { } current) return new HashSet<AreaObjectKey>();
+        return Piled(runtimeMap, _maps.ContainsKey(runtimeMap) ? session.QueryMapInventory(new(runtimeMap)) : null);
+    }
+
+    /// <summary>ARC-RENDER-3362: <see cref="Piled(GameSessionOwner, int)"/> over a view the caller already made of the map now.</summary>
+    public IReadOnlySet<AreaObjectKey> Piled(int runtimeMap, SessionMapInventory? current)
+    {
+        if (!_maps.TryGetValue(runtimeMap, out var map) || current is null) return new HashSet<AreaObjectKey>();
         return current.JunkPiles.SelectMany(pile => pile.Items).Where(item => map.TryGetRow(item.Entity, out _)).Select(item => map.Row(item.Entity).Key).ToHashSet();
     }
 
