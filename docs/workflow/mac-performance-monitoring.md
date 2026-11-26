@@ -1,7 +1,7 @@
 # Watching the packaged game's performance on a Mac (ARC-DEV-3378)
 
-How to read fps, frame time, GPU time and memory of the packaged game with tools outside it. Nothing is built into the
-game. Part of the performance epic [#3377](https://github.com/Simarglok/arcanum-steamwoven/issues/3377).
+How to read fps, frame time, GPU time and memory of the packaged game with tools outside it (the game's own panel is the
+[performance overlay](../rendering/terrain-viewer.md#performance-overlay-arc-dev-3389), Ctrl+F). Part of the performance epic [#3377](https://github.com/Simarglok/arcanum-steamwoven/issues/3377).
 
 **What was checked.** 2026-11-26, M4 Pro 24 GB, macOS 27.2.1, Xcode 27.2, display 2560x1440 at 180 Hz, the
 `./arcanum package mac` build of main `27d9c280c`, Developer mode off; only `powermetrics` used `sudo`. The runs stayed in the launcher and
@@ -37,9 +37,14 @@ runs, the [launch queue](toolchain.md#launch-queue-arc-dev-033) holds the agents
 
 ## Metal Performance HUD (works)
 
-Start from Terminal:
+In the game itself **Ctrl+F** switches it on and off: it is the third step of the
+[performance overlay](../rendering/terrain-viewer.md#performance-overlay-arc-dev-3389), after the game's own panel. To have
+it from the first frame, start from Terminal:
 
     MTL_HUD_ENABLED=1 "$EXE"
+
+Where `metalperftrace` exists (macOS 27) the game then puts the HUD where its own panel stands (the right edge, below the top
+bar), whichever way it was started.
 
 **You see** an overlay at the top right: chip, resolution, Metal and app memory, FPS, GPU ms, frame interval and its
 graph. More lines (thermal state, present delay, encoder CPU time):

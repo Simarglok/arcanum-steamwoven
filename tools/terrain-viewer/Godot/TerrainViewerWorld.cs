@@ -1075,6 +1075,8 @@ public partial class TerrainViewerApp
         if (RouteBugReportInput(input)) return;
         // ARC-DEV-2190: the owner-checks overlay (only when the owner-QA flag is on) comes right after it.
         if (RouteOwnerQaInput(input)) return;
+        // ARC-DEV-3389: Ctrl+F shows or hides the performance overlay; the diagnostic's key reaches nothing in the game.
+        if (RoutePerfOverlayInput(input)) return;
         // ARC-RENDER-1170: a movie owns every event while it plays; a key press ends it.
         if (HandleMovieInput(input)) { GetViewport().SetInputAsHandled(); return; }
         // ARC-UI-026: the death screen owns every key and mouse button while it covers the game.
