@@ -71,12 +71,6 @@ public sealed partial class SessionSpellRunTests
         public SpellCellPayment Pay(SpellCellRequest request) => throw new AssertFailedException("no cells");
     }
 
-    private sealed class NoStacking : ISpellRunStacking
-    {
-        public int? Blocking(SpellRun run, SpellRunObject target) => null;
-        public void Cancel(SpellRun run) { }
-    }
-
     private sealed class Check : ISpellInvocationWorld
     {
         public SpellLineOfFire LineOfFire(SpellObjectFacts parent, SpellLocation tile) => new(0, null);

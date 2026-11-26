@@ -22,7 +22,7 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaUnlockScriptTests
 {
     private const byte Triggerer = 0, Number = 3, GlobalFlag = 4, Local = 2;
-    private const int PcType = 15, NpcType = 16, SeenFlag = 2381, OpenerSeenFlag = 2382;
+    private const int PcType = 15, SeenFlag = 2381, OpenerSeenFlag = 2382;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 

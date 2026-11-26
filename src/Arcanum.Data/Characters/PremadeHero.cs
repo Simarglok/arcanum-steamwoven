@@ -36,8 +36,9 @@ public enum PremadeHeroFailure
     /// <summary>A coin range (minimum ≠ maximum) or an item rate other than 100. A range or a rate 1..99 needs gameplay
     /// randomness, which is not modelled (FR-CONTENT-007); rate 0 never creates the item and is refused with them.</summary>
     RandomInventorySource,
-    /// <summary>Kept for compatibility: since ARC-WORLD-093 a kit item without a prototype file empties the set
-    /// (<see cref="InventorySourceRefused"/> with <see cref="InventorySourceStatus.Emptied"/>), so this is not reached.</summary>
+    /// <summary>A kit prototype number past the prototype range, or without a file, from <see cref="PremadeHeroReader.ReadItem"/>: the
+    /// new character's opening shop kit skips such an item. The premade hero's own set does not report it: since ARC-WORLD-093 a kit item
+    /// without a prototype file empties the set (<see cref="InventorySourceRefused"/> with <see cref="InventorySourceStatus.Emptied"/>).</summary>
     ItemPrototypeMissing,
     ItemPrototypeAmbiguous,
     ItemPrototypeInvalid,

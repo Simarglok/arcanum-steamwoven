@@ -187,14 +187,6 @@ public partial class FrameCanvas : Control
         QueueRedraw();
     }
 
-    // Temporary source-compatibility shim for the ARC-RENDER-001 viewer. New callers must choose ResetAsset or UpdateFrame.
-    internal void SetTexture(Texture2D texture)
-    {
-        ArgumentNullException.ThrowIfNull(texture);
-        var size = texture.GetSize();
-        ResetAsset(texture, FrameHotspot.Zero, new FrameCanvasGroupLayout([new FrameCanvasFrame((int)size.X, (int)size.Y, FrameHotspot.Zero)]));
-    }
-
     public void SetAlignment(FrameAlignment alignment)
     {
         if (!Enum.IsDefined(alignment))

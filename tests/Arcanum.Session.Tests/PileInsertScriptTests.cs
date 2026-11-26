@@ -84,9 +84,6 @@ public sealed class PileInsertScriptTests
         return owner;
     }
 
-    private static string[] List(GameSessionOwner owner, string holder) =>
-        owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == holder).Items.Select(item => item.Entity).ToArray();
-
     [TestMethod]
     public void The_hero_taking_coins_runs_the_pile_script_first_with_the_pile_as_attachee_and_the_hero_reading_its_line()
     {

@@ -9,7 +9,7 @@ namespace Arcanum.Scripting.Tests.Scr;
 [TestClass]
 public sealed class ScrTalkCommandTests
 {
-    private const byte Triggerer = 0, Attachee = 1, ExtraObject = 12, Everyone = 8;
+    private const byte Attachee = 1, ExtraObject = 12, Everyone = 8;
     private const int Talk = 1952;
     private static readonly ScrObjectRef Other = new(1, "npc.2");
     // The commands of S19 these runs need: S3 with float line, get area and the everyone-in-vicinity list.

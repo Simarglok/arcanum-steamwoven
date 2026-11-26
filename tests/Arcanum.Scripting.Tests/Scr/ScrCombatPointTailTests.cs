@@ -12,8 +12,8 @@ namespace Arcanum.Scripting.Tests.Scr;
 [TestClass]
 public sealed class ScrCombatPointTailTests
 {
-    private const byte Triggerer = 0, Attachee = 1, Extra = 12;
-    private static readonly ScrObjectRef Sword = new(1, "kit:3"), Victim = new(1, "kit:4"), Bystander = new(1, "kit:5");
+    private const byte Triggerer = 0, Extra = 12;
+    private static readonly ScrObjectRef Sword = new(1, "kit:3"), Victim = new(1, "kit:4");
 
     private sealed class Host(FakeHost inner) : IScrHost, IScrCritterQueries, IScrStatAdjustQueries
     {

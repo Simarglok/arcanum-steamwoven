@@ -104,7 +104,7 @@ public partial class TerrainViewerApp : Node
             // ARC-DEV-046: without command-line inputs the game folder comes from the launcher settings.
             if (args.Count == 0)
             {
-                _gameFolderStart = StartFromGameFolderAsync(launcher);
+                _ = StartFromGameFolderAsync(launcher);
                 return;
             }
             if (launcher) throw new ArgumentException("Usage");

@@ -18,7 +18,6 @@ public sealed class HeroCreatedItemScriptTests
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
     private static readonly SessionItemKind Bullets = new(SessionItemType.Ammo, AmmoProto, 3301, 33301);
     private static readonly SessionItemKind Trinket = new(SessionItemType.Generic, 5700, 3700, 33700);
-    private static readonly SessionItemKind HeroGold = SessionHeroGrid.GoldKind;
 
     /// <summary>The prototype arrays of the new items: the ammunition, the trinket and the hero's gold pile all carry a get and an insert-item script.</summary>
     private static readonly Func<int, IReadOnlyList<SessionPrototypeScript>?> Prototypes = prototype =>

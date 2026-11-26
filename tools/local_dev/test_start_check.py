@@ -88,7 +88,6 @@ class WrapperStartTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.env = {**os.environ, "ARCANUM_LOCAL_HOME": str(Path(self.temp.name) / "home"),
-                    "ARCANUM_QUEUE_LEGACY_LOCK": str(Path(self.temp.name) / "legacy.lock"),
                     "ARCANUM_QUEUE_BUILD_SERVER_SHUTDOWN": "0"}
         self.env.pop("ARCANUM_QUEUE_TICKET", None)
 

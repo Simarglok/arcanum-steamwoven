@@ -18,7 +18,6 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaKnockbackItemsTests
 {
-    private static readonly SessionMapId Map = new(1);
     private static readonly CellCoord Source = new(90, 100);
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);

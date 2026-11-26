@@ -682,25 +682,6 @@ public static partial class TerrainViewerSelfTest
         return false;
     }
 
-    private static async Task AssertActorCanvasOracleAsync(Node host, TerrainTextureCache cache, TerrainTextureKey terrainKey)
-    {
-        var terrain = Plan(new TerrainRect(0, 0, 200, 100), [Input(51, terrainKey, TerrainKind.Tile, 0, 0, 0)]);
-        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 7, 0, 1),
-            SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, 0, 0, 3, -2, ActorDiagnosticSource.IdleFrames, ActorDiagnosticSource.IdleFps);
-        var input = new ActorDiagnosticPlacementInput(0, 0, 100, 20, 0, 0, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
-            ActorDiagnosticAction.Idle, 1, 0, SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, 0, 0, 3, -2);
-        var actor = ActorDiagnosticScenePlan.CreateSynthetic(input, [frame]);
-        var viewport = new SubViewport { Size = new Vector2I(200, 100), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
-        var canvas = new TerrainCanvas { ShowActorGuides = true };
-        viewport.AddChild(canvas); host.AddChild(viewport); canvas.Publish(DiagnosticScenePlan.Create(terrain, null, actor), cache);
-        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-        using var image = viewport.GetTexture().GetImage();
-        AssertPixel(image, 98, 42, 255, 0, 0, 255); // asymmetric source x=2 reflects to width-1-2.
-        AssertPixel(image, 100, 39, 255, 255, 0, 255); // anchor guide paints last.
-        viewport.QueueFree();
-    }
-
     private static async Task AssertStaticRasterPoliciesAsync(Node host, TerrainTextureCache cache, TerrainTextureKey terrainKey)
     {
         // Literal asymmetric RGBA keeps this oracle independent of the ART

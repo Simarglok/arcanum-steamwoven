@@ -19,7 +19,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaTalkQueryTests
 {
-    private const byte Triggerer = 0, Attachee = 1, Local = 2, Number = 3, GlobalFlag = 4;
+    private const byte Triggerer = 0, Attachee = 1, Local = 2, Number = 3;
     private const int Map = 1, AreaFlag = 100;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
