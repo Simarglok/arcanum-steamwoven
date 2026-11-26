@@ -262,7 +262,10 @@ class Chain(unittest.TestCase):
         self.assertEqual(read("glyph.cvr_armor")["source"]["generation"], {"generator": "test"})
         self.assertEqual(read("glyph.mm_chest")["source"]["picture"], f"{marker_kit.MARKER_ITEM}.png")
         self.assertEqual(read("glyph.mm_skull")["source"]["picture"], "skull-neutral.png")
-        self.assertIsNone(read("glyph.mm_cross_lit")["source"])
+        lit = read("glyph.mm_cross_lit")
+        self.assertEqual((lit["made_from"], lit["source"]), ("glyph.mm_cross", read("glyph.mm_cross")["source"]), "a highlighted frame traces to the sheet")
+        self.assertEqual(lit["original"]["frame"], "204-MM_Cross/f0.png")
+        self.assertIsNone(read("glyph.mm_loc_lit")["source"])
 
 
 if __name__ == "__main__":

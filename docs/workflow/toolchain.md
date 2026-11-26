@@ -1551,7 +1551,7 @@ python3 -B tools/steamwoven_ui/marker_kit.py sheet --out FILE [--parts DIR] [--z
 python3 -B tools/steamwoven_ui/marker_kit.py self-test
 ```
 
-The originals are `local/steamwoven-ui/census/frames/` (`--frames` names another folder), the pack is the installed `interface-redraw-4x` (`--pack`), both read and never written; the generated pictures are `local/steamwoven-ui/outbox/<batch>/`. `build` prints, per generated part, how well it sits on the original (the outline overlap of a cover, the stretch of a marker). Tests: `python3 -B -m unittest tools.steamwoven_ui.test_marker_kit` (about 10 s; also in `tools/local_dev/run_tests.py`).
+The originals are `local/steamwoven-ui/census/frames/` (`--frames` names another folder), the pack is the installed `interface-redraw-4x` (`--pack`), both read and never written; the generated pictures are `local/steamwoven-ui/outbox/<batch>/`. `build` prints, per generated part, how well it sits on the original (the outline overlap of a cover, the stretch of a marker). Tests: `python3 -B -m unittest tools.steamwoven_ui.test_marker_kit` (under half a minute; also in `tools/local_dev/run_tests.py`).
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
 

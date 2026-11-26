@@ -182,8 +182,8 @@ def mean_colour(colours: list[tuple[int, int, int]]) -> tuple[int, int, int]:
 
 def round_layers(frame: Image) -> tuple[list[tuple[float, tuple[int, int, int]]], tuple[int, int, int] | None]:
     """A circle marker as rings from the outside in, `(radius in cells, colour)`, and the colour of its centre cross (or None). A coloured outline (yellow,
-    violet) is one cell wide, as in the original; an outer radius is that of a disc with the area of the original's cells, at most half the frame, and the
-    bright disc of a waypoint has the area of its bright cells; its rim takes the mean of the original's dark cells."""
+    violet) is one cell wide, as in the original; an outer rim reaches half the frame (the violet one: the radius of a disc with the area of the original's
+    cells, cut to half the frame), and the bright disc of a waypoint has the area of its bright cells; its rim takes the mean of the original's dark cells."""
     cells: dict[tuple[int, int, int], int] = {}
     for y in range(frame.h):
         for x in range(frame.w):
@@ -664,7 +664,7 @@ def generated(local_root: Path, part: Part) -> Path:
 class Made:
     part: Part
     image: Image
-    source: Path | None      # the pack frame or the generated picture; None: by rule
+    source: Path | None      # the pack frame or the generated picture it comes from (a highlighted frame: its first part's); None: by rule alone
     note: str = ""
 
 
@@ -694,13 +694,13 @@ def build_parts(args: argparse.Namespace, arts: list[Art]) -> list[Made]:
                     raise MarkerError(f"{lit.ident}: the original's frames of art {art.art} differ, so the first part does not serve the second")
                 made.append(Made(lit, Image(*lit.size, bytearray(made[-1].image.data)), None))
             else:
-                made.append(Made(lit, highlight(made[-1].image, lit.size), None))
+                made.append(Made(lit, highlight(made[-1].image, lit.size), made[-1].source))   # the record traces it to the first part's picture
     return made
 
 
 def record_of(made: Made, image_path: Path, frames: Path, args: argparse.Namespace) -> dict:
     part = made.part
-    original = frames / part.art.folder / f"f{part.frame}.png"
+    original = frames / part.art.folder / "f0.png"   # every part is made from the first frame: a second part is the first, highlighted or copied
     record = {
         "id": part.ident,
         "tool": "marker_kit.py",
@@ -708,7 +708,8 @@ def record_of(made: Made, image_path: Path, frames: Path, args: argparse.Namespa
         "rule": note_of(part.ident),
         "source_art": part.art.art,
         "source": None,
-        "original": {"frame": f"{part.art.folder}/f{part.frame}.png", "sha256": button_kit.sha256_file(original)},
+        "made_from": parts_of(part.art)[0].ident if part.frame else None,
+        "original": {"frame": f"{part.art.folder}/f0.png", "sha256": button_kit.sha256_file(original)},
         "sha256": button_kit.sha256_file(image_path),
         "date": datetime.date.today().isoformat(),
     }
