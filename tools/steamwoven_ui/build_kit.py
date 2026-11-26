@@ -249,7 +249,7 @@ def dome_hud_parts(plates: dict[str, dict]) -> list[dict]:
 SMALL_FAMILY_TEXT = {  # family -> (provenance prefix, the idle plate's note, the glyph's note, the overlay's note)
     "rect": ("rule", "the old HD pack's idle frame at the master size, opaque (the owner kept the stone Add / Remove and the follower arrows from the pack, ARC-UI-3206); the symbol is in the frame",
              "EMPTY: the symbol of art {art} is in the pack's frames", "the pack's {state} frame of art {art}, a full frame laid over the idle plate"),
-    "paper": ("codex", "art {art}: Codex stone slab and parchment (small_kit.py, ARC-UI-3272)",
+    "paper": ("codex", "art {art}: Codex stone, parchment and symbol (small_kit.py, ARC-UI-3272)",
               "EMPTY: the symbol of art {art} is in the plate", "art {art}'s {state} face by rule, a full opaque frame"),
     "ink": ("codex", "art {art}: the arrow's ink alone, alpha from the Codex sheet (small_kit.py, ARC-UI-3272)",
             "EMPTY: the arrow of art {art} is the plate", "art {art}'s {state} ink: the same shape in that state's colour"),

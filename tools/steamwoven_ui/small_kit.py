@@ -3,7 +3,7 @@
 ARC-UI-3272: the schematics skill button and arrows and the follower cycle arrows) as kit parts, in six families (owner 2026-11-25 and 2026-11-26).
 
 * `rect` (the owner kept these from the old HD pack, the installed `interface-redraw-4x`, 4 px per original cell): the stone Add / Remove (647, 648) and the follower arrows (501, 502): the kit part IS the pack's frame of each state at the master size, opaque.
-* `paper` (568, the schematics skill button): a Codex stone slab and on it the Codex parchment with its symbol, cut along the torn edge into the original's place; the lit and the pressed looks by rule.
+* `paper` (568, the schematics skill button): three layers, a Codex mottled stone, on it the Codex torn parchment and the Codex symbol, each in the original's place; the lit and the pressed looks by rule.
 * `ink` (372, 373, the schematics page arrows): Codex draws the ink alone on white; it is cut out, put where the original has it, and the states are made by rule.
 * `wedge` (827, 828, the follower cycle arrows): the olive Codex plate of #3323 without its symbol, cut to the button's shape, and a straight-edged triangle by rule, one full face per state.
 * `dome` (624, 625, 667, 668): by rule, no pack and no Codex: the accepted round face of the bottom strip's buttons (#3202) reduced under the brass ring of the sockets (#2481), the symbol (red checkered cells) by rule E from the original's own frames,
@@ -495,12 +495,13 @@ def wedge_parts(frames: Path, cell: Image, group: list[Small]) -> dict[str, Imag
 STRAY = 3              # a lone solid pixel left by the keying (a corner of the ground) is not the object's edge
 PAPER_WARM = 25        # an original cell whose red exceeds its blue by this much is parchment or symbol; the stone round it is grey
 PAPER_LIGHT = 1.18     # the sheet's tone: the hue of the original sheet's mean colour, this much lighter (light cream; ARC-UI-3272, owner 2026-11-26)
-PAPER_TEXTURE = 0.5    # the share of the generated paper's own light and dark that is kept (the owner asked for a weaker texture)
-LIT_RIM = 2            # master px of the lit symbol's solid outline
-LIT_DARK = 0.68        # the darker cell of a lit symbol, as a share of the bright one's colour
-LIT_SAMPLES = 4        # sub-samples a side for a cell edge inside a master pixel
-PAPER_SHEET = "plate-schem-skills"     # left the idle look, right the lit one
-PAPER_SLAB = "plate-schem-slab"        # the raised stone slab, bare
+PAPER_TEXTURE = 1.0    # the share of the generated paper's own light and dark that is kept: all of it, the sheet was asked for a faint mottled texture (owner 2026-11-26)
+PAPER_SHEET = "plate-schem-skills"     # the symbol is taken from here: left cell the idle (dark) one, right the lit one
+PAPER_PIECE = "plate-schem-paper"      # the bare parchment with its torn edge
+PAPER_SLAB = "plate-schem-slab"        # the mottled stone of the button, bare
+PAPER_FOOT = 1         # cells the parchment ends above the original's, so that a line of stone stays under it in the pressed look (owner 2026-11-26)
+SYMBOL_CORE = 0.5      # the symbolness from which a pixel belongs to the symbol's body
+SYMBOL_GROW = 2        # px of the sheet round the body that keep their soft edge
 INK_SHEET = "glyph-schem-arrows"       # left the left arrow, right the right arrow, dark ink on white
 INK_DARK = 70          # an original cell darker than this is ink of the dark state; both states take their colour from those cells
 # the generator copied a one-cell stair of the original at both arrow heads: along the head's slanting edge (x from, x to, a point of the edge, its slope; px of the sheet) the ink is cut to that line and the notch under it filled.
@@ -519,11 +520,13 @@ def cells_box(frame: Image, keep) -> tuple[int, int, int, int]:
     return min(xs), min(ys), max(xs) + 1, max(ys) + 1
 
 
-def placed(cut: Image, box: tuple[int, int, int, int], units: tuple[int, int], master: tuple[int, int]) -> Image:
-    """The cut object (its opaque bounding box, a column or row of fewer than `STRAY` solid pixels not counted) reduced into the place the original has it, on a clear master canvas."""
-    solid = [v >= 128 for v in cut.data[3::4]]
-    xs = [x for x in range(cut.w) if sum(solid[x::cut.w]) >= STRAY]
-    ys = [y for y in range(cut.h) if sum(solid[y * cut.w:(y + 1) * cut.w]) >= STRAY]
+def placed(cut: Image, box: tuple[int, int, int, int], units: tuple[int, int], master: tuple[int, int], shape: Image | None = None) -> Image:
+    """The cut object (its opaque bounding box, a column or row of fewer than `STRAY` solid pixels not counted) reduced into the place the original has it, on a clear master canvas.
+    With `shape`, a layer of the same size takes the place that shape's box would take (the symbol of a parchment keeps its place on it)."""
+    by = shape or cut
+    solid = [v >= 128 for v in by.data[3::4]]
+    xs = [x for x in range(by.w) if sum(solid[x::by.w]) >= STRAY]
+    ys = [y for y in range(by.h) if sum(solid[y * by.w:(y + 1) * by.w]) >= STRAY]
     if not xs or not ys:
         raise SmallError("the sheet cell has no object")
     cropped = cut.crop(min(xs), min(ys), max(xs) + 1 - min(xs), max(ys) + 1 - min(ys))
@@ -572,50 +575,91 @@ def toned(cut: Image, target: tuple[float, float, float]) -> Image:
     return out
 
 
-def lit_cells(part: Image, units: tuple[int, int]) -> Image:
-    """A lit symbol as the kit draws one (owner 2026-11-26): a solid outline and inside it even cells, a checker one original cell wide, in two tones of its own colour."""
-    w, h = part.w, part.h
-    red = [part.data[i * 4 + 3] > 0 and symbolness(*part.data[i * 4:i * 4 + 3]) >= 0.5 for i in range(w * h)]
-    out = Image(w, h, bytearray(part.data))
-    n = LIT_SAMPLES
-    for y in range(LIT_RIM, h - LIT_RIM):
-        for x in range(LIT_RIM, w - LIT_RIM):
-            if not all(red[yy * w + xx] for yy in range(y - LIT_RIM, y + LIT_RIM + 1) for xx in range(x - LIT_RIM, x + LIT_RIM + 1)):
-                continue
-            dark = sum((int((x + (i + 0.5) / n) * units[0] / w) + int((y + (j + 0.5) / n) * units[1] / h)) % 2 for j in range(n) for i in range(n)) / (n * n)
-            for k in range(3):
-                o = (y * w + x) * 4 + k
-                out.data[o] = round(out.data[o] * (1.0 - dark * (1.0 - LIT_DARK)))
-    return out
-
-
 def is_stone_cell(p: tuple) -> bool:
     """An original cell of the bare stone: grey, neither the parchment nor its symbol."""
     return abs(p[0] - p[2]) < 20
 
 
-def toned_slab(slab: Image, original: Image) -> Image:
-    """The generated stone brought to the original's: each channel scaled so that the face's mean (the middle four fifths) is the mean of the original's stone cells inside its outer ring."""
-    stone = [(x, y) for y in range(1, original.h - 1) for x in range(1, original.w - 1) if is_stone_cell(original.pixel(x, y))]
-    if not stone:
-        raise SmallError("the original frame has no stone cell")
-    target = mean_colour(original, stone)
-    face = slab.crop(slab.w // 10, slab.h // 10, slab.w * 4 // 5, slab.h * 4 // 5)
-    gain = [target[k] * (len(face.data) / 4) / max(1, sum(face.data[k::4])) for k in range(3)]
-    out = Image(slab.w, slab.h, bytearray(slab.data))
-    for k in range(3):
-        out.data[k::4] = bytes(slab.data[k::4]).translate(bytes(min(255, round(v * gain[k])) for v in range(256)))
+def parchment_box(frame: Image) -> tuple[int, int, int, int]:
+    """Where the bare parchment goes: the columns and rows of the original with at least `STRAY` warm cells (a lone warm chip of the stone is not the sheet's edge), its foot `PAPER_FOOT` cells higher."""
+    warm = [[frame.pixel(x, y)[0] - frame.pixel(x, y)[2] >= PAPER_WARM for x in range(frame.w)] for y in range(frame.h)]
+    xs = [x for x in range(frame.w) if sum(row[x] for row in warm) >= STRAY]
+    ys = [y for y in range(frame.h) if sum(warm[y]) >= STRAY]
+    if not xs or not ys:
+        raise SmallError("the original frame has no parchment")
+    return min(xs), min(ys), max(xs) + 1, max(ys) + 1 - PAPER_FOOT
+
+
+def symbol_layer(cut: Image) -> Image:
+    """The symbol of a cut parchment alone: the largest connected body of symbol pixels and the soft edge within `SYMBOL_GROW` px of it (a stain or the dark torn rim is no part of it)."""
+    w, h = cut.w, cut.h
+    weight = [symbolness(*cut.data[i * 4:i * 4 + 3]) if cut.data[i * 4 + 3] == 255 else 0.0 for i in range(w * h)]
+    seen = bytearray(w * h)
+    body: list[int] = []
+    for start in range(w * h):
+        if seen[start] or weight[start] < SYMBOL_CORE:
+            continue
+        seen[start] = 1
+        found = [start]
+        for i in found:
+            x = i % w
+            for j in (i - 1 if x else -1, i + 1 if x < w - 1 else -1, i - w, i + w):
+                if 0 <= j < w * h and not seen[j] and weight[j] >= SYMBOL_CORE:
+                    seen[j] = 1
+                    found.append(j)
+        if len(found) > len(body):
+            body = found
+    if not body:
+        raise SmallError("the sheet cell has no symbol")
+    full = [i for i in body if weight[i] == 1.0] or body
+    mean = tuple(round(sum(cut.data[i * 4 + k] for i in full) / len(full)) for k in range(3))
+    near = set()
+    for i in body:
+        x, y = i % w, i // w
+        for yy in range(max(0, y - SYMBOL_GROW), min(h, y + SYMBOL_GROW + 1)):
+            near.update(range(yy * w + max(0, x - SYMBOL_GROW), yy * w + min(w, x + SYMBOL_GROW + 1)))
+    out = Image.blank(w, h)
+    for i in near:
+        if weight[i] > 0:
+            colour = cut.data[i * 4:i * 4 + 3] if weight[i] == 1.0 else mean
+            out.data[i * 4:i * 4 + 4] = bytes((*colour, round(255 * weight[i])))
     return out
 
 
-def sunk_slab(slab: Image, step: int, edge: tuple[int, int, int]) -> Image:
-    """The pressed slab as the original makes it: the raised one `step` px lower (its bottom edge stays), a dark line of `step` px along the top and the left."""
+def toned_slab(slab: Image, original: Image) -> Image:
+    """The generated stone brought to the original's: each channel scaled so that its mean over the original's stone cells (inside the outer ring) is theirs. The stone is opaque and square."""
+    if min(slab.data[3::4]) < 255 or abs(slab.w / slab.h - 1.0) > 0.01:
+        raise SmallError(f"the stone sheet is {slab.w} x {slab.h} or not opaque: an opaque square is needed")
+    stone = [(x, y) for y in range(1, original.h - 2) for x in range(1, original.w - 2) if is_stone_cell(original.pixel(x, y))]
+    if not stone:
+        raise SmallError("the original frame has no stone cell")
+    target = mean_colour(original, stone)
+    mine = mean_colour(resample(slab, original.w - 1, original.h - 1), stone)
     out = Image(slab.w, slab.h, bytearray(slab.data))
-    for y in range(step, slab.h - step):
-        out.data[y * slab.w * 4:(y + 1) * slab.w * 4] = slab.data[(y - step) * slab.w * 4:(y - step + 1) * slab.w * 4]
-    for y in range(slab.h):
-        for x in range(slab.w if y < step else step):
-            out.data[(y * slab.w + x) * 4:(y * slab.w + x) * 4 + 3] = bytes(edge)
+    for k in range(3):
+        gain = target[k] / max(1, mine[k])
+        out.data[k::4] = bytes(slab.data[k::4]).translate(bytes(min(255, round(v * gain)) for v in range(256)))
+    return out
+
+
+def raised_stone(slab: Image, original: Image, master: tuple[int, int]) -> Image:
+    """The button standing up, as the original draws it: the stone over all but the last column and row of cells, those a black line."""
+    step_x, step_y = round(master[0] / original.w), round(master[1] / original.h)
+    edge = mean_colour(original, [(original.w - 1, y) for y in range(1, original.h)] + [(x, original.h - 1) for x in range(1, original.w)])
+    out = Image.blank(*master, (*edge, 255))
+    paste(out, resample(toned_slab(slab, original), master[0] - step_x, master[1] - step_y), 0, 0)
+    return out
+
+
+def sunk(face_image: Image, step: tuple[int, int], edge: tuple[int, int, int]) -> Image:
+    """The pressed look as the original's frames make it: the whole button one cell lower (none sideways) and a black line of one cell on all four sides, so its lowest cell is hidden."""
+    w, h = face_image.w, face_image.h
+    step_x, step_y = step
+    line = bytes((*edge, 255))
+    out = Image.blank(w, h, (*edge, 255))
+    for y in range(step_y, h - step_y):
+        row = face_image.data[((y - step_y) * w + step_x) * 4:((y - step_y) * w + w - step_x) * 4]
+        out.data[y * w * 4:(y + 1) * w * 4] = line * step_x + row + line * step_x
     return out
 
 
@@ -625,29 +669,29 @@ def ink_trim(path: Path, name: str) -> tuple:
     return INK_TRIM[name]
 
 
-def paper_parts(frames: Path, sheet: Image, slab: Image, b: Small) -> dict[str, Image]:
-    """The schematics button as the original builds it: a stone slab, the parchment on it, the symbol on the parchment. Idle and hover lie on the raised slab (the dark symbol, then the lit one), pressed on the sunk slab
-    with the lit parchment one original cell lower. Every state is a full opaque frame."""
+def paper_parts(frames: Path, sheet: Image, piece: Image, slab: Image, b: Small) -> dict[str, Image]:
+    """The schematics button as the original builds it, in three layers: the stone, the torn parchment on it, the symbol on the parchment. Idle and hover stand up (the dark symbol, then the lit one); pressed is the
+    hover look one original cell lower inside a black line. Every state is a full opaque frame."""
     original, pressed = (read_frame(frames, b, b.frames[s]) for s in ("idle", "pressed"))
-    box = cells_box(original, lambda p: p[0] - p[2] >= PAPER_WARM)
     bare = [(x, y) for y in range(original.h) for x in range(original.w) if is_sheet_cell(original.pixel(x, y))]
     if not bare:
         raise SmallError("the original frame has no bare sheet cell")
     target = tuple(PAPER_LIGHT * v for v in mean_colour(original, bare))
-    idle, lit = (placed(toned(cut_from_magenta(sheet.crop(k * (sheet.w // 2), 0, sheet.w // 2, sheet.h)), target), box, b.units, b.master) for k in (0, 1))
-    for layer in (idle, lit):
-        fit.decontaminate(layer, 255, fit.EDGE_RADIUS)
-    lit = lit_cells(lit, b.units)
-    raised = resample(toned_slab(slab, original), *b.master)
-    step = round(b.master[1] / b.units[1])
-    sunk = sunk_slab(raised, step, mean_colour(pressed, [(x, 0) for x in range(pressed.w)]))
-    parts = {}
-    for ident, base, layer, dy in ((f"plate.{b.name}", raised, idle, 0), (f"plate.{b.name}_hover", raised, lit, 0), (f"plate.{b.name}_pressed", sunk, lit, step)):
-        face_image = Image(base.w, base.h, bytearray(base.data))
-        over(face_image, layer, 0, dy)
-        parts[ident] = face_image
-    parts[f"glyph.{b.name}"] = Image.blank(*b.master)
-    return parts
+    paper = placed(toned(cut_from_magenta(piece), target), parchment_box(original), b.units, b.master)
+    fit.decontaminate(paper, 255, fit.EDGE_RADIUS)
+    box = cells_box(original, lambda p: p[0] - p[2] >= PAPER_WARM)
+    cuts = [cut_from_magenta(sheet.crop(k * (sheet.w // 2), 0, sheet.w // 2, sheet.h)) for k in (0, 1)]
+    idle, lit = (placed(symbol_layer(cut), box, b.units, b.master, shape=cut) for cut in cuts)
+    stone = raised_stone(slab, original, b.master)
+    faces = []
+    for symbol in (idle, lit):
+        face_image = Image(stone.w, stone.h, bytearray(stone.data))
+        over(face_image, paper, 0, 0)
+        over(face_image, symbol, 0, 0)
+        faces.append(face_image)
+    step = (round(b.master[0] / b.units[0]), round(b.master[1] / b.units[1]))
+    down = sunk(faces[1], step, mean_colour(pressed, [(x, 0) for x in range(pressed.w)]))
+    return {f"plate.{b.name}": faces[0], f"plate.{b.name}_hover": faces[1], f"plate.{b.name}_pressed": down, f"glyph.{b.name}": Image.blank(*b.master)}
 
 
 def ink_alpha(cell: Image, colour: tuple[int, int, int]) -> Image:
@@ -821,7 +865,7 @@ def build_parts(args: argparse.Namespace, buttons: list[Small]) -> tuple[dict[st
             path = sheet_path(sheets, PAPER_SHEET if b.family == "paper" else INK_SHEET)
             sheet_image = pngio.read(path)
             if b.family == "paper":
-                p = paper_parts(frames, sheet_image, pngio.read(sheet_path(sheets, PAPER_SLAB)), b)
+                p = paper_parts(frames, sheet_image, *(pngio.read(sheet_path(sheets, n)) for n in (PAPER_PIECE, PAPER_SLAB)), b)
             else:
                 p = ink_parts(frames, sheet_image, b, ink_trim(path, b.name))
         parts.update(p)
@@ -847,12 +891,24 @@ def owner_of(ident: str) -> Small:
 
 RULES = {
     "rect": "pack-first (owner 2026-11-25): the old HD pack's frame of this state at the master size, opaque (kept by the owner: the stone Add / Remove and the follower arrows)",
-    "paper": "Codex and rules (owner 2026-11-26, ARC-UI-3272): a Codex stone slab and on it the Codex parchment (cut from magenta into the original parchment's place, toned by rule); hover = the lit parchment, its symbol an outline with even cells inside; pressed = the slab sunk by rule and the lit parchment one original cell lower",
+    "paper": "Codex and rules (owner 2026-11-26, ARC-UI-3272): Codex stone, on it the Codex torn parchment (cut from magenta, toned by rule) and the Codex symbol; hover = the lit symbol, solid as in the original; pressed = the hover look one original cell lower inside a black line",
     "ink": "Codex and rules (owner 2026-11-26, ARC-UI-3272): the arrow's ink drawn on white, the alpha taken from it, put in the place of the original's ink; each state in the colour of the original's ink cells",
     "wedge": "by rule (owner 2026-11-26, ARC-UI-3272): the olive Codex plate of #3323 without its symbol, cut to the button's shape (pressed in by the original's own darkening), and a straight-edged triangle of the original's red cells",
     "dome": "by rule (owner 2026-11-25): the accepted round face of #3202 + the brass ring of the sockets (#2481) + the symbol by rule E from the original's own frames, states as in #3202",
     "codex": "generated (owner 2026-11-25): a sheet of cells from Codex, original and neighbouring pack frames as input, cut and reduced to the master size",
 }
+
+
+def sheet_record(sheet: Path) -> dict:
+    """A sheet's name, hash and, when the runner's record lies next to it, how it was generated."""
+    record: dict = {"sheet": sheet.name, "sha256": button_kit.sha256_file(sheet)}
+    provenance = sheet.with_suffix(".provenance.json")
+    if provenance.is_file():
+        try:
+            record["generation"] = json.loads(provenance.read_text(encoding="utf-8"))
+        except ValueError as error:
+            raise SmallError(f"{provenance}: not a JSON provenance record ({error})") from error
+    return record
 
 
 def record_of(ident: str, b: Small, source: Path | None, image_path: Path, args: argparse.Namespace) -> dict:
@@ -870,18 +926,12 @@ def record_of(ident: str, b: Small, source: Path | None, image_path: Path, args:
     if source is not None and b.family == "rect":
         record["source"] = {"pack": args.pack.name, "file": str(source.relative_to(args.pack)), "sha256": button_kit.sha256_file(source)}
     elif source is not None:
-        provenance = source.with_suffix(".provenance.json")
-        record["source"] = {"sheet": source.name, "sha256": button_kit.sha256_file(source)}
-        if provenance.is_file():
-            try:
-                record["source"]["generation"] = json.loads(provenance.read_text(encoding="utf-8"))
-            except ValueError as error:
-                raise SmallError(f"{provenance}: not a JSON provenance record ({error})") from error
+        record["source"] = sheet_record(source)
         if b.family in ("paper", "ink", "wedge"):
             record["source"]["frames"] = b.folder
         if b.family == "paper":
-            slab = source.parent / f"{PAPER_SLAB}.png"
-            record["source"]["slab"] = {"sheet": slab.name, "sha256": button_kit.sha256_file(slab)}
+            for key, name in (("paper", PAPER_PIECE), ("slab", PAPER_SLAB)):
+                record["source"][key] = sheet_record(source.parent / f"{name}.png")
     elif b.family == "dome" and not empty:
         masters = args.local_root / "masters"
         record["source"] = {"face": DOME_PLATE, "face_sha256": button_kit.sha256_file(masters / f"{DOME_PLATE}.png"), "ring": DOME_RING, "ring_sha256": button_kit.sha256_file(masters / f"{DOME_RING}.png"), "frames": b.folder}
