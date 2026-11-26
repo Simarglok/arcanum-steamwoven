@@ -80,6 +80,7 @@ Pages are grouped below by kind: project (status, plans, decisions), development
 - [DAT R1 evidence record](research/dat-evidence.md)
 - [ARC-RES-005 dialogue evidence record](research/dialog-evidence.md)
 - [Research method and R1 boundary](research/method.md)
+- [Dead code and leftovers of old iterations (ARC-RES-3381)](research/dead-code-audit-2026-11-26.md): evidence table, owner questions and the removal issues under #3377
 - [Crash Site scenery placement and overlap (ARC-RES-008)](research/scenery-placement.md)
 
 ## Player
