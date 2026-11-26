@@ -1,9 +1,9 @@
 # ADR: what to do with the disputed code of the dead-code audit
 
-Status: **proposed, awaiting the owner** (work item ARC-DEV-3404,
-[#3404](https://github.com/Simarglok/arcanum-steamwoven/issues/3404), 2026-11-26). Nothing is removed by this page;
-each accepted verdict is carried out by its own follow-up issue (listed under [Follow-up work](#follow-up-work)), and
-an accepted page gets its row in [decisions](decisions.md). Epic
+Status: **accepted by the owner on 2026-11-26** (all verdicts; decision 5 with the floor raised to schema 106; work
+item ARC-DEV-3404, [#3404](https://github.com/Simarglok/arcanum-steamwoven/issues/3404); row in
+[decisions](decisions.md)). Nothing is removed by this page; each verdict is carried out by its own follow-up issue
+(listed under [Follow-up work](#follow-up-work)). Epic
 [#3377](https://github.com/Simarglok/arcanum-steamwoven/issues/3377). Requirements: none (code organisation).
 
 ## Context
@@ -119,7 +119,7 @@ them (delete, principle 4) or they wait for wiring (keep with a named issue). Th
 To keep it from coming back (principle 2): the analyzer configuration of #3387 is kept as a documented, uncommitted
 recipe and re-run at each audit; a public member added for a test is a review finding.
 
-### 5. Older save versions — keep the mechanism, move the floor only at points the owner names
+### 5. Older save versions — keep the mechanism, raise the floor to 106, no old-save support before the GitHub release
 
 Evidence: `GameSessionSnapshotUpgrade.cs` (720 lines) reads saves from schema 56 (the first packaged build,
 ARC-DEV-047) up to the current 106, one small step per schema (mostly one added field with the value an older session
@@ -130,16 +130,16 @@ code comment and [game session runtime](../world/game-session-runtime.md#older-s
 packaged-game save folder holds saves of schemas 57, 70, 90 and 106 (read on 2026-11-26), so old versions are in real
 use.
 
-Verdict: **keep** the upgrade chain; it is live code with a typed refusal, and a step costs a few lines. Record the
-rule as an owner decision: **the floor (`OldestReadableSchemaVersion`) moves only at a point the owner names** (for
-example a new alpha the owner hands out, or a fresh playthrough); a floor move deletes the steps below it and the older-save
-tests that use them, in one PR. Not proposed: dropping old saves until release (it would break saves the owner plays
-on every schema bump, about two a day since 2026-10-28). The owner's question for now: **move the floor today** (to 90, which keeps the saves of 2026-11-11 and later, or
-to 106, which keeps those of 2026-11-21 and later) or keep 56?
+Verdict (accepted with the owner's choice): **keep** the upgrade mechanism (the step chain, the typed refusal and
+the test that a schema bump has its step); **raise the floor to schema 106** now, which deletes every step below it and
+the older-save tests that use them (#3409); saves of schema 57 to 105 become "incompatible version". Owner rule,
+recorded as a decision: **until the package is released on GitHub, the game does not need to read old save versions**;
+the floor moves only at a point the owner names, and a floor move deletes the steps below it and their tests in one
+PR. Rejected: keeping the floor at 56 (the owner's choice: no reason to carry old versions before the release).
 
 ## Follow-up work
 
-Filed as blocked issues, each waiting on the owner's verdict on this page; an amended verdict amends its issue.
+Filed with the ADR; all are ready since the owner accepted it.
 
 | Decision | Issue | Work |
 |---|---|---|
@@ -147,4 +147,4 @@ Filed as blocked issues, each waiting on the owner's verdict on this page; an am
 | 2 | [#3406](https://github.com/Simarglok/arcanum-steamwoven/issues/3406) | delete the `MAP_MODE` ARC-RENDER-008 fallback |
 | 3 | [#3407](https://github.com/Simarglok/arcanum-steamwoven/issues/3407) | move pipeline-row registration into `image_archive.py`, last rescue plan, delete `image_rescue.py` |
 | 4 | [#3408](https://github.com/Simarglok/arcanum-steamwoven/issues/3408) | test-only methods: groups Q, M, R, D, W, E by the verdicts above (may split per group) |
-| 5 | [#3409](https://github.com/Simarglok/arcanum-steamwoven/issues/3409) | record the save-floor rule; move the floor if the owner says so |
+| 5 | [#3409](https://github.com/Simarglok/arcanum-steamwoven/issues/3409) | record the save-floor rule and raise the floor to schema 106 |
