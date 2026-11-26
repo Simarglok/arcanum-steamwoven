@@ -78,7 +78,9 @@ public partial class TerrainViewerApp
         // Shown before the row moves in: a focused button takes the focus again only where it is visible.
         _quantityRowHost.Visible = asking;
         _inventoryPanel?.HostQuantityRow(asking ? _quantityRowHost : null);
-        _quantityRowHost.Modulate = paneShown ? new Color(1, 1, 1, 0) : Colors.White;
+        // ARC-UI-3136: as the panel it left, the row is unseen in a player's run whose window could only draw the diagnostic look.
+        var unseen = paneShown || _inventoryPanel is { ArtMode: false } && !AreaFallbackLook.Allowed;
+        _quantityRowHost.Modulate = unseen ? new Color(1, 1, 1, 0) : Colors.White;
         _quantityRowHost.MouseFilter = paneShown ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Stop;
     }
 

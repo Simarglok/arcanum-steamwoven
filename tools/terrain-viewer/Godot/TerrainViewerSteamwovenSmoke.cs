@@ -588,7 +588,7 @@ public partial class TerrainViewerApp
             }
             await CaptureHudAsync("steamwoven-" + tag + "-" + name, frames);
             if (plan is not null) CheckBackdrop(tag, name, window.Family, plan, panel, require);
-            if (plan is not null && name is "inventory" or "loot" or "barter" or "identify" or "repair") await CheckWindowRowsAsync(tag, name, plan, panel, frames, waitPainted, require);
+            if (name is "inventory" or "loot" or "barter" or "identify" or "repair") await CheckWindowRowsAsync(tag, name, panel, frames, waitPainted, require);
             // ARC-UI-2694: the lens of the sheet and the map window is a close spot (a mouse-up in its square closes the window): a click on its centre, at the zone place, closes it.
             if (plan is not null && name is "sheet" or "map")
             {
@@ -608,19 +608,20 @@ public partial class TerrainViewerApp
     // ARC-UI-2615: with the debug switch on and a quantity asked while the bottom strip's pane is hidden, nothing of it touches the window: the frame keeps the zone place, the quantity row (inventory, loot) lies
     // inside the strip's message window, and the debug block (the key's note, the inventory's message) stands at the left above the bottom strip, outside the window where the margin holds it, taking no
     // pointer. The key (Ctrl+Shift+J) goes to the diagnostic window and back. The capture is steamwoven-VARIANT-WxH-WINDOW-rows.png.
-    private async Task CheckWindowRowsAsync(string tag, string name, SteamwovenHudPlan plan, AreaGameBarPanel panel, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
+    private async Task CheckWindowRowsAsync(string tag, string name, AreaGameBarPanel panel, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
     {
         Action<bool> debug = name switch { "barter" => on => _barterPanel!.DiagnosticSwitch = on, "identify" or "repair" => on => _servicePanel!.DiagnosticSwitch = on, _ => on => _inventoryPanel!.DiagnosticSwitch = on };
         var asks = name is "inventory" or "loot";
         AreaDebugBlock Block() => name switch { "barter" => _barterPanel!.DebugBlockForSelfTest, "identify" or "repair" => _servicePanel!.DebugBlockForSelfTest, _ => _inventoryPanel!.DebugBlockForSelfTest };
         bool Art() => name switch { "barter" => _barterPanel!.ArtMode, "identify" or "repair" => _servicePanel!.ArtMode, _ => _inventoryPanel!.ArtMode };
         AreaInventoryGridArea Frame() => name switch { "barter" => _barterPanel!.GridAreaForSelfTest, "identify" or "repair" => _servicePanel!.GridAreaForSelfTest, _ => _inventoryPanel!.GridAreaForSelfTest };
-        var place = ZoneBody(plan);
+        // The window's place with the debug switch off (in the layout passes the check above has held it to the zone).
+        var (place, size) = (Frame().GetGlobalRect().Position, Frame().FrameScale);
         void RequireFrame(string when)
         {
             var (origin, scale) = (Frame().GetGlobalRect().Position, Frame().FrameScale);
-            require(Math.Abs(scale - place.Scale) < 0.002 && Math.Abs(origin.X - place.X) <= 1.01 && Math.Abs(origin.Y - place.Y) <= 1.01,
-                $"[{tag}] the {name} window keeps the zone place {when}: ({origin.X:F1}, {origin.Y:F1}) scale {scale:F4}");
+            require(Math.Abs(scale - size) < 0.002 && origin.DistanceTo(place) <= 1.01f,
+                $"[{tag}] the {name} window keeps its place {when}: ({origin.X:F1}, {origin.Y:F1}) scale {scale:F4}");
         }
         debug(true);
         if (asks)
@@ -652,7 +653,7 @@ public partial class TerrainViewerApp
             var block = Block();
             var bounds = block.GetGlobalTransform() * new Rect2(Vector2.Zero, block.Size);
             var view = GetViewport().GetVisibleRect().Size;
-            var margin = place.X >= 96 * place.Scale;
+            var margin = place.X >= 96 * block.Scale.X;
             GD.Print($"ARC-UI-2615 steamwoven debug block [{tag}] {name} rect={bounds} windowLeft={place.X:F0} bottomStrip={view.Y - AreaGameBarPanel.BottomInset:F0} outside={margin}");
             require(block.IsVisibleInTree() && block.KeyTextForSelfTest.StartsWith(AreaDebugBlock.KeyName, StringComparison.Ordinal) && bounds.Position.X >= 0 && bounds.End.Y <= view.Y - AreaGameBarPanel.BottomInset + 1
                 && (!margin || bounds.End.X <= place.X + 1), $"[{tag}] the {name} debug block stands at the left above the bottom strip{(margin ? ", outside the window" : "")}: {bounds}");

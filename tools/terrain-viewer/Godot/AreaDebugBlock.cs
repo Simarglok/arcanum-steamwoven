@@ -70,6 +70,8 @@ public partial class AreaDebugBlock : VBoxContainer
     public override void _Input(InputEvent input)
     {
         if (input is not InputEventKey { Pressed: true, Echo: false, CtrlPressed: true, ShiftPressed: true, Keycode: ToggleKey } || _describe() is null) return;
+        // Not while a text field is typed in (a bug report over the window).
+        if (GetViewport().GuiGetFocusOwner() is LineEdit or TextEdit) return;
         GetViewport().SetInputAsHandled();
         _toggle();
     }
