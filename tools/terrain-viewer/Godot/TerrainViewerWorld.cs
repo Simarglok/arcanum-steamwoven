@@ -252,8 +252,18 @@ public partial class TerrainViewerApp
         InvertCameraY: _worldSettings.InvertCameraY, Modal: WorldModal || WorldUiFocus, AdvanceTime: advance)
     { WorldZoomEnabled = true, KeyboardCameraFixedSign = true, ScrollUnderModal = WorldModal && WorldScrollsGameView };
 
-    private void QuarantineWorld() => WorldObservation(QuarantineWorldObserved);
-    private void QuarantineWorldObserved()
+    private void QuarantineWorld() => WorldObservation(() => QuarantineWorldObserved(true));
+    /// <summary>ARC-RENDER-3362: the frame of a window without complete input (no focus): quarantine, then the frame's neutral advance, with one publication of the
+    /// selection (the advance's own, or one after it when it published none). Publishing in both built the whole view twice a frame.</summary>
+    private void QuarantineAndAdvanceWorld()
+    {
+        WorldObservation(() => QuarantineWorldObserved(false));
+        var published = _worldPublications;
+        AdvanceWorldGrid(default);
+        if (_worldPublications == published && IsWorldMode(_readyMode) && _readyActorPlan is not null) PublishWorldSelection();
+    }
+    private long _worldPublications;
+    private void QuarantineWorldObserved(bool publish)
     {
         TraceWorldInput("Quarantine");
         _gameMenuEscapeArmed = false; _optionsKeyArmed = false; // ARC-INPUT-1124: a held Escape (ARC-UI-2026: O) whose release another owner may take opens nothing later.
@@ -265,7 +275,7 @@ public partial class TerrainViewerApp
             _worldGridInput.Observe(session, WorldTime, ActorIntent.Neutral);
         _worldMenuAnalogDirection = 0;
         _dragging = false; _camera?.SafetyResetWorld();
-        if (IsWorldMode(_readyMode) && _readyActorPlan is not null) PublishWorldSelection();
+        if (publish && IsWorldMode(_readyMode) && _readyActorPlan is not null) PublishWorldSelection();
     }
     private void ResetWorldScene() => WorldObservation(() => RequestWorldLifecycle(false));
     private void RequestWorldLifecycle(bool reload)
@@ -494,7 +504,7 @@ public partial class TerrainViewerApp
     private void ProcessWorldObserved(double delta)
     {
         _worldAdapter.PaletteOpen = PaletteOpen;
-        if (!double.IsFinite(delta) || delta < 0) { QuarantineWorld(); AdvanceWorldGrid(default); return; }
+        if (!double.IsFinite(delta) || delta < 0) { QuarantineAndAdvanceWorld(); return; }
         if (WorldUiFocus != _worldUiFocused) { _worldUiFocused = WorldUiFocus; QuarantineWorld(); }
         var complete = _worldFocused;
         var controllers = new List<RawInputFrame>();
@@ -527,7 +537,7 @@ public partial class TerrainViewerApp
         if (!complete || !_worldFocused || !double.IsFinite(delta) || delta < 0 || !Valid(keyboard)
             || controllers.Any(raw => !Valid(raw))
             || (observedActive is int device && !controllers.Any(raw => raw.DeviceId == device)))
-        { QuarantineWorld(); AdvanceWorldGrid(default); RefreshReadyStatusPerFrame(delta); return; }
+        { QuarantineAndAdvanceWorld(); RefreshReadyStatusPerFrame(delta); return; }
         keyboard = WorldKeyboardRouting(keyboard);
         var context = WorldContext(delta, true);
         var priorActive = _worldReducer.ActiveDevice;
@@ -606,6 +616,7 @@ public partial class TerrainViewerApp
         if (_exiting) return;
         if (_readyActorPlan is null || (_readyArea is null && _readyDiagnosticPlan?.IsWorldDiagnostic != true)) return;
         if (_worldActor.Session is null) return;
+        _worldPublications++;
         var input = _worldActor.Placement();
         var actor = _readyActorPlan.Select(input);
         if (_readyArea is not null)

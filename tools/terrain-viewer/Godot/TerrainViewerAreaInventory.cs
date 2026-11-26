@@ -154,9 +154,25 @@ public partial class TerrainViewerApp
         // ARC-DEV-323: the window no longer clears a theft in progress, so a replaced session drops its "trying" note here.
         _pickPocketTrying = false;
         UnbindAreaCombat();
-        _inventoryHost = null; _inventoryHiddenStamp = null; _inventoryHidden = null;
+        _inventoryHost = null; _inventoryHiddenStamp = null; _inventoryHidden = null; _mapInventoryNow = null;
         _canvas?.SetAreaHidden(null);
         _inventoryStatus = "inventory: not loaded";
+    }
+
+    private (GameSessionOwner Session, long Revision, long Seed, int Map, SessionMapInventory View)? _mapInventoryNow;
+
+    /// <summary>
+    /// ARC-RENDER-3362: the shown map's inventory at the session's revision, made once for the frame's readers that are keyed on it (the hidden set and the ground bodies): every AI tick moves the
+    /// revision, and each of them made the whole map's lists again. A seed attach (a window move) changes the view without moving the revision, so its generation is part of the key. A map not attached yet is asked every time.
+    /// </summary>
+    private SessionMapInventory? AreaMapInventoryNow(GameSessionOwner session, int map)
+    {
+        var revision = session.Version.Revision;
+        var seed = session.QueryInventorySeedGeneration();
+        if (_mapInventoryNow is { } known && ReferenceEquals(known.Session, session) && known.Revision == revision && known.Seed == seed && known.Map == map) return known.View;
+        var view = session.QueryMapInventory(new SessionMapId(map));
+        _mapInventoryNow = view is null ? null : (session, revision, seed, map, view);
+        return view;
     }
 
     /// <summary>Per frame: the taken items of the current map are neither drawn nor picked.</summary>
@@ -169,11 +185,12 @@ public partial class TerrainViewerApp
         {
             _inventoryHiddenStamp = stamp;
             var shown = _inventoryHidden;
-            _inventoryHidden = _inventoryHost!.Taken(_areaSession, CurrentAreaMap);
+            var current = AreaMapInventoryNow(_areaSession, CurrentAreaMap);
+            _inventoryHidden = _inventoryHost!.Taken(_areaSession, CurrentAreaMap, current);
             // ARC-COMBAT-008: the objects an attack destroyed or switched off are not drawn either.
             if (ObjectTargets()?.Gone(_areaSession) is { Count: > 0 } gone) _inventoryHidden = _inventoryHidden.Concat(gone).ToHashSet();
             // ARC-WORLD-063: a map item swept into a junk pile is drawn as the pile, not where it lay.
-            if (_inventoryHost.Piled(_areaSession, CurrentAreaMap) is { Count: > 0 } piled) _inventoryHidden = _inventoryHidden.Concat(piled).ToHashSet();
+            if (_inventoryHost.Piled(CurrentAreaMap, current) is { Count: > 0 } piled) _inventoryHidden = _inventoryHidden.Concat(piled).ToHashSet();
             // ARC-RENDER-3126: the session's revision moves with every AI tick; an unchanged hidden set keeps its reference, so the canvas does not submit the view again for it.
             if (shown is not null && shown.SetEquals(_inventoryHidden)) _inventoryHidden = shown;
         }

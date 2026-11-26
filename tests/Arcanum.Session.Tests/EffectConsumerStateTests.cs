@@ -48,6 +48,19 @@ public sealed class EffectConsumerStateTests
     private static DamageResistances Defends(SessionCritterCombat npc) => npc.Combatant(new LifeStatus(10, 10, 10, 10, false, false, true), LifeState.Unharmed, CombatAnomalyProfile.Steamwoven).Resistances;
 
     [TestMethod]
+    public void The_hero_s_perception_asked_alone_is_the_attack_s()
+    {
+        // ARC-RENDER-3362: the AI's cheap question answers as the whole attack does, an effect on the stat included.
+        using var owner = Owner();
+        var plain = owner.QueryHeroAttack()!.Combatant.Perception;
+        Assert.AreEqual(plain, owner.QueryHeroPerception());
+        var sharp = new SessionEffectDefinition(156, [new(EffectAttributeKind.Stat, (int)CharacterStat.Perception, EffectChangeOperator.Add, 3)]);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddHeroEffect(owner.Version, sharp, EffectCause.Spell).Disposition);
+        Assert.AreEqual(plain + 3, owner.QueryHeroPerception());
+        Assert.AreEqual(owner.QueryHeroAttack()!.Combatant.Perception, owner.QueryHeroPerception());
+    }
+
+    [TestMethod]
     public void The_resistance_changes_of_the_hero_s_effects_reach_what_it_defends_with()
     {
         using var owner = Owner();

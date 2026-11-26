@@ -4178,7 +4178,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 // ARC-AI-2155, ARC-AI-2750 (the stat getter for stats 17 and 19, the PC included): the stored level and alignment with the hero's effect list laid over them.
                 Level = _session.QueryHeroScriptStat(GameSessionOwner.ScriptStatLevel) ?? 0, Alignment = _session.QueryHeroScriptStat(GameSessionOwner.ScriptStatAlignment) ?? 0,
                 HealthPercent = Percent(hero.Status),
-                Perception = _session.QueryHeroAttack()?.Combatant.Perception ?? 0,
+                Perception = _session.QueryHeroPerception() ?? 0,
                 // ARC-DEV-358: the spell flags the hero's spells wrote (Invisibility, Sense Hidden, Sanctuary).
                 InvisibleSpell = (SpellFlagsOf(Pc, 0) & InvisibleSpell) != 0, DetectsInvisible = (SpellFlagsOf(Pc, 0) & DetectsInvisibleSpell) != 0,
                 Enshrouded = (SpellFlagsOf(Pc, 0) & EnshroudedSpell) != 0,

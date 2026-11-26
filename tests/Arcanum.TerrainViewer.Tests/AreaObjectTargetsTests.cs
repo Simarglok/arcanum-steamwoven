@@ -176,6 +176,24 @@ public sealed class AreaObjectTargetsTests
     }
 
     [TestMethod]
+    public void TheWholeSetsFollowAWrittenObjectFlagAndAnotherSession()
+    {
+        // ARC-RENDER-3362: the sets are keyed on the objects' recorded state (map changes and written object flags), not on the session's version.
+        using var session = ConversationSessionFixture.Create();
+        var npc = AreaHeartbeatScriptTests.Row(1, 16, 781);
+        var statue = Row(5, 3);
+        var targets = Targets(statue, npc);
+        var busted = targets.Busted(session);
+        Assert.AreEqual(0, targets.Gone(session).Count);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WriteObjectFlag(session.Version, AreaHeartbeatScriptTests.Entity(1), SessionObjectFlagField.Object, 0x2, true).Disposition);
+        CollectionAssert.AreEqual(new[] { npc.Key }, targets.Gone(session).ToArray(), "an NPC switched off by a written flag");
+        Assert.AreEqual(0, targets.Busted(session).Count);
+        Assert.AreEqual(0, busted.Count);
+        using var other = ConversationSessionFixture.Create();
+        Assert.AreEqual(0, targets.Gone(other).Count, "another session's records");
+    }
+
+    [TestMethod]
     public void TheSceneriesAScriptToggledAreListedWithTheirStateForTheirLights()
     {
         // ARC-SCRIPT-2585 (ledger OT10): only a scenery with a record of a toggle is listed (true off, false on over a data that stores it off); a scenery nobody toggled keeps the lights the map data loaded.

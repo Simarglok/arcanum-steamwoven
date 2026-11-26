@@ -143,7 +143,7 @@ public sealed class AreaObjectTargets
             : new(item, row, DamageableObjectKind.Item, null, null, null, "values outside the durability bounds");
     }
 
-    private (GameSessionVersion Version, IReadOnlySet<AreaObjectKey> Keys)? _gone;
+    private (SessionObjectStateStamp Stamp, IReadOnlySet<AreaObjectKey> Keys)? _gone;
 
     /// <summary>
     /// ARC-SCRIPT-2324 (ledger OT8): whether a scenery's off flag (0x2) is set now: the map data's bit, or the record of a script's toggle state (56) over it
@@ -152,23 +152,23 @@ public sealed class AreaObjectTargets
     private bool SceneryOff(GameSessionOwner session, (AreaObjectRecord Row, string Entity, DamageableObjectKind Kind) found) =>
         found.Kind == DamageableObjectKind.Scenery && session.QueryObjectOff(_map, found.Entity, _dataOff.Contains(found.Row.Key));
 
-    private (GameSessionVersion Version, IReadOnlyDictionary<AreaObjectKey, bool> States)? _sceneryOff;
+    private (SessionObjectStateStamp Stamp, IReadOnlyDictionary<AreaObjectKey, bool> States)? _sceneryOff;
 
     /// <summary>
     /// ARC-SCRIPT-2585 (ledger OT10): the sceneries of the shown map that a script's toggle state (56) changed, by their key: true for off, false for on over a data that stores it off. The lights of these sceneries follow the state
-    /// (<see cref="AreaLocalLighting.WithObjectsOff"/>); a scenery no script toggled is not listed, so its lights stand as the map data loaded them. The same dictionary is returned while the session's version is unchanged, and
+    /// (<see cref="AreaLocalLighting.WithObjectsOff"/>); a scenery no script toggled is not listed, so its lights stand as the map data loaded them. The same dictionary is returned while the objects' recorded state is unchanged, and
     /// across revisions that change nothing here.
     /// </summary>
     public IReadOnlyDictionary<AreaObjectKey, bool> SceneryOffStates(GameSessionOwner session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        var version = session.Version;
-        if (_sceneryOff is { } known && known.Version == version) return known.States;
+        var stamp = session.ObjectStateStamp;
+        if (_sceneryOff is { } known && known.Stamp == stamp) return known.States;
         var states = new Dictionary<AreaObjectKey, bool>();
         foreach (var pair in _objects)
             if (pair.Value.Kind == DamageableObjectKind.Scenery && session.QueryObjectOffRecord(_map, pair.Value.Entity) is { } off) states[pair.Key] = off;
         IReadOnlyDictionary<AreaObjectKey, bool> result = _sceneryOff is { } previous && previous.States.Count == states.Count && !states.Except(previous.States).Any() ? previous.States : states;
-        _sceneryOff = (version, result);
+        _sceneryOff = (stamp, result);
         return result;
     }
 
@@ -178,18 +178,18 @@ public sealed class AreaObjectTargets
 
     /// <summary>The objects the session destroyed or switched off (since ARC-WORLD-114 also the NPCs a script switched off, since ARC-SCRIPT-052
     /// those a script destroyed): the view no
-    /// longer draws them, and since ARC-WORLD-065 they no longer block a step (the live overlay moves their T0 records). The same set is returned while the session's version is
+    /// longer draws them, and since ARC-WORLD-065 they no longer block a step (the live overlay moves their T0 records). The same set is returned while the objects' recorded state is
     /// unchanged.</summary>
     public IReadOnlySet<AreaObjectKey> Gone(GameSessionOwner session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        var version = session.Version;
-        if (_gone is { } known && known.Version == version) return known.Keys;
+        var stamp = session.ObjectStateStamp;
+        if (_gone is { } known && known.Stamp == stamp) return known.Keys;
         var keys = _objects.Where(pair => ObjectGone(session, pair.Value)).Select(pair => pair.Key)
             .Concat(_npcs.Where(pair => NpcGone(session, pair.Value.Entity, pair.Value.Flags)).Select(pair => pair.Key)).ToHashSet();
         // An unchanged set keeps its reference, so overlays cached on it stay valid across unrelated revisions.
         IReadOnlySet<AreaObjectKey> result = _gone is { } previous && previous.Keys.SetEquals(keys) ? previous.Keys : keys;
-        _gone = (version, result);
+        _gone = (stamp, result);
         return result;
     }
 
@@ -251,12 +251,19 @@ public sealed class AreaObjectTargets
         };
     }
 
-    /// <summary>ARC-RENDER-033: the scenery and traps the session busted (they take their destroyed ART).</summary>
+    private (SessionObjectStateStamp Stamp, IReadOnlyList<AreaObjectKey> Keys)? _busted;
+
+    /// <summary>ARC-RENDER-033: the scenery and traps the session busted (they take their destroyed ART). The same list is returned while the objects' recorded state is
+    /// unchanged.</summary>
     public IReadOnlyList<AreaObjectKey> Busted(GameSessionOwner session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        return _objects.Where(pair => pair.Value.Kind is DamageableObjectKind.Scenery or DamageableObjectKind.Trap
-            && session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) == SessionObjectCondition.Busted).Select(pair => pair.Key).ToArray();
+        var stamp = session.ObjectStateStamp;
+        if (_busted is { } known && known.Stamp == stamp) return known.Keys;
+        var keys = Array.AsReadOnly(_objects.Where(pair => pair.Value.Kind is DamageableObjectKind.Scenery or DamageableObjectKind.Trap
+            && session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) == SessionObjectCondition.Busted).Select(pair => pair.Key).ToArray());
+        _busted = (stamp, keys);
+        return keys;
     }
 
     /// <summary>One line for the status bar about an object attack (no original text).</summary>

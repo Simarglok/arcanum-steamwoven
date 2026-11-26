@@ -371,7 +371,7 @@ public partial class TerrainViewerApp
     /// <summary>ARC-COMBAT-005: a dead speaker (its map data or the session) is looted, not talked to, as the original's click on a
     /// corpse that was not spoken with by spell.</summary>
     private bool SpeakerDead(AreaSpeaker speaker) => InventoryActive
-        && _inventoryHost!.Target(_areaSession!, CurrentAreaMap, speaker.Row.Key) is { Kind: AreaInventoryTargetKind.DeadNpc };
+        && _inventoryHost!.IsDeadNpc(_areaSession!, CurrentAreaMap, speaker.Row.Key);
 
     /// <summary>ARC-DEV-304 (GT216, CanSpeakRules): whether a dead speaker may be talked to now: it carries the spoken-with-dead spell flag (spell 56) over the stored fields.</summary>
     private bool SpeakerSpokenWith(AreaSpeaker speaker) =>

@@ -117,6 +117,9 @@ internal sealed class SessionMapChanges
     /// <summary>Every recorded change, per-map and object fields together (the budget of the whole session).</summary>
     internal int Total { get; private set; }
 
+    /// <summary>ARC-RENDER-3362: counts the writes and removals; while it stands, every read of the records answers as before.</summary>
+    internal long Writes { get; private set; }
+
     /// <summary>The recorded value of the key on this map, or null at the loaded baseline.</summary>
     internal long? Get(SessionMapId map, MapChangeKey key)
     {
@@ -130,6 +133,7 @@ internal sealed class SessionMapChanges
     /// <summary>Records the key's value. A new key counts one; a routed key whose record sits on another map moves it here; the caller checked the budgets.</summary>
     internal void Set(SessionMapId map, MapChangeKey key, long value)
     {
+        Writes++;
         if (ObjectStateVocabulary.Static(key))
         {
             if (_statics.TryAdd((map, key.Entity!, key.Property), value)) { Total++; Count(_fieldCounts, map, 1); }
@@ -157,6 +161,7 @@ internal sealed class SessionMapChanges
             if (!_statics.Remove((map, key.Entity!, key.Property))) return false;
             Count(_fieldCounts, map, -1);
             Total--;
+            Writes++;
             return true;
         }
         if (ObjectStateVocabulary.Mobile(key))
@@ -165,10 +170,12 @@ internal sealed class SessionMapChanges
             _fields.Remove((key.Entity!, key.Property));
             Count(_fieldCounts, old.Map, -1);
             Total--;
+            Writes++;
             return true;
         }
         if (!_maps.TryGetValue(map, out var changes) || !changes.Remove(key)) return false;
         Total--;
+        Writes++;
         if (changes.Count == 0) _maps.Remove(map);
         return true;
     }

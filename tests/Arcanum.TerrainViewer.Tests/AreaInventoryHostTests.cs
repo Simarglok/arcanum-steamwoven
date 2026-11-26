@@ -70,6 +70,24 @@ public sealed class AreaInventoryHostTests
     }
 
     [TestMethod]
+    public void TheDeadNpcQuestionAgreesWithTheTarget()
+    {
+        // ARC-RENDER-3362: a frame asks it of every speaker, so it reads the one holder; it answers as Target does.
+        using var session = ConversationSessionFixture.Create();
+        var host = new AreaInventoryHost([Map()]);
+        Assert.IsFalse(host.IsDeadNpc(session, 1, Key(3)), "no seed attached");
+        Assert.AreEqual(GameSessionFailure.None, host.Attach(session));
+        for (var index = 0; index <= 8; index++)
+            Assert.AreEqual(host.Target(session, 1, Key(index))?.Kind == AreaInventoryTargetKind.DeadNpc, host.IsDeadNpc(session, 1, Key(index)), $"{index}");
+        Assert.IsTrue(host.IsDeadNpc(session, 1, Key(3)));
+        Assert.IsFalse(host.IsDeadNpc(session, 79, Key(3)), "a map without a seed");
+        // The sets made from a view the caller made are the sets made without one.
+        var current = session.QueryMapInventory(new(1));
+        CollectionAssert.AreEquivalent(host.Taken(session, 1).ToArray(), host.Taken(session, 1, current).ToArray());
+        CollectionAssert.AreEquivalent(host.Piled(session, 1).ToArray(), host.Piled(1, current).ToArray());
+    }
+
+    [TestMethod]
     public void TargetsAreGroundItemsDeadNpcsAndContainers()
     {
         using var session = ConversationSessionFixture.Create();

@@ -404,6 +404,20 @@ public sealed partial class GameSessionOwner : IDisposable
         return Changed();
     }
 
+    /// <summary>
+    /// ARC-RENDER-3362: what the recorded state of the objects is made of: the map changes and the written object flags. While two stamps are equal, <see cref="QueryMapChange"/>,
+    /// <see cref="QueryObjectChange"/>, <see cref="QueryObjectCondition"/>, <see cref="QueryObjectOff"/>, <see cref="QueryObjectOffRecord"/> and <see cref="QueryObjectFlags"/> answer as
+    /// before, so a host keeps what it made of them across revisions that touch neither (every AI tick moves <see cref="Version"/>).
+    /// </summary>
+    public SessionObjectStateStamp ObjectStateStamp
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return new(_maps, _maps.Writes, _objectFlags);
+        }
+    }
+
     /// <summary>Current value of one map-local change, or null when the map is at its loaded baseline.</summary>
     public long? QueryMapChange(SessionMapId map, MapChangeKey key)
     {
