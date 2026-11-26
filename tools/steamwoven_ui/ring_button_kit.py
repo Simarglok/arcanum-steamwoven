@@ -382,12 +382,12 @@ def cell_colour(cells: dict[tuple[int, int], tuple[int, int, int]], x: int, y: i
 
 
 def sign_mask(frame: Image, circle: Circle, metric, reach: float) -> dict[tuple[int, int], float]:
-    """The generated sign of one disc: frame pixel -> how much of it is sign."""
-    scale = frame.h / circle.height
+    """The generated sign of one disc: frame pixel -> how much of it is sign. A frame at the master size is not quite equally scaled in the two directions."""
+    across, down = frame.w / circle.width, frame.h / circle.height
     mask = {}
     for y in range(frame.h):
-        for x in range(max(0, int((circle.cx - circle.radius) * scale)), min(frame.w, int((circle.cx + circle.radius) * scale) + 1)):
-            if share_in(circle, (x + 0.5) / scale, (y + 0.5) / scale) <= reach:
+        for x in range(max(0, int((circle.cx - circle.radius) * across)), min(frame.w, int((circle.cx + circle.radius) * across) + 1)):
+            if share_in(circle, (x + 0.5) / across, (y + 0.5) / down) <= reach:
                 value = metric(*frame.data[(y * frame.w + x) * 4:(y * frame.w + x) * 4 + 3])
                 if value > 0:
                     mask[(x, y)] = value
@@ -431,29 +431,45 @@ def blend(frame: Image, x: int, y: int, colour: tuple[int, int, int], share: flo
 
 
 def celled(frame: Image, original: Image, b: Button) -> Image:
-    """A generated frame with its burning sign filled by the original's cells as even squares: the outline is the generated one; a well's outline is moved and scaled onto the box of the original's cells (the generated arrow is larger)."""
+    """A generated button frame with its burning sign filled by the original's cells as even squares; the outline is the generated one."""
     test, metric = SIGNS[b.name]
-    reach = SIGN_REACH[b.kind]
     out = Image(frame.w, frame.h, bytearray(frame.data))
     for circle in b.circles:
         scale = frame.h / circle.height
-        cells = sign_cells(original, circle, test, reach)
-        if SIGNS[b.name] is RED_SIGN:
-            cells = without_pale_rim(cells)
-        mask = sign_mask(frame, circle, metric, reach)
-        if b.kind == "picture":
-            sx0, sy0, sx1, sy1 = box_of([k for k, v in mask.items() if v >= 0.5])
-            tx0, ty0, tx1, ty1 = (v * scale for v in box_of(cells))
-            clear_lens(out, circle, mask)
-            placed = {}
-            for y in range(int(ty0), int(math.ceil(ty1))):
-                for x in range(int(tx0), int(math.ceil(tx1))):
-                    source = (int(sx0 + (x + 0.5 - tx0) * (sx1 - sx0) / (tx1 - tx0)), int(sy0 + (y + 0.5 - ty0) * (sy1 - sy0) / (ty1 - ty0)))
-                    if mask.get(source, 0) > 0:
-                        placed[(x, y)] = mask[source]
-            mask = placed
-        for (x, y), value in mask.items():
+        cells = without_pale_rim(sign_cells(original, circle, test, SIGN_REACH[b.kind]))
+        for (x, y), value in sign_mask(frame, circle, metric, SIGN_REACH[b.kind]).items():
             blend(out, x, y, cell_colour(cells, int(x // scale), int(y // scale)), value)
+    return out
+
+
+def solid(mask: dict[tuple[int, int], float]) -> dict[tuple[int, int], float]:
+    """The mask with a full inside: a pixel that is sign on all four sides shows the cell's own colour, whatever shading the generator gave it; only the outline stays soft."""
+    inside = lambda k: mask.get(k, 0) >= 0.5
+    return {(x, y): 1.0 if all(map(inside, ((x, y), (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))) else v for (x, y), v in mask.items()}
+
+
+def celled_well(frame: Image, original: Image, b: Button, master: tuple[int, int]) -> Image:
+    """A well's part with its burning arrows: the generated arrow is painted out of the lens, and the original's cells are laid at the master size, inside the generated
+    outline moved and scaled onto the box of those cells (the generated arrow is larger). The cells are never resampled, so each master pixel inside holds a colour of the
+    original (owner 2026-11-26)."""
+    test, metric = SIGNS[b.name]
+    reach = SIGN_REACH[b.kind]
+    cleared = Image(frame.w, frame.h, bytearray(frame.data))
+    for circle in b.circles:
+        clear_lens(cleared, circle, sign_mask(frame, circle, metric, reach))
+    out, outline = cut(cleared, b.circles, master), cut(frame, b.circles, master)
+    for circle in b.circles:
+        across, down = master[0] / circle.width, master[1] / circle.height
+        cells = sign_cells(original, circle, test, reach)
+        mask = solid(sign_mask(outline, circle, metric, reach))
+        sx0, sy0, sx1, sy1 = box_of([k for k, v in mask.items() if v >= 0.5])
+        x0, y0, x1, y1 = box_of(cells)
+        tx0, ty0, tx1, ty1 = x0 * across, y0 * down, x1 * across, y1 * down
+        for y in range(int(ty0), int(math.ceil(ty1))):
+            for x in range(int(tx0), int(math.ceil(tx1))):
+                source = (math.floor(sx0 + (x + 0.5 - tx0) * (sx1 - sx0) / (tx1 - tx0)), math.floor(sy0 + (y + 0.5 - ty0) * (sy1 - sy0) / (ty1 - ty0)))
+                if mask.get(source, 0) > 0:
+                    blend(out, x, y, cell_colour(cells, int((x + 0.5) // across), int((y + 0.5) // down)), mask[source])
     return out
 
 
@@ -660,13 +676,18 @@ def button_parts(local_root: Path, frames: Path, b: Button, dome: str, source: s
     def frame_of(state: str) -> Image:
         if b != DOME and source == "codex":
             frame = pngio.read(codex_frame(local_root, b, state))
-            if uses_cells(b, state):
+            if uses_cells(b, state) and (b.kind == "plate" or b.name == LAMP):    # a well's arrows are laid on the cut part
                 original = original_frame(frames, b, b.frames[state])
                 frame = latticed(frame, original, b) if b.name == LAMP else celled(frame, original, b)
             return toned(frame, b.circles[0], *tone) if tone else frame
         return pack_frame(local, b, state)[0]
 
-    parts = {ident_of(b, state): cut(frame_of(state), b.circles, master) for state in b.frames}
+    def part_of(state: str) -> Image:
+        if b.kind == "picture" and source == "codex" and uses_cells(b, state) and b.name != LAMP:
+            return celled_well(frame_of(state), original_frame(frames, b, b.frames[state]), b, master)
+        return cut(frame_of(state), b.circles, master)
+
+    parts = {ident_of(b, state): part_of(state) for state in b.frames}
     if b.kind == "plate":
         parts[f"glyph.{b.name}"] = school_kit.empty_layer(master)
     return {ident: parts[ident] for ident in part_ids(b)}

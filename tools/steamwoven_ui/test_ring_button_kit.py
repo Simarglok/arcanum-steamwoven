@@ -195,18 +195,30 @@ class BrassTests(unittest.TestCase):
 
 
 class CellTests(unittest.TestCase):
-    def test_a_wells_sign_takes_the_originals_cells_and_share(self):
+    def test_a_wells_sign_takes_the_originals_cells_unresampled_and_their_share(self):
         b = rk.INDICATORS[1]
-        scale = rk.CODEX_FRAME_PX
         original = signed(b, 1, 3.0, alpha=0, checker=True)
-        out = rk.celled(signed(b, scale, 5.0), original, b)
+        master = rk.master_of(b)
+        out = rk.celled_well(signed(b, rk.CODEX_FRAME_PX, 5.0), original, b, master)
+        self.assertEqual((out.w, out.h), master)
         for circle in b.circles:
+            across, down = master[0] / circle.width, master[1] / circle.height
             cells = rk.sign_cells(original, circle, rk.SIGNS[b.name][0], rk.SIGN_REACH[b.kind])
             x0, y0, x1, y1 = rk.box_of(cells)
-            for cx, cy in ((x0, y0), (x0 + 1, y0), (x1 - 1, y1 - 1)):
-                self.assertEqual(at(out, int((cx + 0.5) * scale), int((cy + 0.5) * scale))[:3], cells[(cx, cy)], (cx, cy))
-            self.assertNotEqual(cells[(x0, y0)], cells[(x0 + 1, y0)])                      # the dither survives
-            self.assertEqual(at(out, int((x0 - 1.0) * scale), int(circle.cy * scale))[:3], (10, 10, 4))   # the larger generated sign is painted out
+            # every master pixel one master pixel inside the cells' box holds its own cell's colour, none a blend of two: the dither survives with both colours
+            seen = set()
+            for y in range(int((y0 + 1) * down) + 1, int((y1 - 1) * down) - 1):
+                for x in range(int((x0 + 1) * across) + 1, int((x1 - 1) * across) - 1):
+                    colour = rk.cell_colour(cells, int((x + 0.5) // across), int((y + 0.5) // down))
+                    self.assertEqual(at(out, x, y)[:3], colour, (x, y))
+                    seen.add(colour)
+            self.assertEqual(seen, set(cells.values()))
+            self.assertEqual(at(out, int((x0 - 1.0) * across), int(circle.cy * down))[:3], (10, 10, 4))   # the larger generated sign is painted out
+
+    def test_the_inside_of_a_sign_is_full_and_its_outline_stays_soft(self):
+        mask = {(x, y): 0.6 for x in range(3) for y in range(3)}
+        out = rk.solid(mask)
+        self.assertEqual((out[(1, 1)], out[(0, 0)], out[(1, 0)]), (1.0, 0.6, 0.6))
 
     def test_a_buttons_sign_keeps_the_generated_outline(self):
         b = rk.RINGED[1]
