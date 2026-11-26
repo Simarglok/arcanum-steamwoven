@@ -605,15 +605,17 @@ public partial class TerrainViewerApp
         }
     }
 
-    // ARC-UI-2615: with the debug switch on and a quantity asked while the bottom strip's pane is hidden, nothing of it touches the window: the frame keeps the zone place, the quantity row (inventory, loot) lies
-    // inside the strip's message window, and the debug block (the key's note, the inventory's message) stands at the left above the bottom strip, outside the window where the margin holds it, taking no
-    // pointer. The key (Ctrl+Shift+J) goes to the diagnostic window and back. The capture is steamwoven-VARIANT-WxH-WINDOW-rows.png.
+    // ARC-UI-2615: with the debug switch on nothing of it touches the original look: the frame keeps its place and no debug block shows. A quantity asked there (inventory, loot) is the original's pane on the
+    // bottom strip with the count 0, the diagnostic row unseen under it; with the pane hidden (neither a pack frame nor the Legacy art) that row lies inside the strip's message window and keeps the focus. A
+    // controller prompt line lies inside the message window too. The key (Ctrl+Shift+J) goes to the diagnostic view, where the debug block stands beside the window (or at the top left with the window below it),
+    // takes no pointer and names the key in a test run only, and back. Captures: …-WINDOW-rows.png (the original look), …-WINDOW-fallback.png and …-WINDOW-diag.png.
     private async Task CheckWindowRowsAsync(string tag, string name, AreaGameBarPanel panel, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
     {
         Action<bool> debug = name switch { "barter" => on => _barterPanel!.DiagnosticSwitch = on, "identify" or "repair" => on => _servicePanel!.DiagnosticSwitch = on, _ => on => _inventoryPanel!.DiagnosticSwitch = on };
         var asks = name is "inventory" or "loot";
         AreaDebugBlock Block() => name switch { "barter" => _barterPanel!.DebugBlockForSelfTest, "identify" or "repair" => _servicePanel!.DebugBlockForSelfTest, _ => _inventoryPanel!.DebugBlockForSelfTest };
         bool Art() => name switch { "barter" => _barterPanel!.ArtMode, "identify" or "repair" => _servicePanel!.ArtMode, _ => _inventoryPanel!.ArtMode };
+        Rect2 Window() => name switch { "barter" => _barterPanel!.WindowRectForSelfTest, "identify" or "repair" => _servicePanel!.WindowRectForSelfTest, _ => _inventoryPanel!.WindowRectForSelfTest };
         AreaInventoryGridArea Frame() => name switch { "barter" => _barterPanel!.GridAreaForSelfTest, "identify" or "repair" => _servicePanel!.GridAreaForSelfTest, _ => _inventoryPanel!.GridAreaForSelfTest };
         // The window's place with the debug switch off (in the layout passes the check above has held it to the zone).
         var (place, size) = (Frame().GetGlobalRect().Position, Frame().FrameScale);
@@ -623,56 +625,84 @@ public partial class TerrainViewerApp
             require(Math.Abs(scale - size) < 0.002 && origin.DistanceTo(place) <= 1.01f,
                 $"[{tag}] the {name} window keeps its place {when}: ({origin.X:F1}, {origin.Y:F1}) scale {scale:F4}");
         }
-        debug(true);
-        if (asks)
+        Rect2 MessageWindow()
         {
-            _quantityPaneHiddenForCapture = true;
-            _inventoryPanel!.AskQuantity("Arrows", 120, "took 1 item(s)");
+            var strip = panel.ScreenFrame(GetViewport().GetVisibleRect().Size);
+            var (x, y, width, height) = AreaMessageLayout.Window;
+            return new Rect2(strip.Origin + new Vector2(x, y) * strip.Scale, new Vector2(width, height) * strip.Scale).Grow(1);
         }
+        async Task Key()
+        {
+            foreach (var pressed in new[] { true, false })
+                GetViewport().PushInput(new InputEventKey { Keycode = AreaDebugBlock.ToggleKey, CtrlPressed = true, ShiftPressed = true, Pressed = pressed });
+            await frames(4);
+        }
+        debug(true);
+        // The inventory window asks by the app's own path (a drop of the hero's gold pile), so the pane shows the kind's icon; the loot window asks the panel alone.
+        var coins = _areaSession!.QueryGold();
+        if (name == "inventory") DropGoldToGround("Gold");
+        else if (asks) _inventoryPanel!.AskQuantity("Arrows", 120);
         try
         {
             await frames(4);
             await waitPainted();
             await CaptureHudAsync("steamwoven-" + tag + "-" + name + "-rows", frames);
-            RequireFrame("with the debug rows");
+            RequireFrame("with the debug switch on");
+            require(!Block().IsVisibleInTree(), $"[{tag}] the {name} window's original look has no debug block");
+            if (panel.Visible && _promptPanel is { Visible: true } prompt)
+                require(MessageWindow().Encloses(prompt.GetGlobalRect()), $"[{tag}] the controller line lies inside the message window {MessageWindow()}: {prompt.GetGlobalRect()}");
             if (asks)
             {
-                var strip = panel.ScreenFrame(GetViewport().GetVisibleRect().Size);
-                var (x, y, width, height) = AreaMessageLayout.Window;
-                var window = new Rect2(strip.Origin + new Vector2(x, y) * strip.Scale, new Vector2(width, height) * strip.Scale).Grow(1);
-                foreach (var button in _inventoryPanel!.QuantityButtonsForSelfTest.Cast<Control>().Append(_inventoryPanel.QuantityRowForSelfTest))
+                require(QuantityPaneForSelfTest is not null && _inventoryPanel!.Quantity is { Count: 0 } && _quantityRowHost is { Modulate.A: 0 },
+                    $"[{tag}] the {name} quantity is asked by the original's pane at 0, the diagnostic row unseen (pane {QuantityPaneForSelfTest is not null}, count {_inventoryPanel!.Quantity?.Count})");
+                _quantityPaneHiddenForCapture = true;
+                await frames(4);
+                await CaptureHudAsync("steamwoven-" + tag + "-" + name + "-fallback", frames);
+                var window = MessageWindow();
+                foreach (var control in _inventoryPanel!.QuantityButtonsForSelfTest.Cast<Control>().Append(_inventoryPanel.QuantityRowForSelfTest))
                 {
-                    var rect = button.GetGlobalTransform() * new Rect2(Vector2.Zero, button.Size);
-                    require(button.IsVisibleInTree() && window.Encloses(rect), $"[{tag}] the {name} quantity row lies in the bottom strip's message window {window}: {button.Name} {rect}");
+                    var rect = control.GetGlobalTransform() * new Rect2(Vector2.Zero, control.Size);
+                    require(control.IsVisibleInTree() && window.Encloses(rect), $"[{tag}] the {name} diagnostic quantity row lies in the message window {window}: {control.Name} {rect}");
                 }
                 require(_inventoryPanel.QuantityButtonsForSelfTest[0].HasFocus(), $"[{tag}] the {name} quantity window's first button keeps the focus on the strip");
-                _inventoryPanel.CancelQuantity();
+                _quantityPaneHiddenForCapture = false;
+                // Accept with the count 0 closes the question and moves nothing, as the original's (0x578B80 returns before any move, ledger QW5).
+                if (name == "inventory") _inventoryPanel.AcceptQuantity();
+                else _inventoryPanel.CancelQuantity();
                 await frames(2);
-                require(!_inventoryPanel.QuantityRowForSelfTest.IsVisibleInTree(), $"[{tag}] the {name} quantity row is gone with the question");
+                require(_inventoryPanel.Quantity is null && !_inventoryPanel.QuantityRowForSelfTest.IsVisibleInTree() && _areaSession!.QueryGold() == coins,
+                    $"[{tag}] the {name} question is gone with its row and nothing moved (gold {_areaSession!.QueryGold()} of {coins})");
+                // The message the diagnostic view's block shows below.
+                if (_inventoryPanel.CurrentView is { } view) _inventoryPanel.Render(view, "took 1 item(s)");
             }
+            await Key();
+            require(!Art(), $"[{tag}] {AreaDebugBlock.KeyName} changes the {name} window to the diagnostic view");
             var block = Block();
+            require(block.IsVisibleInTree() && block.KeyTextForSelfTest.StartsWith(AreaDebugBlock.KeyName, StringComparison.Ordinal), $"[{tag}] the {name} diagnostic view has the debug block with the key's note in a test run");
+            await CaptureHudAsync("steamwoven-" + tag + "-" + name + "-diag", frames);
             var bounds = block.GetGlobalTransform() * new Rect2(Vector2.Zero, block.Size);
-            var view = GetViewport().GetVisibleRect().Size;
-            var margin = place.X >= 96 * block.Scale.X;
-            GD.Print($"ARC-UI-2615 steamwoven debug block [{tag}] {name} rect={bounds} windowLeft={place.X:F0} bottomStrip={view.Y - AreaGameBarPanel.BottomInset:F0} outside={margin}");
-            require(block.IsVisibleInTree() && block.KeyTextForSelfTest.StartsWith(AreaDebugBlock.KeyName, StringComparison.Ordinal) && bounds.Position.X >= 0 && bounds.End.Y <= view.Y - AreaGameBarPanel.BottomInset + 1
-                && (!margin || bounds.End.X <= place.X + 1), $"[{tag}] the {name} debug block stands at the left above the bottom strip{(margin ? ", outside the window" : "")}: {bounds}");
+            var visible = GetViewport().GetVisibleRect().Size;
+            var beside = block.TopReserve == 0;
+            GD.Print($"ARC-UI-2615 steamwoven debug block [{tag}] {name} rect={bounds} window={Window()} beside={beside}");
+            require(!bounds.Intersects(Window()) && bounds.Position.X >= 0 && bounds.Position.Y >= AreaGameBarPanel.TopInset && bounds.End.Y <= visible.Y - AreaGameBarPanel.BottomInset + 1
+                && (beside ? bounds.End.X <= Window().Position.X + 1 : bounds.Position.Y <= AreaGameBarPanel.TopInset + 8 * block.Scale.Y),
+                $"[{tag}] the {name} debug block stands between the strips off the window ({(beside ? "beside it" : "at the top left")}): {bounds} window {Window()}");
             require(new Control[] { block }.Concat(block.GetChildren().OfType<Control>()).All(control => control.MouseFilter == Control.MouseFilterEnum.Ignore), $"[{tag}] the {name} debug block takes no pointer");
-            foreach (var art in new[] { false, true })
-            {
-                foreach (var pressed in new[] { true, false })
-                    GetViewport().PushInput(new InputEventKey { Keycode = AreaDebugBlock.ToggleKey, CtrlPressed = true, ShiftPressed = true, Pressed = pressed });
-                await frames(3);
-                require(Art() == art, $"[{tag}] {AreaDebugBlock.KeyName} changes the {name} window to the {(art ? "original" : "diagnostic")} look");
-            }
+            AreaDebugBlock.KeyHint = false;
+            await frames(2);
+            require(block.KeyTextForSelfTest.Length == 0 && block.IsVisibleInTree() == block.MessageTextForSelfTest.Length > 0, $"[{tag}] the {name} player's block names no key and shows only with a message");
+            AreaDebugBlock.KeyHint = true;
+            await Key();
+            require(Art() && !Block().IsVisibleInTree(), $"[{tag}] {AreaDebugBlock.KeyName} changes the {name} window back to the original look");
             RequireFrame("after the key");
         }
         finally
         {
+            AreaDebugBlock.KeyHint = true;
             if (asks)
             {
-                _inventoryPanel!.CancelQuantity();
                 _quantityPaneHiddenForCapture = false;
+                _inventoryPanel!.CancelQuantity();
             }
             debug(false);
             await frames(2);

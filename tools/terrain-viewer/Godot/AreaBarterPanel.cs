@@ -101,6 +101,7 @@ public partial class AreaBarterPanel : CanvasLayer
     internal Button LookToggleForSelfTest => _lookToggle;
     private AreaDebugBlock _debugBlock = null!;
     internal AreaDebugBlock DebugBlockForSelfTest => _debugBlock;
+    internal Rect2 WindowRectForSelfTest => _panel.GetGlobalRect();
 
     /// <summary>ARC-UI-2764: the switch to the diagnostic view is a debug and self-test path (ARC-UI-2615: the debug block's key outside the window); false (the default) gives none in play.</summary>
     public bool DiagnosticSwitch
@@ -225,8 +226,7 @@ public partial class AreaBarterPanel : CanvasLayer
         if (View is { } view) Render(view, _message.Text, _art);
     }
 
-    private AreaDebugNote? DescribeDebug() => IsOpen && LookSwitchable
-        ? new($"{AreaDebugBlock.KeyName}: {(ArtMode ? "diagnostic view" : "original look")}", null, _panel.Position.X) : null;
+    private AreaDebugNote? DescribeDebug() => IsOpen && LookSwitchable ? new(!ArtMode, _message.Text, _panel.Position.X) : null;
 
     /// <summary>ARC-UI-064: the original look hides the diagnostic lists, buttons and texts (the frame's drags trade, its quote line shows
     /// the messages); ARC-UI-2615: the debug block's key changes to the diagnostic window and back.</summary>
@@ -243,6 +243,8 @@ public partial class AreaBarterPanel : CanvasLayer
         _close.Visible = !art && !_docked;
         _lookToggle.Visible = !art && LookSwitchable;
         _lookToggle.Text = "Original look";
+        // ARC-UI-2615: in the debug mode's diagnostic view the debug block shows the message.
+        if (LookSwitchable) _message.Visible = false;
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
         // ARC-UI-3136: the diagnostic look (Godot's default font) is developer-only; the original look carries the art grid and stays.
         _panel.Modulate = art || AreaFallbackLook.Allowed ? Colors.White : new Color(1, 1, 1, 0);
@@ -354,11 +356,13 @@ public partial class AreaBarterPanel : CanvasLayer
         var size = GetViewport().GetVisibleRect().Size;
         var width = Math.Max(1, Math.Min(1040, size.X - 48));
         var reserve = _docked ? DockReserve : 0;
-        _scroll.CustomMinimumSize = new(0, Math.Max(40, Math.Min(_columns.GetCombinedMinimumSize().Y, size.Y - 260 - reserve)));
+        // ARC-UI-2615: the debug block at the top left (no margin beside the window) is not covered.
+        var above = _debugBlock.TopReserve;
+        _scroll.CustomMinimumSize = new(0, Math.Max(40, Math.Min(_columns.GetCombinedMinimumSize().Y, size.Y - 260 - reserve - above)));
         _panel.Size = new(width, 0);
-        var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48 - reserve));
+        var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48 - reserve - above));
         _panel.Size = new(width, height);
-        _panel.Position = new((size.X - width) / 2, _docked ? 24 : Math.Max(24, (size.Y - height) / 2));
+        _panel.Position = new((size.X - width) / 2, _docked ? 24 : Math.Max(Math.Max(24, above), (size.Y - height) / 2));
     }
 
     public override void _Process(double delta)

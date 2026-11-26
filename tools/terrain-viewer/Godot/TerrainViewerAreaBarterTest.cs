@@ -416,8 +416,7 @@ public partial class TerrainViewerApp
             Require(panel.KitState is { Background: 235, InZone: true }, "undocked again the frame is in the zone: " + panel.KitState);
             panel.DiagnosticSwitch = true;
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            Require(!panel.LookToggleForSelfTest.Visible && panel.DebugBlockForSelfTest is { Visible: true } && panel.DebugBlockForSelfTest.KeyTextForSelfTest == "Ctrl+Shift+J: diagnostic view",
-                "ARC-UI-2615: the debug key's note outside the window, no button in it");
+            Require(!panel.LookToggleForSelfTest.Visible && !panel.DebugBlockForSelfTest.Visible, "ARC-UI-2615: nothing of the debug mode in or around the original look");
             panel.DiagnosticSwitch = false;
             var view = panel.ArtView!;
             var sword = view.LootGrid.Single(item => item.Entity == "kit:1");

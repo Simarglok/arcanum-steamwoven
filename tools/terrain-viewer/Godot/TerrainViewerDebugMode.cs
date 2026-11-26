@@ -26,6 +26,7 @@ public partial class TerrainViewerApp
     private void SyncFallbackLook()
     {
         AreaFallbackLook.Allowed = DebugMode || AutomatedVisualRun;
+        AreaDebugBlock.KeyHint = AutomatedVisualRun;
         AreaFallbackLook.Fonts = () => IsInstanceValid(this) ? TextFonts() : null;
     }
 

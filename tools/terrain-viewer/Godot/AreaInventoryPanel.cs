@@ -171,6 +171,7 @@ public partial class AreaInventoryPanel : CanvasLayer
     internal Button LookToggleForSelfTest => _lookToggle;
     private AreaDebugBlock _debugBlock = null!;
     internal AreaDebugBlock DebugBlockForSelfTest => _debugBlock;
+    internal Rect2 WindowRectForSelfTest => _panel.GetGlobalRect();
 
     /// <summary>ARC-UI-2764: the switch to the diagnostic view and the original look's message are a debug and self-test path (ARC-UI-2615: both in the debug block outside the window); false (the default) draws neither in play.</summary>
     public bool DiagnosticSwitch
@@ -450,9 +451,9 @@ public partial class AreaInventoryPanel : CanvasLayer
         ResizePanel(); UpdateRoundView();
     }
 
-    /// <summary>ARC-UI-2615: the original look has no message line in the window (the original prints none there; the debug block shows it);
-    /// the diagnostic window wraps it.</summary>
-    private void ShowMessageLine() => _message.Visible = !ArtMode;
+    /// <summary>ARC-UI-2615: the original look has no message line in the window (the original prints none there); in the debug mode's diagnostic
+    /// view the debug block shows it; a diagnostic window with no switch (its art did not read) wraps it itself.</summary>
+    private void ShowMessageLine() => _message.Visible = !ArtMode && !LookSwitchable;
 
     /// <summary>ARC-UI-2615: the debug mode can change this window between the original look and the diagnostic one.</summary>
     private bool LookSwitchable => _diagnosticSwitch && _look is not null && OriginalAvailable;
@@ -464,8 +465,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         if (_view is { } view) Render(view, _message.Text);
     }
 
-    private AreaDebugNote? DescribeDebug() => IsOpen && LookSwitchable
-        ? new($"{AreaDebugBlock.KeyName}: {(ArtMode ? "diagnostic view" : "original look")}", ArtMode ? _message.Text : null, _panel.Position.X) : null;
+    private AreaDebugNote? DescribeDebug() => IsOpen && LookSwitchable ? new(!ArtMode, _message.Text, _panel.Position.X) : null;
 
     /// <summary>ARC-UI-051: the original look hides the diagnostic lists, buttons and texts (their actions stay: the doll, the grid, the
     /// boxes and a right click); ARC-UI-2615: the debug block's key changes to the diagnostic window and back.</summary>
@@ -609,6 +609,9 @@ public partial class AreaInventoryPanel : CanvasLayer
             _panel.Position = new(AreaGameBarPanel.FreeLeft + (size.X - frameWidth) / 2, top);
             return;
         }
+        // ARC-UI-2615: the debug block at the top left (no margin beside the window) is not covered.
+        var above = Math.Max(0, _debugBlock.TopReserve - top);
+        top += above; size.Y -= above;
         var width = Math.Max(1, Math.Min(960, size.X - 48));
         _area.Fit(Math.Min(width - 32, (size.Y - 300) * AreaInventoryDrag.FrameWidth / AreaInventoryDrag.FrameHeight));
         _scroll.CustomMinimumSize = new(0, Math.Max(40, Math.Min(_columns.GetCombinedMinimumSize().Y, size.Y - 260 - _area.CustomMinimumSize.Y)));
