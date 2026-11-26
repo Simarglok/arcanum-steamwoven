@@ -79,9 +79,22 @@ public partial class AreaSchematicWindowView : Control
     internal Vector2 PointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
     internal int? HoveredForSelfTest => _hovered is { } hit ? (int)hit.Kind * 100 + hit.A : null;
 
-    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
+    private readonly AreaKitFaceLayer _kitFaces = new();
 
-    public override void _ExitTree() => AreaGameBarPanel.KitBackgroundChanged -= QueueRedraw;
+    /// <summary>ARC-UI-3341: the kit faces the window's page arrows show now (the native smoke).</summary>
+    internal IReadOnlyList<AreaKitFaceLayer.Item> KitFacesForSelfTest => _kitFaces.ShownForSelfTest;
+
+    public override void _EnterTree()
+    {
+        AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
+        AreaKitSheets.Changed += QueueRedraw;
+    }
+
+    public override void _ExitTree()
+    {
+        AreaGameBarPanel.KitBackgroundChanged -= QueueRedraw;
+        AreaKitSheets.Changed -= QueueRedraw;
+    }
 
     private static bool KitBackgroundShown => AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Schematic;
 
@@ -93,6 +106,7 @@ public partial class AreaSchematicWindowView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
+        AddChild(_kitFaces);
     }
 
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaSchematicWindowFonts fonts)
@@ -226,6 +240,14 @@ public partial class AreaSchematicWindowView : Control
         if (Art(art, frame) is { } texture) DrawTextureRect(texture, new Rect2(place.X, place.Y, texture.GetWidth(), texture.GetHeight()), false);
     }
 
+    /// <summary>A page arrow: over the kit's background the kit's face of its state in the art's place (ARC-UI-3341), else the art's own frame.</summary>
+    private void DrawPageArrow(int art, (int X, int Y) place, Hit hit, List<AreaKitFaceLayer.Item> faces)
+    {
+        var frame = Frame(art, hit);
+        if (KitBackgroundShown && AreaKitSheets.Face(art, frame) is { } face && Art(art, frame) is { } own) faces.Add(new(art, face, new Rect2(place.X, place.Y, own.GetWidth(), own.GetHeight())));
+        else DrawArt(art, place, frame);
+    }
+
     private void DrawText(AreaArtFontFace face, string text, int x, int y)
     {
         if (text.Length > 0) AreaArtTextDraw.Text(this, face, text, x, y, Black);
@@ -244,8 +266,10 @@ public partial class AreaSchematicWindowView : Control
             // The list tabs are plain buttons: the exe presses no list tab, only the discipline group (0x56D530).
             DrawArt(AreaSchematicWindowLayout.ListTabArt, AreaSchematicWindowLayout.ListTab(found), Frame(AreaSchematicWindowLayout.ListTabArt, new(Kind.ListTab, found ? 1 : 0)));
         }
-        if (PreviousShown) DrawArt(AreaSchematicWindowLayout.PreviousArt, AreaSchematicWindowLayout.Previous, Frame(AreaSchematicWindowLayout.PreviousArt, new(Kind.Previous, 0)));
-        if (NextShown) DrawArt(AreaSchematicWindowLayout.NextArt, AreaSchematicWindowLayout.Next, Frame(AreaSchematicWindowLayout.NextArt, new(Kind.Next, 0)));
+        var faces = new List<AreaKitFaceLayer.Item>();
+        if (PreviousShown) DrawPageArrow(AreaSchematicWindowLayout.PreviousArt, AreaSchematicWindowLayout.Previous, new(Kind.Previous, 0), faces);
+        if (NextShown) DrawPageArrow(AreaSchematicWindowLayout.NextArt, AreaSchematicWindowLayout.Next, new(Kind.Next, 0), faces);
+        _kitFaces.Show(faces);
 
         // The record: its art at its natural size, the discipline glyph of its product, the name and the wrapped description.
         if (view.RecordArt > 0) DrawArt(view.RecordArt, AreaSchematicWindowLayout.RecordArtAt);

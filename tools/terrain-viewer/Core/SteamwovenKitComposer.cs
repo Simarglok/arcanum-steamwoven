@@ -296,6 +296,18 @@ public static class SteamwovenKitTable
         [310] = "plate.gunsmithy_but", [311] = "plate.mechanical_but", [312] = "plate.smithy_but", [313] = "plate.therapeutics_but",
     };
 
+    /// <summary>
+    /// ARC-UI-3341 (#3272, <c>tools/steamwoven_ui/small_kit.py</c>): the flat small controls a window draws whole from the kit, by the art the window shows: the window, the plate part and its master size. <c>plate.&lt;name&gt;</c> is the idle face,
+    /// <c>plate.&lt;name&gt;_pressed</c> and <c>plate.&lt;name&gt;_hover</c> the other two; each face takes the art's place alone (never over the idle face: the ink of the schematic arrows has a soft edge that would double). The arts are the schematics
+    /// tab of the character sheet (568) and the schematic window's page arrows (372, 373).
+    /// </summary>
+    public static IReadOnlyDictionary<int, SteamwovenKitFaceSpec> WindowFaces { get; } = new Dictionary<int, SteamwovenKitFaceSpec>
+    {
+        [568] = new(SteamwovenKitWindow.Character, "plate.char_schem_skills", 114, 114),
+        [AreaSchematicWindowLayout.PreviousArt] = new(SteamwovenKitWindow.Schematic, "plate.schm_larrow", 66, 78),
+        [AreaSchematicWindowLayout.NextArt] = new(SteamwovenKitWindow.Schematic, "plate.schm_rarrow", 66, 78),
+    };
+
     /// <summary>The glyph part of the bar button <paramref name="button"/> showing <paramref name="art"/>, or null when the art has none.</summary>
     public static string? GlyphOf(AreaBarButton? button, int art) =>
         ButtonGlyphs.TryGetValue(art, out var glyph) ? glyph : button is { } b && SharedArtGlyphs.TryGetValue(b, out glyph) ? glyph : null;
@@ -560,11 +572,21 @@ public static class SteamwovenKitComposer
     /// ARC-UI-3320: the kit faces of the round button the page shows with <paramref name="art"/> (<see cref="SteamwovenKitTable.RoundFaces"/>), or null when the set has no idle face for it (the page keeps the art's own frame through the round-part
     /// layer, ARC-UI-3101). The pressed and hover faces count only at the idle face's size (a state that does not fit shows the idle face); the symbol is in the plate, so no glyph is asked for.
     /// </summary>
-    public static SteamwovenKitRoundFace? RoundFace(SteamwovenKitSet set, int art)
+    public static SteamwovenKitFace? RoundFace(SteamwovenKitSet set, int art) =>
+        SteamwovenKitTable.RoundFaces.TryGetValue(art, out var face) && set.TryGet(face, out var idle) ? Faces(set, face, idle) : null;
+
+    /// <summary>
+    /// ARC-UI-3341: the kit faces of the flat control the window shows with <paramref name="art"/> (<see cref="SteamwovenKitTable.WindowFaces"/>), or null when the set has no idle face at the table's size at the step (the window keeps the art's own
+    /// frame). The pressed and hover faces count only at that size (a state that does not fit shows the idle face).
+    /// </summary>
+    public static SteamwovenKitFace? WindowFace(SteamwovenKitSet set, int art) =>
+        SteamwovenKitTable.WindowFaces.TryGetValue(art, out var spec) && set.TryGet(spec.Part, out var idle)
+        && idle.Width == SteamwovenGrid.BakedLength(spec.MasterWidth, set.Step) && idle.Height == SteamwovenGrid.BakedLength(spec.MasterHeight, set.Step) ? Faces(set, spec.Part, idle) : null;
+
+    private static SteamwovenKitFace Faces(SteamwovenKitSet set, string plate, SteamwovenKitPart idle)
     {
-        if (!SteamwovenKitTable.RoundFaces.TryGetValue(art, out var face) || !set.TryGet(face, out var idle)) return null;
-        SteamwovenKitPart? State(string suffix) => set.TryGet(face + suffix, out var part) && part.Width == idle.Width && part.Height == idle.Height ? part : null;
-        return new SteamwovenKitRoundFace(idle, State("_pressed"), State("_hover"));
+        SteamwovenKitPart? State(string suffix) => set.TryGet(plate + suffix, out var part) && part.Width == idle.Width && part.Height == idle.Height ? part : null;
+        return new SteamwovenKitFace(idle, State("_pressed"), State("_hover"));
     }
 
     /// <summary>
@@ -585,8 +607,11 @@ public static class SteamwovenKitComposer
     }
 }
 
-/// <summary>ARC-UI-3320: the parts of a round button's three states in the set: the idle face and, where the set holds them at its size, the pressed and the hover face (a missing state shows the idle face).</summary>
-public sealed record SteamwovenKitRoundFace(SteamwovenKitPart Idle, SteamwovenKitPart? Pressed, SteamwovenKitPart? Hover)
+/// <summary>ARC-UI-3341: the window, the plate part and the master size of a flat control drawn whole from the kit (<see cref="SteamwovenKitTable.WindowFaces"/>).</summary>
+public sealed record SteamwovenKitFaceSpec(SteamwovenKitWindow Window, string Part, int MasterWidth, int MasterHeight);
+
+/// <summary>ARC-UI-3320: the parts of a button's three states in the set: the idle face and, where the set holds them at its size, the pressed and the hover face (a missing state shows the idle face).</summary>
+public sealed record SteamwovenKitFace(SteamwovenKitPart Idle, SteamwovenKitPart? Pressed, SteamwovenKitPart? Hover)
 {
     /// <summary>The part ids, idle first, for the holder that keeps them resident.</summary>
     public IEnumerable<SteamwovenKitPart> Parts => new[] { Idle, Pressed, Hover }.OfType<SteamwovenKitPart>();

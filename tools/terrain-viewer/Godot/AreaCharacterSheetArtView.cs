@@ -46,6 +46,10 @@ public partial class AreaCharacterSheetArtView : Control
     public bool MenuScreen { get; set; }
 
     private IReadOnlyDictionary<int, Texture2D[]> _art = new Dictionary<int, Texture2D[]>();
+    private readonly AreaKitFaceLayer _kitFaces = new();
+
+    /// <summary>ARC-UI-3341: the kit faces the sheet's own buttons show now (the native smoke).</summary>
+    internal IReadOnlyList<AreaKitFaceLayer.Item> KitFacesForSelfTest => _kitFaces.ShownForSelfTest;
     private AreaCharacterSheetFonts? _fonts;
     private AreaCharacterSheetTexts _texts = AreaCharacterSheetTexts.Project("not set");
     private (int X, int Y)[] _alignmentHot = [];
@@ -95,6 +99,7 @@ public partial class AreaCharacterSheetArtView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
+        AddChild(_kitFaces); // under the pages, as the tabs drawn by this view are
         AddChild(Pages);
         AddChild(Spells);
         AddChild(Schemes);
@@ -258,11 +263,16 @@ public partial class AreaCharacterSheetArtView : Control
             }
     }
 
-    public override void _EnterTree() => AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
+    public override void _EnterTree()
+    {
+        AreaGameBarPanel.KitBackgroundChanged += QueueRedraw;
+        AreaKitSheets.Changed += QueueRedraw;
+    }
 
     public override void _ExitTree()
     {
         AreaGameBarPanel.KitBackgroundChanged -= QueueRedraw;
+        AreaKitSheets.Changed -= QueueRedraw;
         if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
         _watched.Clear();
     }
@@ -350,14 +360,20 @@ public partial class AreaCharacterSheetArtView : Control
             AreaArtTextDraw.Text(this, face, text.Text, AreaCharacterSheetArtLayout.Left(text, face.Font.Measure(text.Text).Width), text.Y,
                 AreaCharacterSheetArtLayout.Rgb(text.Colour));
         }
+        var faces = new List<AreaKitFaceLayer.Item>();
         foreach (var hit in Hits)
         {
             if (ReadOnly && hit.Kind != Kind.Tab) continue;
             var (number, x, y) = Place(hit);
             if (hit.Kind == Kind.Tab && Art(number) is null) continue;
             var shown = hit.Kind == Kind.Tab && hit.Index == (int)_tab ? AreaBarButtonFrameDown(number) : Frame(hit);
-            if (Art(number, shown) is { } texture) DrawTextureRect(texture, new Rect2(x, y, texture.GetWidth(), texture.GetHeight()), false);
+            if (Art(number, shown) is not { } texture) continue;
+            var place = new Rect2(x, y, texture.GetWidth(), texture.GetHeight());
+            // ARC-UI-3341: over the kit's background a tab the kit holds a face for (the schematics tab) draws that face in the art's place.
+            if (KitBackgroundShown && AreaKitSheets.Face(number, shown) is { } face) faces.Add(new(number, face, place));
+            else DrawTextureRect(texture, place, false);
         }
+        _kitFaces.Show(faces);
     }
 
     /// <summary>The shown tab keeps its pressed frame (the page is on).</summary>

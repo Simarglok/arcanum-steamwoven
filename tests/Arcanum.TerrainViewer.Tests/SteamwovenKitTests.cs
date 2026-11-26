@@ -468,6 +468,44 @@ public sealed class SteamwovenKitTests
     }
 
     [TestMethod]
+    public void The_window_faces_are_the_manifest_s_plates_of_their_arts_at_their_master_sizes()
+    {
+        // ARC-UI-3341: the schematics tab and the schematic window's page arrows, each with its idle, hover and pressed rows (#3272).
+        var parts = KitManifest().GetProperty("parts").EnumerateArray().ToDictionary(part => part.GetProperty("id").GetString()!);
+        CollectionAssert.AreEquivalent(new[] { 568, 372, 373 }, SteamwovenKitTable.WindowFaces.Keys.ToArray());
+        foreach (var (art, spec) in SteamwovenKitTable.WindowFaces)
+        {
+            Assert.IsTrue(parts.TryGetValue(spec.Part, out var part), spec.Part + " is a manifest part");
+            Assert.AreEqual(art.ToString(System.Globalization.CultureInfo.InvariantCulture), part.GetProperty("source_arts")[0].GetString(), spec.Part);
+            Assert.AreEqual(spec.MasterWidth, part.GetProperty("size")[0].GetInt32(), spec.Part + " width");
+            Assert.AreEqual(spec.MasterHeight, part.GetProperty("size")[1].GetInt32(), spec.Part + " height");
+            Assert.IsTrue(parts.ContainsKey(spec.Part + "_hover") && parts.ContainsKey(spec.Part + "_pressed"), spec.Part + " has its state rows");
+        }
+        Assert.AreEqual(SteamwovenKitWindow.Character, SteamwovenKitTable.WindowFaces[568].Window);
+        Assert.AreEqual(SteamwovenKitWindow.Schematic, SteamwovenKitTable.WindowFaces[372].Window);
+        Assert.AreEqual(SteamwovenKitWindow.Schematic, SteamwovenKitTable.WindowFaces[373].Window);
+    }
+
+    [TestMethod]
+    public void A_window_face_is_its_idle_part_at_the_table_s_size_and_the_states_of_that_size()
+    {
+        var set = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.schm_larrow", 33, 39), new("plate.schm_larrow_pressed", 33, 39), new("plate.schm_larrow_hover", 33, 39)]);
+        var face = SteamwovenKitComposer.WindowFace(set, 372)!;
+        CollectionAssert.AreEqual(new[] { "plate.schm_larrow", "plate.schm_larrow_pressed", "plate.schm_larrow_hover" }, face.Parts.Select(part => part.Id).ToArray());
+        // The other arrow and the tab are not in this set; an art outside the table has no face.
+        Assert.IsNull(SteamwovenKitComposer.WindowFace(set, 373));
+        Assert.IsNull(SteamwovenKitComposer.WindowFace(set, 568));
+        Assert.IsNull(SteamwovenKitComposer.WindowFace(set, 1));
+        // A state the set lacks or holds at another size is left out; without an idle face at the table's size the window keeps its art.
+        var odd = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.char_schem_skills", 57, 57), new("plate.char_schem_skills_hover", 30, 30)]);
+        var tab = SteamwovenKitComposer.WindowFace(odd, 568)!;
+        Assert.IsNull(tab.Pressed);
+        Assert.IsNull(tab.Hover);
+        Assert.IsNull(SteamwovenKitComposer.WindowFace(SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.char_schem_skills", 56, 57)]), 568));
+        Assert.IsNull(SteamwovenKitComposer.WindowFace(SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.char_schem_skills_hover", 57, 57)]), 568));
+    }
+
+    [TestMethod]
     public void A_face_without_its_glyph_or_with_one_of_another_size_is_not_drawn_from_the_kit()
     {
         // ARC-UI-3096 (AC1): the plate alone would be a button without its symbol, so the whole button stays the generated or legacy art.
