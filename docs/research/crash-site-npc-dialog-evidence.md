@@ -108,9 +108,9 @@ Research records later fields without executing or skipping the unsupported firs
 Source-first-entry effects occur before reply enumeration; no rollback is inferred.
 The six structural immediate replies are IDs **2,3,4,5,6,7**. Selected serialized
 and numerical-source grouping agree on this input (F-ORDER closed for this input
-only). As read, the dialog enumerates up to five *eligible* replies; current project runtime
-rejects six structural replies rather than truncating. It also lacks GF/IN/RE.
-Thus **the current one-edge runtime cannot run this conversation**. Do not choose
+only). As read, the dialog enumerates up to five *eligible* replies; the project runtime of that
+time (the one-edge runtime, since removed, #3384) rejected six structural replies rather
+than truncating and lacked GF/IN/RE, so **it could not run this conversation**. Do not choose
 a different reply group, truncate, or discard effects to manufacture compatibility.
 
 ## Text, variant and decoding findings
