@@ -80,26 +80,28 @@ public static class AreaKitRoundParts
     /// </summary>
     public static bool IsSocketDome(int art) => art is >= 145 and <= 148 or 757 or 758;
 
-    // The centres of the sockets' gold rings (inner diameter 22.2, outer 26.0 units on arts 200, 765 and 825), in units from the button's table position.
-    private static readonly (float X, float Y) MarkerSocket = (11.4f, 11.15f), FollowerSocket = (11.42f, 11.17f);
+    // The centres of the sockets' gold rings (about 22 units inside, 26 outside) as the screens draw them, in units from the button's table position: fitted on the HD pack's arts 200, 765 and 825 at 4 px to the unit. The original arts' sockets
+    // lie up to 1.4 units elsewhere; a background that replaces one of these screens brings its own numbers here.
+    private static readonly (float X, float Y) MarkerSocket = (11.61f, 11.18f);
 
-    /// <summary>The new character screen's sockets (art 765) by the table position of their button: gender, race and background, left and right.</summary>
-    private static readonly Dictionary<(int X, int Y), (float X, float Y)> NewCharacterSockets = new()
+    /// <summary>The sockets of the cycle buttons by table position: the new character screen's gender, race and background (art 765), then the follower barter's (art 825), left and right.</summary>
+    private static readonly Dictionary<(int X, int Y), (float X, float Y)> CycleSockets = new()
     {
-        [(42, 281)] = (10.42f, 10.17f), [(255, 282)] = (11.42f, 10.17f),
-        [(42, 331)] = (10.42f, 10.17f), [(255, 332)] = (11.42f, 10.17f),
-        [(42, 381)] = (10.42f, 11.17f), [(255, 382)] = (11.42f, 10.17f),
+        [(42, 281)] = (10.97f, 10.04f), [(255, 282)] = (10.96f, 9.2f),
+        [(42, 331)] = (10.97f, 10.29f), [(255, 332)] = (10.96f, 9.53f),
+        [(42, 381)] = (10.95f, 10.74f), [(255, 382)] = (10.93f, 9.75f),
+        [(155, 55)] = (10.97f, 11.1f), [(253, 55)] = (11.08f, 11.01f),
     };
 
     /// <summary>
-    /// How far, in units, the kit's face of <paramref name="art"/> at the table position (<paramref name="x"/>, <paramref name="y"/>) moves so that its centre is the centre of the socket it stands in: nothing for a part that is no socket dome.
-    /// A cycle button outside the new character screen stands in the follower barter's sockets (art 825).
+    /// How far, in units, the kit's face of <paramref name="art"/> at the table position (<paramref name="x"/>, <paramref name="y"/>) moves so that its centre is the centre of the socket it stands in: nothing for a part that is no socket dome,
+    /// and nothing for a cycle button at a position with no socket here.
     /// </summary>
     public static (float X, float Y) SocketShift(int art, float x, float y)
     {
         if (!IsSocketDome(art) || Of(art) is not { } part) return (0f, 0f);
-        var socket = art < 757 ? MarkerSocket : NewCharacterSockets.GetValueOrDefault(((int)MathF.Round(x), (int)MathF.Round(y)), FollowerSocket);
-        return (socket.X - part.Cx, socket.Y - part.Cy);
+        if (art < 757) return (MarkerSocket.X - part.Cx, MarkerSocket.Y - part.Cy);
+        return CycleSockets.TryGetValue(((int)MathF.Round(x), (int)MathF.Round(y)), out var socket) ? (socket.X - part.Cx, socket.Y - part.Cy) : (0f, 0f);
     }
 
     /// <summary>The arts that have a round part, in order.</summary>

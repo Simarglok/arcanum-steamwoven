@@ -35,7 +35,7 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
     {
         for (var i = 0; i < _shown.Count; i++)
             if (_shown[i] == art)
-                return (new Rect2(_parts[i].Position, _parts[i].Size), new Rect2(_shadows[i].Position, _shadows[i].Size), (Vector3)_parts[i].Material!.Get("shader_parameter/disc"));
+                return (_parts[i].Drawn, _shadows[i].Drawn, (Vector3)_parts[i].Material!.Get("shader_parameter/disc"));
         return null;
     }
 
@@ -99,6 +99,7 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
         private readonly bool _shadow;
         private readonly ShaderMaterial _material = new() { Shader = Shared };
         private Texture2D? _texture;
+        private Rect2 _drawn;
 
         internal PartNode(bool shadow)
         {
@@ -106,6 +107,9 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
             MouseFilter = MouseFilterEnum.Ignore;
             Material = _material;
         }
+
+        /// <summary>The rectangle the node draws, in the layer's coordinates.</summary>
+        internal Rect2 Drawn => new(Position + _drawn.Position, _drawn.Size);
 
         internal void Place(AreaKitRoundParts.Part part, Texture2D? texture, Rect2 rect, bool kit)
         {
@@ -119,8 +123,7 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
             if (_shadow)
             {
                 var reach = AreaKitRoundParts.ShadowReach;
-                Position = rect.Position - new Vector2(reach, reach) * ratio;
-                Size = rect.Size + new Vector2(reach, reach) * ratio * 2;
+                Cover(new Rect2(rect.Position - new Vector2(reach, reach) * ratio, rect.Size + new Vector2(reach, reach) * ratio * 2));
                 _material.SetShaderParameter("mode", 1f);
                 _material.SetShaderParameter("unit_size", new Vector2(part.Width + 2 * reach, part.Height + 2 * reach));
                 _material.SetShaderParameter("origin", new Vector2(reach, reach));
@@ -129,7 +132,7 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
             }
             else
             {
-                Position = rect.Position; Size = rect.Size;
+                Cover(rect);
                 _material.SetShaderParameter("mode", 0f);
                 _material.SetShaderParameter("unit_size", new Vector2(part.Width, part.Height));
                 _material.SetShaderParameter("origin", Vector2.Zero);
@@ -137,10 +140,18 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
             QueueRedraw();
         }
 
+        // ARC-UI-3347: the engine rounds a canvas item's origin to whole units (the project snaps 2D transforms, and a Control its position), so a node stands on the whole unit at or before its rectangle and draws it at the rest: a socket dome stands between units.
+        private void Cover(Rect2 rect)
+        {
+            Position = rect.Position.Floor();
+            _drawn = new Rect2(rect.Position - Position, rect.Size);
+            Size = _drawn.End;
+        }
+
         public override void _Draw()
         {
-            if (_shadow) DrawRect(new Rect2(Vector2.Zero, Size), Colors.White);
-            else if (_texture is not null) DrawTextureRect(_texture, new Rect2(Vector2.Zero, Size), false);
+            if (_shadow) DrawRect(_drawn, Colors.White);
+            else if (_texture is not null) DrawTextureRect(_texture, _drawn, false);
         }
     }
 }

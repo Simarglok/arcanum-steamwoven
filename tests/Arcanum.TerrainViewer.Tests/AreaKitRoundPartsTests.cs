@@ -76,21 +76,22 @@ public sealed class AreaKitRoundPartsTests
     [TestMethod]
     public void A_socket_dome_stands_on_its_sockets_centre()
     {
-        // ARC-UI-3347: the centres of the socket rings measured on the screens, in the screen's own units (the new character body 765, the follower barter 825, the note pane 200).
+        // ARC-UI-3347: the centres of the socket rings the screens draw, in the screen's own units (the HD pack's new character body 765, follower barter 825 and note pane 200).
         var sockets = new Dictionary<AreaNewCharacterArtButton, (float X, float Y)>
         {
-            [AreaNewCharacterArtButton.GenderPrevious] = (52.42f, 291.17f), [AreaNewCharacterArtButton.GenderNext] = (266.42f, 292.17f),
-            [AreaNewCharacterArtButton.RacePrevious] = (52.42f, 341.17f), [AreaNewCharacterArtButton.RaceNext] = (266.42f, 342.17f),
-            [AreaNewCharacterArtButton.BackgroundPrevious] = (52.42f, 392.17f), [AreaNewCharacterArtButton.BackgroundNext] = (266.42f, 392.17f),
+            [AreaNewCharacterArtButton.GenderPrevious] = (52.97f, 291.04f), [AreaNewCharacterArtButton.GenderNext] = (265.96f, 291.2f),
+            [AreaNewCharacterArtButton.RacePrevious] = (52.97f, 341.29f), [AreaNewCharacterArtButton.RaceNext] = (265.96f, 341.53f),
+            [AreaNewCharacterArtButton.BackgroundPrevious] = (52.95f, 391.74f), [AreaNewCharacterArtButton.BackgroundNext] = (265.93f, 391.75f),
         };
         foreach (var (button, socket) in sockets)
         {
             var (art, x, y) = AreaNewCharacterArtLayout.Button(button);
             AssertCentre(art, x, y, socket);
         }
-        AssertCentre(AreaBarterArtLayout.CycleLeftArt, AreaBarterArtLayout.CycleLeft.X, AreaBarterArtLayout.CycleLeft.Y, (166.42f, 66.17f));
-        AssertCentre(AreaBarterArtLayout.CycleRightArt, AreaBarterArtLayout.CycleRight.X, AreaBarterArtLayout.CycleRight.Y, (264.42f, 66.17f));
-        foreach (var marker in new[] { 145, 146, 147, 148 }) AssertCentre(marker, 10, 20, (21.4f, 31.15f));
+        AssertCentre(AreaBarterArtLayout.CycleLeftArt, AreaBarterArtLayout.CycleLeft.X, AreaBarterArtLayout.CycleLeft.Y, (165.97f, 66.1f));
+        AssertCentre(AreaBarterArtLayout.CycleRightArt, AreaBarterArtLayout.CycleRight.X, AreaBarterArtLayout.CycleRight.Y, (264.08f, 66.01f));
+        foreach (var marker in new[] { 145, 146, 147, 148 }) AssertCentre(marker, 10, 20, (21.61f, 31.18f));
+        Assert.AreEqual((0f, 0f), AreaKitRoundParts.SocketShift(757, 10, 20), "no socket there: the table position");
         // Only the bare domes move and lose the shadow: a ringed button stays at its table position.
         foreach (var art in AreaKitRoundParts.ArtNumbers)
         {
