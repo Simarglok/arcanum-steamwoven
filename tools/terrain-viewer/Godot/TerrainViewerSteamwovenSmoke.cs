@@ -649,8 +649,15 @@ public partial class TerrainViewerApp
             await CaptureHudAsync("steamwoven-" + tag + "-" + name + "-rows", frames);
             RequireFrame("with the debug switch on");
             require(!Block().IsVisibleInTree(), $"[{tag}] the {name} window's original look has no debug block");
-            if (panel.Visible && _promptPanel is { Visible: true } prompt)
-                require(MessageWindow().Encloses(prompt.GetGlobalRect()), $"[{tag}] the controller line lies inside the message window {MessageWindow()}: {prompt.GetGlobalRect()}");
+            if (panel.Visible)
+            {
+                // A touch in hand names itself (after the tracker's hysteresis): the line lies inside the message window, unseen while a quantity is asked there.
+                ObserveControllerInput(new InputEventScreenTouch { Pressed = true, Position = GetViewport().GetVisibleRect().Size / 2 });
+                for (var wait = 0; wait < 120 && _promptPanel is not { Visible: true }; wait++) await frames(1);
+                await frames(2);
+                require(_promptPanel is { Visible: true } && MessageWindow().Encloses(_promptPanel.GetGlobalRect()) && _promptPanel.Modulate.A == (asks ? 0 : 1),
+                    $"[{tag}] the controller line lies inside the message window {MessageWindow()}, {(asks ? "unseen under the question" : "shown")}: {_promptPanel?.GetGlobalRect()} (\"{PromptStripForSelfTest}\")");
+            }
             if (asks)
             {
                 require(QuantityPaneForSelfTest is not null && _inventoryPanel!.Quantity is { Count: 0 } && _quantityRowHost is { Modulate.A: 0 },

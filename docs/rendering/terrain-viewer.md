@@ -1323,9 +1323,9 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   at (11, 9) or (16, 17) shows the screen's square of 178 game pixels around the PC (centred 15 game pixels above its foot point) at
   half size, copied by a screen-texture shader on canvas layer 3 under the window (the background art leaves the square out, as
   the original's copy replaces it; the doll art 223 is opaque there), with art 233 or 232 drawn over it when it reads.
-  A left release in the rectangle closes the window (in the loot window a held item goes back first). The message line under the
-  frame keeps one line in the original look (cut with an ellipsis), so a message such as `took N item(s)` no longer shrinks the
-  frame. ARC-UI-060: the rectangle, its art and the release are a table by the window's mode (`AreaInventoryMode`: own (11, 9) and 233,
+  A left release in the rectangle closes the window (in the loot window a held item goes back first). The original look has no
+  message line (ARC-UI-2615: a message such as `took N item(s)` shows in the debug block of the diagnostic view), so a message
+  never changes the frame. ARC-UI-060: the rectangle, its art and the release are a table by the window's mode (`AreaInventoryMode`: own (11, 9) and 233,
   barter (16, 17) and 231, loot and steal (16, 17) and 232; `AreaInventoryHole.Release`: nothing held closes in every mode, a held item
   goes back and the window closes outside the own window); the barter window's round view shows with its original look since
   ARC-UI-064 (art 231, below) and the steal window's since ARC-UI-065; the component is `AreaRoundView`, shared by the inventory and
