@@ -65,9 +65,9 @@ class Fixture:
 INV = ("G01", "G17")
 INV_FAMILY = ("G01", "G02", "G03", "G04", "G17", "M10")
 FIXTURES: tuple[Fixture, ...] = (
-    Fixture("grid.inventory_cells", 32, 32, INV_FAMILY, "one cell well of the item grids (black, thin line on its top and left edges); the pack's 10 x 12, the doll's 10 x 9 and the holder's 10 x 7 or 10 x 8 are copies of it"),
-    Fixture("fixture.pack_pit", 324, 388, INV_FAMILY, "the pack's pit at 366, 6 with its inner line round the 10 x 12 grid at 368, 8"),
-    Fixture("fixture.doll_pit", 330, 300, INV, "the paper doll's pit at 18, 100 with its inner line round the 10 x 9 grid at 23, 107"),
+    Fixture("grid.inventory_cells", 32, 32, INV_FAMILY, "one cell well of the item grids (black, thin line on its last column and row); the pack's 10 x 12, the doll's 10 x 9 and the holder's 10 x 7 or 10 x 8 are copies of it"),
+    Fixture("fixture.pack_pit", 324, 388, INV_FAMILY, "the pack's pit at 366, 6 under the 10 x 12 grid at 368, 8; deviation: its ground is black, art 221 has 8, 8, 8 (owner 2026-11-26)"),
+    Fixture("fixture.doll_pit", 330, 300, INV, "the paper doll's pit at 18, 100 under the 10 x 9 grid at 23, 107"),
     Fixture("fixture.holder_pit_loot", 324, 260, ("G02", "G04"), "the body's or container's grid pit at 6, 134 (10 x 8 cells at 8, 136)"),
     Fixture("fixture.holder_pit_barter", 324, 228, ("G03", "M10"), "the merchant's grid pit at 6, 166 (10 x 7 cells at 8, 168)"),
     Fixture("fixture.name_pit", 223, 55, INV, "the plate behind the weights and speed text at 124, 25"),
@@ -97,8 +97,13 @@ FIXTURES: tuple[Fixture, ...] = (
 )
 BY_ID = {fixture.ident: fixture for fixture in FIXTURES}
 
+# ARC-UI-3342: the original paints a grid line one unit wide on the last column and row of units of a 32-unit cell, and none before a grid's first cell; the kit's 2 px line is centred there.
+LINE_AT = -0.5
+# The grid pits: the grid's visible units inside each part (x, y, w, h). The paper doll's stops a unit short on the right and below, where the original's frame stands.
+GRID_PITS = {"fixture.pack_pit": (2, 2, 320, 384), "fixture.doll_pit": (5, 7, 319, 287), "fixture.holder_pit_loot": (2, 2, 320, 256), "fixture.holder_pit_barter": (2, 2, 320, 224)}
 Colour = tuple[int, int, int]
 BLACK: Colour = (4, 5, 9)
+GRID_GROUND: Colour = (0, 0, 0)  # the item grids' ground, the original's pure black, as under its empty-slot covers (ARC-UI-3342, owner 2026-11-26)
 EDGE: Colour = (62, 74, 98)
 BRASS: Colour = (184, 146, 62)
 BRASS_DARK: Colour = (104, 76, 28)
@@ -226,12 +231,21 @@ def _trim(c: Canvas, x0: float, y0: float, x1: float, y1: float, variant: str) -
         c.frame(x0, y0, x1, y1, 2, EDGE)
 
 
-def _pit(c: Canvas, variant: str, inner: tuple[float, float, float, float] | None = None) -> None:
+def _pit(c: Canvas, variant: str) -> None:
     c.rect(0, 0, c.w, c.h, BLACK)
     _trim(c, 0, 0, c.w, c.h, variant)
-    if inner:
-        x, y, w, h = inner
-        c.frame(c.X(x), c.Y(y), c.X(x + w), c.Y(y + h), 2, EDGE)
+
+
+def _grid_pit(c: Canvas, variant: str, x: float, y: float, w: float, h: float) -> None:
+    """An item grid's pit (ARC-UI-3342): the ground under the grid's visible units (x, y, w, h of the part) and the trim round them, hugging the grid as the original's frame does, so the grid's lines reach it; clear outside the trim."""
+    x0, y0, x1, y1 = round(c.X(x)), round(c.Y(y)), round(c.X(x + w)), round(c.Y(y + h))
+    c.rect(x0, y0, x1, y1, GRID_GROUND)
+    if variant == "brass":
+        brass = max(3, round(c.s * 0.9))
+        c.frame(x0 - 1, y0 - 1, x1 + 1, y1 + 1, 1, BRASS_DARK)
+        c.frame(x0 - 1 - brass, y0 - 1 - brass, x1 + 1 + brass, y1 + 1 + brass, brass, BRASS)
+    else:
+        c.frame(x0 - 2, y0 - 2, x1 + 2, y1 + 2, 2, EDGE)
 
 
 def _quarter(c: Canvas, right: bool, fill: Colour, variant: str) -> None:
@@ -321,17 +335,12 @@ def draw(ident: str, variant: str = "brass") -> pngio.Image:
     width, height = fixture.master
     c = Canvas(width, height, (fixture.width, fixture.height))
     if ident == "grid.inventory_cells":
-        c.rect(0, 0, width, height, BLACK)
-        c.rect(0, 0, width, 2, EDGE)
-        c.rect(0, 0, 2, height, EDGE)
-    elif ident == "fixture.pack_pit":
-        _pit(c, variant, (2, 2, 320, 384))
-    elif ident == "fixture.doll_pit":
-        _pit(c, variant, (5, 7, 320, 288))
-    elif ident == "fixture.holder_pit_loot":
-        _pit(c, variant, (2, 2, 320, 256))
-    elif ident == "fixture.holder_pit_barter":
-        _pit(c, variant, (2, 2, 320, 224))
+        c.rect(0, 0, width, height, GRID_GROUND)
+        x, y = c.X(fixture.width + LINE_AT), c.Y(fixture.height + LINE_AT)
+        c.rect(x - 1, 0, x + 1, height, EDGE)
+        c.rect(0, y - 1, width, y + 1, EDGE)
+    elif ident in GRID_PITS:
+        _grid_pit(c, variant, *GRID_PITS[ident])
     elif ident in ("fixture.name_pit", "fixture.quote_field", "fixture.count_pit", "fixture.schem_channel"):
         _pit(c, variant)
     elif ident == "fixture.count_icons":
