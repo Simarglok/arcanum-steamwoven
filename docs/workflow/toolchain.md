@@ -1540,16 +1540,18 @@ Viewer (ARC-UI-3320): the kit smoke (`./arcanum smoke pr --stages bar --env ARC_
 
 ## Steamwoven small brass-ringed buttons, batch B-BUTTONS slice 3c (ARC-UI-3270)
 
-The kit parts of the 16 small round buttons in a thin brass ring: arts 23, 24 (19 x 19 units), 770, 771 (21 x 21), 145 to 148, 299, 757, 758 (23 x 23), 338 to 340 (28 x 27), 823 and 824 (28 x 29): the player's own HD-pack frames as they are, cut to the ring's circle by an analytic round alpha (pack-first rule P, [TRD](../ui/steamwoven-interface-trd.md), the 3270 paragraph).
-Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for `sheet`, no Godot and no `dotnet`, so no launch queue. The pack is `local/hd-packs/interface-redraw-4x` (read only).
+The kit parts of the 16 small round buttons in a thin brass ring: arts 23, 24 (19 x 19 units), 770, 771 (21 x 21), 145 to 148, 299, 757, 758 (23 x 23), 338 to 340 (28 x 27), 823 and 824 (28 x 29); how each family is made: [TRD](../ui/steamwoven-interface-trd.md), the 3270 paragraph.
+Local (`local/steamwoven-ui/`, never in git), standard-library Python plus ImageMagick for `sheet`, no Godot and no `dotnet`, so no launch queue. Inputs, all read only: the generated sheet `outbox/B-BUTTONS-RING/pm.png`, the marker sheet `outbox/B-BUTTONS-3207-markers/marker-sheet.png` (#3207), the original frames `census/frames` and the pack `local/hd-packs/interface-redraw-4x`.
 
 ```sh
-python3 -B tools/steamwoven_ui/ring_kit.py check [--only NAME,...]                           # a pack frame for every state, circles inside the arts
+python3 -B tools/steamwoven_ui/ring_kit.py codex-inbox                                       # the inbox of batch B-BUTTONS-RING (one sheet: prompt, original and pack references)
+python3 -B tools/steamwoven_ui/codex_batch.py run B-BUTTONS-RING                             # the owner's Codex subscription, one item
+python3 -B tools/steamwoven_ui/ring_kit.py check [--only NAME,...]                           # a face for every state from its inputs, circles inside the arts
 python3 -B tools/steamwoven_ui/ring_kit.py build [--only NAME,...] [--out DIR] [--dry-run]   # the 57 parts -> masters/ and provenance/rule/
-python3 -B tools/steamwoven_ui/ring_kit.py sheet --out FILE [--only NAME,...] [--zoom N]     # original | HD pack | kit cut | kit with the run-time shadow (English labels)
+python3 -B tools/steamwoven_ui/ring_kit.py sheet --out FILE [--real FILE] [--only NAME,...]  # original | new with the shadow; --real: every button at its size on a 2560 x 1440 screen (English labels)
 ```
 
-`plate.<name>` is the pack's idle frame, `plate.<name>_pressed` and `_hover` the pressed and hover frames in full (the two-frame arts have no hover look), `glyph.<name>` an empty layer; the empty fourth frame of the plus and minus arts is never drawn by the original and has no part. The pack's transparent pixels first take the colour next to them, so only the analytic circle decides the edge; no shadow is baked. The circles are the tool's own table (`RINGS`); the viewer does not draw these arts from the kit yet.
+`plate.<name>` is the idle face, `plate.<name>_pressed` and `_hover` the other states in full (two-frame arts have no hover look), `glyph.<name>` an empty layer. The generated discs are registered onto each art's circle (`RINGS`) by their own centre and radius; the red symbol is moved to the middle with one offset per button. Every ring is brought to the accepted brass (`BRASS`). The viewer does not draw these arts from the kit yet ([#3347](https://github.com/Simarglok/arcanum-steamwoven/issues/3347)).
 Tests: `python3 -B -m unittest tools.steamwoven_ui.test_ring_kit` (in the batched `tools/local_dev/run_tests.py`).
 
 ## Controller test evidence summariser (ARC-GPAD-1376)

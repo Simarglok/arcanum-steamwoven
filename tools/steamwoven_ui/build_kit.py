@@ -278,20 +278,30 @@ def small_parts(plates: dict[str, dict]) -> list[dict]:
     return parts
 
 
+RING_METHOD_TEXT = {  # method of `ring_kit.py` -> (provenance prefix, what the face is)
+    "codex": ("codex", "the generated plus and minus set, one ring"),
+    "marker": ("codex", "the #3207 marker symbol on the set's plate"),
+    "wedge": ("codex", "a triangle by rule on the set's plate"),
+    "arrow": ("codex", "the arrow by rule E on the set's plate"),
+    "pack": ("rule", "the old HD pack's frame"),
+}
+
+
 def ring_parts(plates: dict[str, dict]) -> list[dict]:
-    """ARC-UI-3270, slice 3c of B-BUTTONS: the glyph and the pressed and hover plate of every small brass-ringed button (`ring_kit.py`, pack-first: the HD pack's frames cut to the ring's circle)."""
+    """ARC-UI-3270, slice 3c of B-BUTTONS: the glyph and the pressed and hover plate of every small brass-ringed button (`ring_kit.py`)."""
     parts = []
     for ring in ring_kit.RINGS:
         plate = plates.get(f"plate.{ring.name}")
         if plate is None:  # a census without the button (a test's synthetic one)
             continue
+        prefix, face = RING_METHOD_TEXT[ring.method]
         canvas = f"a {ring.master[0]} x {ring.master[1]} canvas"
         for ident, state in ring_kit.idents(ring):
             if state == "idle":
                 continue
-            what = f"EMPTY: the symbol of art {ring.art} is in the pack's frames" if state is None else f"the pack's {state} frame of art {ring.art}, cut to the ring's circle, a full frame laid over the idle plate"
+            what = f"EMPTY: the symbol of art {ring.art} is in the faces" if state is None else f"the {state} face of art {ring.art}: {face}"
             parts.append(new_part(ident, ident.split(".")[0], plate["anchor"], list(plate["used_by"]), None, "B-BUTTONS",
-                                  f"{what}; ring_kit.py, {canvas}, so the size is open", states=[state or "idle"], master=True, provenance=f"rule:ring_kit:{ident}"))
+                                  f"{what}; ring_kit.py, {canvas}, so the size is open", states=[state or "idle"], master=True, provenance=f"{'rule' if state is None else prefix}:ring_kit:{ident}"))
     return parts
 
 
@@ -368,10 +378,10 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["status"], part["provenance"] = "master", f"rule:parchment_kit:{ident}"
             part["note"] = (f"the idle face of art {part['source_arts'][-1]}: the old HD pack's frame (pack-first rule) resampled to the master, the alpha the ring's ellipse united with the four corner triangles (parchment_kit.py, ARC-UI-3205); the symbol is in the frame" if ident in BOX_PLATES else
                             f"the {'lit' if ident.endswith('_on') else 'refused'} face of art {part['source_arts'][-1]}: the old HD pack's frame of that state (green or red corners kept), the same alpha (parchment_kit.py, ARC-UI-3205)")
-        if ident in RING_PLATES:  # ARC-UI-3270: pack-first (owner rule 2026-11-25): the old HD pack's frames with an analytic round alpha, no Codex
-            part["status"], part["provenance"] = "master", f"rule:ring_kit:{ident}"
-            part["note"] = (f"the pack's own idle frame of art {RING_PLATES[ident].art} (pack-first rule), cut to the circle of the brass ring by an analytic round alpha, no shadow (a runtime layer, #3249); "
-                            "the states are the pack's frames (ring_kit.py, ARC-UI-3270)")
+        if ident in RING_PLATES:  # ARC-UI-3270 (owner decisions of 2026-11-26): one method per family, every ring in the accepted brass
+            prefix, face = RING_METHOD_TEXT[RING_PLATES[ident].method]
+            part["status"], part["provenance"] = "master", f"{prefix}:ring_kit:{ident}"
+            part["note"] = f"art {RING_PLATES[ident].art}, idle face: {face}; cut to the ring's circle by an analytic round alpha, the ring in the accepted brass, no shadow (a runtime layer, #3249) (ring_kit.py, ARC-UI-3270)"
         if ident in SMALL_PLATES:
             family = SMALL_PLATES[ident].family
             part["status"], part["provenance"] = "master", f"{SMALL_FAMILY_TEXT[family][0]}:small_kit:{ident}"
