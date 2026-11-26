@@ -74,7 +74,18 @@ public partial class AreaNewCharacterArtView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
+        AddChild(_rings);
     }
+
+    public override void _EnterTree() => InterfaceHd.Changed += QueueRedraw;
+
+    public override void _ExitTree() => InterfaceHd.Changed -= QueueRedraw;
+
+    // ARC-UI-3347: the ringed buttons (the cycle arrows) of the kit, through the round-part layer.
+    private readonly AreaKitRoundPartsLayer _rings = new();
+
+    /// <summary>ARC-UI-3347: the buttons the last redraw drew from the kit, for the self-test.</summary>
+    internal IReadOnlyList<int> RingsShownForSelfTest => _rings.ShownForSelfTest;
 
     /// <summary>The art's frames by number and the two fonts.</summary>
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaPremadeBrowserFonts fonts)
@@ -138,7 +149,7 @@ public partial class AreaNewCharacterArtView : Control
     {
         // ARC-UI-2575: the art is shared among the screens of the pre-made family, so the view on screen claims its frames at every draw (only while the Steamwoven layout places it).
         if (_zoned) Claim.Claim(_art.Values.SelectMany(frames => frames));
-        if (_fonts is not { } fonts || _view is not { } view) return;
+        if (_fonts is not { } fonts || _view is not { } view) { _rings.Clear(); return; }
         // ARC-UI-3040: over a complete kit the strips and the body are the kit's and the original's arts 336, 335 and 765 are not drawn.
         _kit.Compose(_zoned, GetViewportRect().Size);
         _ownBackdropDrawn = AreaCharacterArtDraw.Window(this, _art, AreaNewCharacterArtLayout.BackgroundArt, (_kit, Position, Scale));
@@ -148,11 +159,16 @@ public partial class AreaNewCharacterArtView : Control
         AreaCharacterArtDraw.Fill(this, field);
         var (x, text) = AreaNewCharacterArtLayout.NameLine(fonts.Name.Font, view.Character.Name, view.Typing);
         AreaArtTextDraw.Text(this, fonts.Name, text, x, field.Y, AreaPremadeBrowserArtLayout.Red);
+        var rings = new List<AreaKitRoundPartsLayer.Item>();
         foreach (var button in AllButtons)
         {
             var (art, bx, by) = AreaNewCharacterArtLayout.Button(button);
-            if (AreaCharacterArtDraw.Art(_art, art, Frame(button)) is { } texture) DrawTextureRect(texture, new Rect2(bx, by, texture.GetWidth(), texture.GetHeight()), false);
+            var frame = Frame(button);
+            if (AreaCharacterArtDraw.Art(_art, art, frame) is not { } texture) continue;
+            if (AreaKitRingFaces.Face(art, frame, GetViewportRect().Size) is { } face && AreaKitRoundPartsLayer.KitItem(art, face, (bx, by)) is { } ring) rings.Add(ring);
+            else DrawTextureRect(texture, new Rect2(bx, by, texture.GetWidth(), texture.GetHeight()), false);
         }
+        _rings.Show(rings);
     }
 
     private AreaNewCharacterArtButton? ButtonAt(Vector2 at)

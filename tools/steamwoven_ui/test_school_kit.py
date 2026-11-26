@@ -47,7 +47,7 @@ class CircleTests(unittest.TestCase):
             self.assertGreater(circle.radius, 10.0, tab.name)
             self.assertAlmostEqual(circle.trim, 0.4)
             self.assertAlmostEqual(circle.cx, circle.width / 2, delta=2.0, msg=tab.name)
-        self.assertEqual(len(sk.circles()), 28)
+        self.assertEqual(len(sk.circles()), 28 + 12)     # the school tabs and (ARC-UI-3347) the ringed buttons of ring_kit
 
     def test_the_shadow_numbers_are_the_viewers(self):
         s = sk.shadow()

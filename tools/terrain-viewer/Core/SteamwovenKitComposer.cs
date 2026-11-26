@@ -333,6 +333,18 @@ public static class SteamwovenKitTable
     };
 
     /// <summary>
+    /// ARC-UI-3347 (#3270, <c>tools/steamwoven_ui/ring_kit.py</c>): the small brass-ringed buttons outside the character sheet by the art they show and the plate part of each: <c>plate.&lt;name&gt;</c> the idle face, <c>_pressed</c> and, for the arts of
+    /// three or more frames, <c>_hover</c>. They draw through the round-part layer (<see cref="AreaKitRoundParts"/>) wherever the Steamwoven look shows them, with or without a kit background under them. 147 is read by no view of the viewer.
+    /// </summary>
+    public static IReadOnlyDictionary<int, string> RingFaces { get; } = new Dictionary<int, string>
+    {
+        [145] = "plate.mmb_chest", [146] = "plate.mmb_note", [147] = "plate.mmb_ques", [148] = "plate.mmb_skull",
+        [299] = "plate.sm_rightarrow", [757] = "plate.mpcycleleftbutton", [758] = "plate.mpcyclerightbutton",
+        [338] = "plate.pd_lil_butt", [339] = "plate.inven_lil_butt", [340] = "plate.tiny_butt",
+        [823] = "plate.lil_accept", [824] = "plate.lil_cancel",
+    };
+
+    /// <summary>
     /// ARC-UI-3341 (#3272, <c>tools/steamwoven_ui/small_kit.py</c>): the flat small controls a window draws whole from the kit, by the art the window shows: the window, the plate part and its master size. <c>plate.&lt;name&gt;</c> is the idle face,
     /// <c>plate.&lt;name&gt;_pressed</c> and <c>plate.&lt;name&gt;_hover</c> the other two; each face takes the art's place alone (never over the idle face: the ink of the schematic arrows has a soft edge that would double). The arts are the schematics
     /// tab of the character sheet (568) and the schematic window's page arrows (372, 373).
@@ -605,11 +617,11 @@ public static class SteamwovenKitComposer
         && part.Width == SteamwovenGrid.BakedLength(SteamwovenKitTable.CompositionMasterWidth, set.Step) && part.Height == SteamwovenGrid.BakedLength(SteamwovenKitTable.FullScreenMasterHeight, set.Step) ? part : null;
 
     /// <summary>
-    /// ARC-UI-3320: the kit faces of the round button the page shows with <paramref name="art"/> (<see cref="SteamwovenKitTable.RoundFaces"/>), or null when the set has no idle face for it (the page keeps the art's own frame through the round-part
-    /// layer, ARC-UI-3101). The pressed and hover faces count only at the idle face's size (a state that does not fit shows the idle face); the symbol is in the plate, so no glyph is asked for.
+    /// ARC-UI-3320: the kit faces of the round button shown with <paramref name="art"/> (<see cref="SteamwovenKitTable.RoundFaces"/>; ARC-UI-3347: <see cref="SteamwovenKitTable.RingFaces"/>), or null when the set has no idle face for it (a sheet
+    /// page keeps the art's own frame through the round-part layer, ARC-UI-3101; a ringed button keeps the art's own frame as before). The pressed and hover faces count only at the idle face's size (a state that does not fit shows the idle face); the symbol is in the plate, so no glyph is asked for.
     /// </summary>
     public static SteamwovenKitFace? RoundFace(SteamwovenKitSet set, int art) =>
-        SteamwovenKitTable.RoundFaces.TryGetValue(art, out var face) && set.TryGet(face, out var idle) ? Faces(set, face, idle) : null;
+        (SteamwovenKitTable.RoundFaces.TryGetValue(art, out var face) || SteamwovenKitTable.RingFaces.TryGetValue(art, out face)) && set.TryGet(face, out var idle) ? Faces(set, face, idle) : null;
 
     /// <summary>
     /// ARC-UI-3341: the kit faces of the flat control the window shows with <paramref name="art"/> (<see cref="SteamwovenKitTable.WindowFaces"/>), or null when the set has no idle face at the table's size at the step (the window keeps the art's own

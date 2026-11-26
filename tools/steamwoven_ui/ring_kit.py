@@ -2,14 +2,18 @@
 """ARC-UI-3270 (batch B-BUTTONS, slice 3c): the small round buttons in a thin brass ring (16 arts, 19 x 19 to 28 x 29 units): the character sheet's plus and minus (two sizes), the message window's four buttons, the multiplayer
 cycle arrows and the small right arrow, the three inventory "lil" buttons and the small accept and cancel.
 
-How each is made (owner decisions of 2026-11-26 in the issue's thread; every part is a full face cut to the ring's circle by an analytic round alpha, no shadow baked):
+How each is made (owner decisions of 2026-11-26 in the issue's thread; every part is a full face cut to a circle by an analytic round alpha, no shadow baked; the ring's circle, or the socket's inner circle for a socket dome):
 
 * `codex`  23, 24, 770, 771: ONE generated ring and glossy dome (the idle Minus of the sheet `pm`, drawn large and reduced, its bar taken out) for every face of both sizes, and the sign drawn over it by rule (owner 2026-11-26:
   the generated stroke was too thin): one stroke, `SIGN_LENGTH` and `SIGN_THICKNESS` of the dome's diameter, in the original's colour of the state (`SIGN`; the idle stroke has a soft relief, a little darker towards its lower edge, and its slot's thin shade above it); hover only lights the sign, pressed also darkens the dome and keeps the original's narrow red halo tight to the sign.
-* `marker` 145 to 148: the symbol cut from the generated marker sheet of the map markers 141 to 144 (#3207, one source for both places), on the set's own ring and dome (the idle Minus with its bar taken out); the idle symbol is
+* `marker` 145 to 148: the symbol cut from the generated marker sheet of the map markers 141 to 144 (#3207, one source for both places), on the socket dome (below), at the original symbol's extent; the idle symbol is
   dimmed as the original's frame 0 is dimmer than frame 1.
-* `wedge`  757, 758: that same plate, a straight-edged triangle by rule fitted to the original's red cells (the method of arts 827 and 828, #3272).
-* `arrow`  299: that same plate, the arrow by rule: a straight outline fitted to the original's red cells, the original's cells inside as even squares (rule E), a soft glow where the original lights up.
+* `wedge`  757, 758: the socket dome, a straight-edged triangle by rule fitted to the original's red cells (the method of arts 827 and 828, #3272).
+
+The socket dome (145 to 148, 757, 758; owner 2026-11-26, #3347): these arts have no ring of their own. Each stands in a socket the screen paints, whose gold ring is 22.2 units inside and 26.0 outside (crest 23.9) on all three screens, so a ring of
+the kit's own showed as a second ring. The face is the same glossy dome without any ring, as wide as the socket's inside (`SOCKET_DOME_CUT`), centred in the art's box; the symbol keeps its place relative to the original's dome (`ORIGINAL_DOME`). The
+viewer puts the dome's centre on the socket's centre and casts no shadow for it (`AreaKitRoundParts.SocketShift`).
+* `arrow`  299: the plus and minus buttons' ring and dome with the bar taken out, the arrow by rule: a straight outline fitted to the original's red cells, the original's cells inside as even squares (rule E), a soft glow where the original lights up.
 * `pack`   338 to 340, 823, 824: the player's own HD-pack frames, the pack's own alpha not used.
 
 Every ring is brought to the accepted brass (`BRASS`, #3259 and #3260, `hardware_build.brass_match`); the dome inside is not recoloured.
@@ -27,8 +31,8 @@ The parts of a button (TRD SWI-KIT-5; all at the plate's size, the manifest row 
 * `plate.<name>_pressed` the face of frame 1, `plate.<name>_hover` of frame 2 (arts of two frames have no hover look: the original wraps hover to frame 0). Frame 3 of the four plus and minus arts (the empty plate) is never
   drawn by the original (census, ledger OF9), so it has no part.
 
-The circles are this tool's own table (`RINGS`: centre and outer radius in art units, plus `TRIM` for the cut). Those of the plus and minus stand on the sheet's socket centres (#3321). The viewer does not draw these arts from the
-kit yet. The soft shadow under a round part is the run-time layer's; its offset and blur grow with the part's diameter (`shadow_of`, TRD).
+The circles are this tool's own table (`RINGS`: centre and outer radius in art units, plus `TRIM` for the cut). Those of the plus and minus stand on the sheet's socket centres (#3321). The viewer draws all these arts from the kit
+(`AreaKitRoundParts` holds the same circles, #3321 and #3347; art 147 is drawn by no window). The soft shadow under a round part is the run-time layer's; its offset and blur grow with the part's diameter (`shadow_of`, TRD).
 
 Nothing here holds art: every picture is read from and written to the ignored `local/` (the pack is `local/hd-packs/interface-redraw-4x`, read only). Standard library only (`pngio.py`); ImageMagick for `sheet`.
 Exit 0 = done, 1 = a check failed, 2 = an input could not be used.
@@ -85,14 +89,20 @@ def _ring(method: str, art: int, folder: str, frames: int, master: tuple[int, in
     return Ring(art, f"{art}-{folder}", folder.lower(), frames, master, school_kit.Circle(size[0], size[1], cx, cy, round(cut - TRIM, 3), TRIM), method)
 
 
+SOCKET_DOME_CUT = 11.1       # units: half the inner diameter of the socket's gold ring (22.2, measured on arts 200, 765 and 825)
+DOME_SHARE = 0.735           # where the generated button's ring begins, as a share of its disc's radius: the socket dome is the disc inside it
+ORIGINAL_DOME = {**{art: (10.4, 10.14) for art in (145, 146, 147, 148)}, 757: (11.42, 11.17), 758: (11.42, 11.17)}   # the dome's centre in the original art (matched against the socket the screen paints)
+
+
 RINGS = (
     # the plus and minus stand on the sheet's socket centres (#3321), as large as the art's box allows (half a unit over at one side)
     _ring("codex", 23, "char_minus", 4, (66, 66), (19, 19), 9.5, 9.5, 9.0),
     _ring("codex", 24, "char_plus", 4, (66, 66), (19, 19), 10.5, 9.5, 9.0),
     _ring("codex", 770, "Char_HTFTMinus", 4, (78, 78), (21, 21), 10.5, 10.0, 10.5),
     _ring("codex", 771, "Char_HTFTPlus", 4, (78, 78), (21, 21), 10.5, 10.0, 10.5),
-    *(_ring("marker", art, name, 2, (84, 84), (23, 23), 11.5, 11.5, 11.5) for art, name in ((145, "mmb_chest"), (146, "mmb_note"), (147, "mmb_ques"), (148, "mmb_skull"))),
-    *(_ring("wedge", art, name, 3, (84, 84), (23, 23), 11.5, 11.5, 11.5) for art, name in ((757, "MPCycleLeftButton"), (758, "MPCycleRightButton"))),
+    # the socket domes: no ring of their own, as wide as the inside of the socket's ring
+    *(_ring("marker", art, name, 2, (84, 84), (23, 23), 11.5, 11.5, SOCKET_DOME_CUT) for art, name in ((145, "mmb_chest"), (146, "mmb_note"), (147, "mmb_ques"), (148, "mmb_skull"))),
+    *(_ring("wedge", art, name, 3, (84, 84), (23, 23), 11.5, 11.5, SOCKET_DOME_CUT) for art, name in ((757, "MPCycleLeftButton"), (758, "MPCycleRightButton"))),
     _ring("arrow", 299, "Sm_RightArrow", 3, (84, 84), (23, 23), 11.5, 11.5, 11.5),
     *(_ring("pack", art, name, 2, (102, 96), (28, 27), 13.4, 12.1, 13.2) for art, name in ((338, "PD_lil_butt"), (339, "Inven_lil_butt"), (340, "tiny_butt"))),
     *(_ring("pack", art, name, 3, (102, 102), (28, 29), 13.35, 13.0, 13.2) for art, name in ((823, "Lil_Accept"), (824, "Lil_Cancel"))),
@@ -275,8 +285,22 @@ def empty_plate(local_root: Path, ring: Ring) -> Image:
     return toned(part_of(ring, frame), ring.circle, INNER["codex"])
 
 
-SYMBOL_BOXES = {"mmb_chest": (5, 4, 17, 17), "mmb_note": (5, 3, 16, 18), "mmb_ques": (7, 4, 15, 16), "mmb_skull": (4, 5, 19, 17)}   # the symbol's cells in the original's frames (x0, y0, x1, y1)
+SYMBOL_BOXES = {"mmb_chest": (5, 4, 17, 17), "mmb_note": (5, 3, 16, 18), "mmb_ques": (7, 4, 15, 16), "mmb_skull": (3, 3, 19, 17)}   # the symbol's cells in the original's frames (x0, y0, x1, y1)
 IDLE_DIM = {"mmb_chest": 0.77, "mmb_note": 0.67, "mmb_ques": 0.78, "mmb_skull": 0.66}   # frame 0's symbol lightness as a share of frame 1's, measured on the originals
+
+
+def dome_plate(local_root: Path, ring: Ring) -> Image:
+    """The socket dome: the same glossy dome as the plus and minus with its bar taken out, drawn so large that its ring falls outside the circle (`DOME_SHARE`), and cut to this circle. No ring, so no brass tone."""
+    c = ring.circle
+    large = school_kit.Circle(c.width, c.height, c.cx, c.cy, round(c.cut / DOME_SHARE - c.trim, 3), c.trim)
+    placed = placed_minus(local_root, large)
+    return part_of(ring, without_bar(centred(placed, large, symbol_offset(placed, large)), large))
+
+
+def symbol_shift(ring: Ring) -> tuple[float, float]:
+    """How far a symbol moves from the original art's cells so that it stands to this dome as it stands to the original's."""
+    x, y = ORIGINAL_DOME[ring.art]
+    return ring.circle.cx - x, ring.circle.cy - y
 
 
 def marker_name(name: str) -> str:
@@ -317,15 +341,16 @@ def marker_face(local_root: Path, ring: Ring, state: str) -> Image:
     symbol = marker_symbol(local_root, ring.name)
     x0, y0, x1, y1 = SYMBOL_BOXES[ring.name]
     mx, my = ring.master[0] / ring.circle.width, ring.master[1] / ring.circle.height
-    scale = min((x1 - x0) * mx / symbol.w, (y1 - y0) * my / symbol.h)
+    scale = math.sqrt((x1 - x0) * mx * (y1 - y0) * my / (symbol.w * symbol.h))   # the original symbol's area: its share of the disc, whatever the drawing's aspect
     w, h = max(1, round(symbol.w * scale)), max(1, round(symbol.h * scale))
     small = school_kit.resampled(symbol, w, h)
     if state == "idle":
         for i in range(w * h):
             for c in range(3):
                 small.data[i * 4 + c] = int(round(small.data[i * 4 + c] * IDLE_DIM[ring.name]))
-    face = empty_plate(local_root, ring)
-    over(face, small, round((x0 + x1) / 2 * mx - w / 2), round((y0 + y1) / 2 * my - h / 2))
+    face = dome_plate(local_root, ring)
+    dx, dy = symbol_shift(ring)
+    over(face, small, round(((x0 + x1) / 2 + dx) * mx - w / 2), round(((y0 + y1) / 2 + dy) * my - h / 2))
     return face
 
 
@@ -390,8 +415,9 @@ def fit_wedge(frame: Image) -> Wedge:
 
 def wedge_face(local_root: Path, ring: Ring, frame: Image) -> Image:
     wedge = fit_wedge(frame)
-    face = empty_plate(local_root, ring)
-    over(face, drawn(ring, lambda x, y: wedge.colour if wedge.holds(x, y) else None))
+    face = dome_plate(local_root, ring)
+    dx, dy = symbol_shift(ring)
+    over(face, drawn(ring, lambda x, y: wedge.colour if wedge.holds(x - dx, y - dy) else None))
     return face
 
 

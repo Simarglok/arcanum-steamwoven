@@ -287,20 +287,55 @@ class FaceTests(unittest.TestCase):
                 upright = (c.cx, c.cy + 0.4 * length)
                 self.assertEqual(at(ring, hover, *upright)[0] > 240, "plus" in name)
 
-    def test_the_symbol_buttons_stand_on_the_sets_plate_and_the_idle_symbol_is_dimmed(self):
+    def test_the_symbol_buttons_stand_on_the_socket_dome_and_the_idle_symbol_is_dimmed(self):
         with tempfile.TemporaryDirectory() as folder:
             root = tree(folder)
             frames = root / "census" / "frames"
             ring = rk.ring_named("mmb_chest")
             idle, lit = rk.face_of(root, frames, ring, "idle"), rk.face_of(root, frames, ring, "pressed")
             x0, y0, x1, y1 = rk.SYMBOL_BOXES[ring.name]
-            self.assertEqual(at(ring, lit, (x0 + x1) / 2, (y0 + y1) / 2)[:3], (240, 240, 240))
-            self.assertAlmostEqual(at(ring, idle, (x0 + x1) / 2, (y0 + y1) / 2)[0], 240 * rk.IDLE_DIM[ring.name], delta=2)
-            plate = rk.empty_plate(root, ring)
+            dx, dy = rk.symbol_shift(ring)
+            middle = ((x0 + x1) / 2 + dx, (y0 + y1) / 2 + dy)
+            self.assertEqual(at(ring, lit, *middle)[:3], (240, 240, 240))
+            self.assertAlmostEqual(at(ring, idle, *middle)[0], 240 * rk.IDLE_DIM[ring.name], delta=2)
+            plate = rk.dome_plate(root, ring)
             centre = at(ring, plate, ring.circle.cx, ring.circle.cy)
             self.assertLess(centre[0], 60)                                             # the bar is gone from the plate
             arrow = rk.ring_named("mpcyclerightbutton")
             self.assertGreater(at(arrow, rk.face_of(root, frames, arrow, "idle"), 11, 11.5)[0], 150)
+
+    def test_a_socket_dome_has_no_ring_and_fills_the_inside_of_the_sockets_ring(self):
+        domes = [r for r in rk.RINGS if r.method in ("marker", "wedge")]
+        self.assertEqual({(r.circle.cx, r.circle.cy, round(r.circle.cut, 3)) for r in domes}, {(11.5, 11.5, rk.SOCKET_DOME_CUT)})
+        with tempfile.TemporaryDirectory() as folder:
+            root = tree(folder)
+            for ring in domes:
+                c = ring.circle
+                plate = rk.dome_plate(root, ring)
+                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    inside = at(ring, plate, c.cx + 0.95 * c.cut * dx, c.cy + 0.95 * c.cut * dy)
+                    self.assertEqual(inside[3], 255, ring.name)
+                    self.assertLess(inside[0], 60, ring.name)                          # the dome to its edge: no brass
+                    self.assertEqual(at(ring, plate, c.cx + 1.03 * c.cut * dx, c.cy + 1.03 * c.cut * dy)[3], 0, ring.name)
+
+    def test_a_socket_domes_symbol_keeps_its_place_on_the_originals_dome(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = tree(folder)
+            frames = root / "census" / "frames"
+            for name, state in (("mmb_chest", "pressed"), ("mmb_skull", "pressed"), ("mpcyclerightbutton", "idle")):
+                ring = rk.ring_named(name)
+                c = ring.circle
+                face, plate = rk.face_of(root, frames, ring, state), rk.dome_plate(root, ring)
+                drawn = [(i % face.w, i // face.w) for i in range(face.w * face.h) if max(abs(face.data[i * 4 + k] - plate.data[i * 4 + k]) for k in range(3)) > 60]
+                middle = ((min(x for x, _ in drawn) + max(x for x, _ in drawn) + 1) / 2 * c.width / face.w, (min(y for _, y in drawn) + max(y for _, y in drawn) + 1) / 2 * c.height / face.h)
+                if ring.method == "marker":
+                    x0, y0, x1, y1 = rk.SYMBOL_BOXES[name]
+                    original_middle = ((x0 + x1) / 2, (y0 + y1) / 2)
+                else:
+                    original_middle = ((9 + 15) / 2, 11.5)                    # the synthetic original's triangle: columns 9 to 14, rows 5 to 17
+                x, y = rk.ORIGINAL_DOME[ring.art]
+                for axis, (got, was, dome, centre) in enumerate(zip(middle, original_middle, (x, y), (c.cx, c.cy))):
+                    self.assertAlmostEqual(got - centre, was - dome, delta=0.2, msg=f"{name} axis {axis}")
 
     def test_a_missing_input_is_a_ring_error(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -383,6 +418,24 @@ class CommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             self.assertEqual(run("build", "--local-root", folder, "--only", "nothing")[0], 2)
             self.assertEqual(run("check", "--local-root", str(Path(folder) / "absent"))[0], 2)
+
+
+class ViewerTableTests(unittest.TestCase):
+    def test_the_viewers_ringed_buttons_are_this_tools_arts_with_their_circles(self):
+        """ARC-UI-3347: `SteamwovenKitTable.RingFaces` names the plate of each ringed button outside the sheet's sockets, and `AreaKitRoundParts` holds its circle, as this tool's table does."""
+        import re
+        source = (sk.HERE.parents[1] / "tools" / "terrain-viewer" / "Core" / "SteamwovenKitComposer.cs").read_text(encoding="utf-8")
+        block = source[source.index("RingFaces { get; }"):]
+        block = block[:block.index("};")]
+        viewer = {int(art): name for art, name in re.findall(r'\[(\d+)\] = "plate\.([a-z_]+)"', block)}
+        rings = {ring.art: ring for ring in rk.RINGS if ring.method != "codex"}     # 23, 24, 770, 771 stand in the sheet's sockets
+        self.assertEqual({art: ring.name for art, ring in rings.items()}, viewer)
+        table = sk.ROUND_PARTS_SOURCE.read_text(encoding="utf-8")
+        rows = {int(a): (int(w), int(h), float(cx), float(cy), float(r)) for a, w, h, cx, cy, r in
+                re.findall(r"\[(\d+)\] = new\((\d+), (\d+), ([0-9.]+)f, ([0-9.]+)f, ([0-9.]+)f\)", table)}
+        for art, ring in rings.items():
+            c = ring.circle
+            self.assertEqual(rows[art], (c.width, c.height, c.cx, c.cy, c.radius), ring.name)
 
 
 if __name__ == "__main__":

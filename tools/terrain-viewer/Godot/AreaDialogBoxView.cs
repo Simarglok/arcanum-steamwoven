@@ -42,9 +42,22 @@ public partial class AreaDialogBoxView : Control
         MouseFilter = MouseFilterEnum.Stop;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
+        AddChild(_rings);
     }
 
-    public override void _ExitTree() => Release();
+    public override void _EnterTree() => InterfaceHd.Changed += QueueRedraw;
+
+    public override void _ExitTree()
+    {
+        InterfaceHd.Changed -= QueueRedraw;
+        Release();
+    }
+
+    // ARC-UI-3347: the accept and cancel buttons of the kit, through the round-part layer.
+    private readonly AreaKitRoundPartsLayer _rings = new();
+
+    /// <summary>ARC-UI-3347: the buttons the last redraw drew from the kit, for the self-test.</summary>
+    internal IReadOnlyList<int> RingsShownForSelfTest => _rings.ShownForSelfTest;
 
     public void SetArt(AreaDialogBoxArt art)
     {
@@ -131,12 +144,16 @@ public partial class AreaDialogBoxView : Control
         var (x, y, _, _) = AreaDialogBoxLayout.Text;
         for (var line = 0; line < _lines.Count; line++)
             AreaArtTextDraw.Glyphs(this, art.Font, _lines[line], x, y + line * art.LineHeight, AreaDialogBoxLayout.Face);
+        var rings = new List<AreaKitRoundPartsLayer.Item>();
         for (var i = 0; i < _buttons.Count; i++)
         {
             var frames = art.Buttons[_buttons[i].Art];
-            var texture = frames[Frame(i, frames.Count)];
-            DrawTextureRect(texture, new Rect2(_buttons[i].X, _buttons[i].Y, texture.GetSize()), false);
+            var frame = Frame(i, frames.Count);
+            var at = (_buttons[i].X, _buttons[i].Y);
+            if (AreaKitRingFaces.Face(_buttons[i].Art, frame, GetViewportRect().Size) is { } face && AreaKitRoundPartsLayer.KitItem(_buttons[i].Art, face, at) is { } ring) rings.Add(ring);
+            else DrawTextureRect(frames[frame], new Rect2(_buttons[i].X, _buttons[i].Y, frames[frame].GetSize()), false);
         }
+        _rings.Show(rings);
     }
 
     public override void _Notification(int what)

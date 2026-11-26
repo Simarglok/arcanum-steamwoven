@@ -5,7 +5,7 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>
 /// ARC-UI-3101: the round parts a view draws as separate arts while the kit's background shows (<see cref="AreaKitRoundParts"/>): a child layer of the view that draws each part through the shader of the rules, the art cut to the circle of its ring and
-/// under it the generated soft shadow. A view collects what it would have drawn with <c>DrawTextureRect</c> into a list in its own <c>_Draw</c> and gives it to <see cref="Show"/> at its end; <see cref="Clear"/> hides the layer where the kit does not show
+/// under it the generated soft shadow (a socket dome has none, ARC-UI-3347). A view collects what it would have drawn with <c>DrawTextureRect</c> into a list in its own <c>_Draw</c> and gives it to <see cref="Show"/> at its end; <see cref="Clear"/> hides the layer where the kit does not show
 /// (the view then draws its parts as before). The shadows lie under every part of the layer (a part never takes the shadow of its neighbour). The shader works in the art's own units, so the cut is one device pixel wide at any scale and for the Legacy
 /// frame as for a pack frame; a texture whose size is not the table's art size is drawn as it is. ARC-UI-3320: a part may be a kit face (<see cref="KitItem"/>: the master's own size and straight alpha, already cut to the same circle); it is stretched to the art's rectangle and goes through the same cut and shadow.
 /// </summary>
@@ -35,7 +35,7 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
     {
         for (var i = 0; i < _shown.Count; i++)
             if (_shown[i] == art)
-                return (new Rect2(_parts[i].Position, _parts[i].Size), new Rect2(_shadows[i].Position, _shadows[i].Size), (Vector3)_parts[i].Material!.Get("shader_parameter/disc"));
+                return (_parts[i].Drawn, _shadows[i].Drawn, (Vector3)_parts[i].Material!.Get("shader_parameter/disc"));
         return null;
     }
 
@@ -47,8 +47,18 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
     /// ARC-UI-3320: the item of a kit face of <paramref name="art"/> at the art's place (<paramref name="place"/>, in the view's units): the rectangle is the table's art size, whatever the master's size (the shader works in the art's units and the
     /// face, already cut to the circle at its own size, is stretched to it), or null when the art is no round part.
     /// </summary>
-    internal static Item? KitItem(int art, Texture2D face, (int X, int Y) place) =>
-        AreaKitRoundParts.Of(art) is { } part ? new Item(art, face, new Rect2(place.X, place.Y, part.Width, part.Height), true) : null;
+    internal static Item? KitItem(int art, Texture2D face, (int X, int Y) place) => KitItem(art, face, (place.X, place.Y), 1f);
+
+    /// <summary>
+    /// ARC-UI-3347: as <see cref="KitItem(int, Texture2D, ValueTuple{int, int})"/> for a view that draws in screen pixels: the art's rectangle at <paramref name="place"/> (units) times <paramref name="scale"/>. A socket dome's rectangle moves to the
+    /// socket's centre first (<see cref="AreaKitRoundParts.SocketShift"/>).
+    /// </summary>
+    internal static Item? KitItem(int art, Texture2D face, (float X, float Y) place, float scale)
+    {
+        if (AreaKitRoundParts.Of(art) is not { } part) return null;
+        var (dx, dy) = AreaKitRoundParts.SocketShift(art, place.X, place.Y);
+        return new Item(art, face, new Rect2((place.X + dx) * scale, (place.Y + dy) * scale, part.Width * scale, part.Height * scale), true);
+    }
 
     /// <summary>Hides every part: the view draws its arts as before.</summary>
     internal void Clear()
@@ -76,6 +86,7 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
             var part = AreaKitRoundParts.Of(art)!.Value;
             _parts[i].Place(part, texture, rect, kit);
             _shadows[i].Place(part, null, rect, false);
+            _shadows[i].Visible = !AreaKitRoundParts.IsSocketDome(art);
         }
         _shown = [.. items.Select(item => item.Art)];
     }
@@ -88,6 +99,7 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
         private readonly bool _shadow;
         private readonly ShaderMaterial _material = new() { Shader = Shared };
         private Texture2D? _texture;
+        private Rect2 _drawn;
 
         internal PartNode(bool shadow)
         {
@@ -95,6 +107,9 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
             MouseFilter = MouseFilterEnum.Ignore;
             Material = _material;
         }
+
+        /// <summary>The rectangle the node draws, in the layer's coordinates.</summary>
+        internal Rect2 Drawn => new(Position + _drawn.Position, _drawn.Size);
 
         internal void Place(AreaKitRoundParts.Part part, Texture2D? texture, Rect2 rect, bool kit)
         {
@@ -108,8 +123,7 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
             if (_shadow)
             {
                 var reach = AreaKitRoundParts.ShadowReach;
-                Position = rect.Position - new Vector2(reach, reach) * ratio;
-                Size = rect.Size + new Vector2(reach, reach) * ratio * 2;
+                Cover(new Rect2(rect.Position - new Vector2(reach, reach) * ratio, rect.Size + new Vector2(reach, reach) * ratio * 2));
                 _material.SetShaderParameter("mode", 1f);
                 _material.SetShaderParameter("unit_size", new Vector2(part.Width + 2 * reach, part.Height + 2 * reach));
                 _material.SetShaderParameter("origin", new Vector2(reach, reach));
@@ -118,7 +132,7 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
             }
             else
             {
-                Position = rect.Position; Size = rect.Size;
+                Cover(rect);
                 _material.SetShaderParameter("mode", 0f);
                 _material.SetShaderParameter("unit_size", new Vector2(part.Width, part.Height));
                 _material.SetShaderParameter("origin", Vector2.Zero);
@@ -126,10 +140,18 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
             QueueRedraw();
         }
 
+        // ARC-UI-3347: the engine rounds a canvas item's origin to whole units (the project snaps 2D transforms, and a Control its position), so a node stands on the whole unit at or before its rectangle and draws it at the rest: a socket dome stands between units.
+        private void Cover(Rect2 rect)
+        {
+            Position = rect.Position.Floor();
+            _drawn = new Rect2(rect.Position - Position, rect.Size);
+            Size = _drawn.End;
+        }
+
         public override void _Draw()
         {
-            if (_shadow) DrawRect(new Rect2(Vector2.Zero, Size), Colors.White);
-            else if (_texture is not null) DrawTextureRect(_texture, new Rect2(Vector2.Zero, Size), false);
+            if (_shadow) DrawRect(_drawn, Colors.White);
+            else if (_texture is not null) DrawTextureRect(_texture, _drawn, false);
         }
     }
 }

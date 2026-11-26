@@ -430,8 +430,8 @@ public sealed class SteamwovenKitTests
     [TestMethod]
     public void The_round_faces_are_the_round_parts_art_for_art_and_each_has_its_own_plate()
     {
-        // ARC-UI-3320: the sixteen college rings, the four skill groups and the eight disciplines: the arts of the round-part table, no more and no less, one plate each.
-        CollectionAssert.AreEquivalent(AreaKitRoundParts.ArtNumbers.ToArray(), SteamwovenKitTable.RoundFaces.Keys.ToArray());
+        // ARC-UI-3320: the sixteen college rings, the four skill groups and the eight disciplines; ARC-UI-3347: the twelve small ringed buttons: together the arts of the round-part table, no more and no less, one plate each.
+        CollectionAssert.AreEquivalent(AreaKitRoundParts.ArtNumbers.ToArray(), SteamwovenKitTable.RoundFaces.Keys.Concat(SteamwovenKitTable.RingFaces.Keys).ToArray());
         Assert.AreEqual(28, SteamwovenKitTable.RoundFaces.Values.Distinct().Count());
         Assert.IsTrue(SteamwovenKitTable.RoundFaces.Values.All(id => id.StartsWith("plate.", StringComparison.Ordinal) && SteamwovenKitSet.ValidId(id)));
         // The names are those of #3204's manifest rows (a college is s_<college>, a school <name>_but).
@@ -439,6 +439,26 @@ public sealed class SteamwovenKitTests
         Assert.AreEqual("plate.s_temporal", SteamwovenKitTable.RoundFaces[122]);
         Assert.AreEqual("plate.social_but", SteamwovenKitTable.RoundFaces[304]);
         Assert.AreEqual("plate.therapeutics_but", SteamwovenKitTable.RoundFaces[313]);
+    }
+
+    [TestMethod]
+    public void The_ringed_buttons_are_the_plates_of_the_ring_kit_and_take_the_states_the_set_holds()
+    {
+        // ARC-UI-3347: the manifest rows of #3270 (tools/steamwoven_ui/ring_kit.py), plate.<name> by art; the sheet's plus and minus are not among them (#3321 draws them into the sheet's sockets).
+        CollectionAssert.AreEquivalent(new[] { 145, 146, 147, 148, 299, 338, 339, 340, 757, 758, 823, 824 }, SteamwovenKitTable.RingFaces.Keys.ToArray());
+        Assert.AreEqual(12, SteamwovenKitTable.RingFaces.Values.Distinct().Count());
+        Assert.IsTrue(SteamwovenKitTable.RingFaces.Values.All(id => id.StartsWith("plate.", StringComparison.Ordinal) && SteamwovenKitSet.ValidId(id)));
+        Assert.AreEqual("plate.tiny_butt", SteamwovenKitTable.RingFaces[340]);
+        Assert.AreEqual("plate.lil_cancel", SteamwovenKitTable.RingFaces[824]);
+        var set = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.lil_accept", 51, 51), new("plate.lil_accept_pressed", 51, 51), new("plate.lil_accept_hover", 51, 51), new("plate.tiny_butt", 51, 48), new("plate.tiny_butt_pressed", 51, 48)]);
+        var accept = SteamwovenKitComposer.RoundFace(set, 823)!;
+        CollectionAssert.AreEqual(new[] { "plate.lil_accept", "plate.lil_accept_pressed", "plate.lil_accept_hover" }, accept.Parts.Select(part => part.Id).ToArray());
+        // A two-frame art has no hover face.
+        var arrange = SteamwovenKitComposer.RoundFace(set, 340)!;
+        Assert.IsNotNull(arrange.Pressed);
+        Assert.IsNull(arrange.Hover);
+        // A button the set has no idle face for keeps its own art.
+        Assert.IsNull(SteamwovenKitComposer.RoundFace(set, 824));
     }
 
     [TestMethod]

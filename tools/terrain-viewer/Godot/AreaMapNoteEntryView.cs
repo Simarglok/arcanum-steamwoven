@@ -38,6 +38,29 @@ public partial class AreaMapNoteEntryView : Control
     internal Texture2D? ButtonArtForSelfTest(MapNoteAction action) => _buttons[(int)action].Visible ? _buttons[(int)action].Texture : null;
     internal Texture2D? MarkerArtForSelfTest(int type) => _markers[type].Visible ? _markers[type].Texture : null;
 
+    // ARC-UI-3347: the note markers of the kit, through the round-part layer (their rects stay for the pointer).
+    private readonly AreaKitRoundPartsLayer _rings = new();
+
+    /// <summary>ARC-UI-3347: the buttons drawn from the kit now, for the self-test.</summary>
+    internal IReadOnlyList<int> RingsShownForSelfTest => _rings.ShownForSelfTest;
+
+    public override void _EnterTree()
+    {
+        InterfaceHd.Changed += KitChanged;
+        GetViewport().SizeChanged += KitChanged;
+    }
+
+    public override void _ExitTree()
+    {
+        InterfaceHd.Changed -= KitChanged;
+        GetViewport().SizeChanged -= KitChanged;
+    }
+
+    private void KitChanged()
+    {
+        if (IsNodeReady()) RenderButtons();
+    }
+
     public override void _Ready()
     {
         Name = "MapNoteEntry";
@@ -60,6 +83,7 @@ public partial class AreaMapNoteEntryView : Control
             var marker = MapNoteEntry.Markers[m];
             _markers[m] = MakeButton("NoteMarker" + marker.Type, marker.X, marker.Y, true, m);
         }
+        AddChild(_rings);
         // Hidden mid-press (the bars went away): no release reaches the view, so the press and the hover are forgotten.
         VisibilityChanged += () => { if (!Visible) { _held = null; _hovered = null; Render(); } };
         Render();
@@ -124,21 +148,29 @@ public partial class AreaMapNoteEntryView : Control
 
     private void RenderButtons()
     {
+        var rings = new List<AreaKitRoundPartsLayer.Item>();
         for (var b = 0; b < _buttons.Length; b++) DrawButton(_buttons[b], _look?.Buttons.ElementAtOrDefault(b), (false, b), false);
-        for (var m = 0; m < _markers.Length; m++) DrawButton(_markers[m], _look?.Markers.ElementAtOrDefault(m), (true, m), MapNoteEntry.Markers[m].Type == _marker);
+        for (var m = 0; m < _markers.Length; m++)
+        {
+            var frame = DrawButton(_markers[m], _look?.Markers.ElementAtOrDefault(m), (true, m), MapNoteEntry.Markers[m].Type == _marker);
+            AreaKitRingButtonRect.Apply(_markers[m], MapNoteEntry.Markers[m].Art, frame, rings);
+        }
+        _rings.Show(rings);
     }
 
     // A button's frame (GB4): down while held with the pointer over it (a radio button also while chosen); lit (two steps) under the pointer; else idle. A button whose art
     // did not read is not shown (no invisible area takes the pointer).
-    private void DrawButton(TextureRect rect, Texture2D[]? frames, (bool Marker, int Index) id, bool chosen)
+    private int DrawButton(TextureRect rect, Texture2D[]? frames, (bool Marker, int Index) id, bool chosen)
     {
         rect.Visible = frames is { Length: > 0 };
-        if (frames is not { Length: > 0 }) return;
+        if (frames is not { Length: > 0 }) return 0;
         var held = _held == id;
         var hovered = _hovered == id;
         var look = chosen || (held && hovered) ? AreaBarButtonLook.Down : hovered && !held ? AreaBarButtonLook.Hovered : AreaBarButtonLook.Idle;
-        rect.Texture = frames[AreaGameBarLayout.Frame(look, frames.Length)];
+        var frame = AreaGameBarLayout.Frame(look, frames.Length);
+        rect.Texture = frames[frame];
         rect.Size = frames[0].GetSize();
+        return frame;
     }
 
     private sealed partial class TextLayer : Control
