@@ -34,6 +34,8 @@ public partial class TerrainViewerApp
     private Func<GogInstallerUnpacker?>? _launcherUnpackerForSelfTest;
     /// <summary>The self-test's stand-in for the start Play begins (a synthetic folder cannot load).</summary>
     private Action<TerrainViewerArguments>? _launcherStartForSelfTest;
+    /// <summary>ARC-RENDER-3420: this process was restarted for the separate rendering thread, so it never restarts again.</summary>
+    private bool _renderThreadRestarted;
     /// <summary>ARC-DEV-069: the first-start preparation of the game data that Play (or a stored folder's start) is waiting for; the self-test awaits it.</summary>
     private Task? _prepareTask;
     /// <summary>The self-test's stand-in for the preparation (a synthetic folder holds no real archives to build from).</summary>
@@ -63,7 +65,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>A start without inputs: the stored or detected folder, through the launcher screen when it shows.</summary>
-    private async Task StartFromGameFolderAsync(bool requested)
+    private async Task StartFromGameFolderAsync(bool requested, bool restarted = false)
     {
         // The start runs on after _Ready returns: a failure here would otherwise fault an unobserved task, leaving the window on its
         // loading line (or a smoke waiting for its timeout).
@@ -86,11 +88,13 @@ public partial class TerrainViewerApp
                          + $"verifiedRelease={folder.Identity.VerifiedRelease} version={folder.Identity.Version ?? "none"} identityChanged={startup.IdentityChanged} "
                          + $"showLauncher={startup.ShowLauncher}");
             else GD.Print("ARC-DEV-046 game folder not found");
-            var reason = LauncherScreen.Decide(read.Settings, startup, requested);
-            if (reason == LauncherShowReason.None && !ViewerAutomatedStorage.Automated && await ShiftDuringStart()) reason = LauncherShowReason.Requested;
+            var reason = RenderThreadRestart.Reason(LauncherScreen.Decide(read.Settings, startup, requested), restarted);
+            // ARC-RENDER-3420: the restarted process continues a start the player already let go on, so it does not wait for Shift again.
+            if (reason == LauncherShowReason.None && !restarted && !ViewerAutomatedStorage.Automated && await ShiftDuringStart()) reason = LauncherShowReason.Requested;
             GD.Print($"ARC-UI-014 launcher reason={reason}");
             if (reason == LauncherShowReason.None)
             {
+                if (RestartForRenderThread(read.Settings)) return;
                 // A stored, unchanged folder goes straight on; the game data (prototype files) is checked first and, only when the installation has
                 // none, prepared with the progress on the status line. A failure opens the launcher screen with the reason.
                 await PrepareAndStartAsync(startup.Folder!, null, () =>
@@ -142,6 +146,7 @@ public partial class TerrainViewerApp
             _launcherPanel.ShowAtStartRequested += show => LauncherChange(launcher => launcher.SetShowAtStart(show));
             _launcherPanel.DebugModeRequested += on => LauncherChange(launcher => launcher.SetDebugMode(on));
             _launcherPanel.HoldToQuitRequested += on => LauncherChange(launcher => launcher.SetHoldToQuit(on));
+            _launcherPanel.RenderThreadRequested += on => LauncherChange(launcher => launcher.SetSeparateRenderThread(on));
             // ARC-UI-143: the HD lines, saved at once in the settings files.
             _launcherPanel.HdRequested += LauncherHd;
             _launcherPanel.HdWorldZoomRequested += LauncherHdWorldZoom;
@@ -273,8 +278,25 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-014 launcher play folder={settings.GameRoot} rules={RuleModeNames.Name(settings.Rules)} showAtStart={settings.ShowAtStart} "
                  + $"debugMode={settings.DebugMode} save={saved?.ToString() ?? "skipped (automated run)"}");
         _launcherSettings = settings;
+        // ARC-RENDER-3420: the restarted game reads the setting from the file, so a start that could not save it goes on in this process.
+        if (saved == LauncherSettingsSaveStatus.Saved && RestartForRenderThread(settings)) return;
         // ARC-DEV-069: the screen stays open (busy) while the game data is checked and, on a first start, prepared; it closes when the game starts.
         _ = PrepareAndStartAsync(launcher.Folder!, launcher, null);
+    }
+
+    /// <summary>ARC-RENDER-3420: when the settings ask for the separate rendering thread and this process was not restarted for it, quits and
+    /// starts the game again with the engine's option; true when it does. The engine reads its thread model only at its start.</summary>
+    private bool RestartForRenderThread(LauncherSettings settings)
+    {
+        if (!RenderThreadRestart.Needed(settings.SeparateRenderThread, _renderThreadRestarted, ViewerAutomatedStorage.Automated)) return false;
+        // A start from sources runs on the editor binary, which needs its project folder again.
+        var project = OS.HasFeature("editor") ? ProjectSettings.GlobalizePath("res://") : null;
+        var arguments = RenderThreadRestart.Arguments(OS.GetCmdlineArgs(), OS.GetCmdlineUserArgs(), project);
+        GD.Print($"ARC-RENDER-3420 restarting for the separate rendering thread arguments=[{string.Join(' ', arguments)}]");
+        OS.SetRestartOnExit(true, arguments);
+        _launcherPanel?.CloseView();
+        GetTree().Quit();
+        return true;
     }
 
     /// <summary>ARC-DEV-069: the folder where the prepared game data lives: beside the launcher settings (an automated run without a test path uses

@@ -106,7 +106,7 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   warning that only that release is checked; otherwise what is missing, for example "no arcanum2.dat here"); a button
   for each other ready fixed candidate; "Choose folder…" (the system's folder dialog; `GameFolderLocator.Choose` also
   looks inside a chosen Wine wrapper `.app`, bottle or `drive_c`); the rules Steamwoven or Original (custom mixes
-  after alpha); three HD lines (ARC-UI-143, below); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
+  after alpha); three HD lines (ARC-UI-143, below); "Show this screen at every start"; "Separate rendering thread (experimental)" (ARC-RENDER-3420, off by default, below); "Debug mode" (ARC-DEV-050, off by default:
   [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
 - **HD lines (ARC-UI-143, ARC-RENDER-2076, ARC-UI-2174).** After the rules the screen has two HD rows (a third, the experimental generated interface, was removed by ARC-UI-3142: HD On is the Steamwoven interface, HD Off the Original look) (the Game page of the options window had them until ARC-UI-146), one row of choices each:
@@ -123,6 +123,16 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   file and finds the defaults. A choice that could not be written is named under the rows. Checked by the launcher self-test (defaults, an old file's migration, each choice saved in the one file, shown again
   by the next screen, read by the start, Custom's folder, Reset) and by the launcher native smoke's HD lines and screenshot (`--native-smoke-screenshot PATH` also writes `NAME-launcher.png` beside it,
   the screen before Play, where `PATH` is `NAME.png`).
+- **Separate rendering thread (ARC-RENDER-3420).** A checkbox, off by default, stored by Play as `separateRenderThread` of the
+  `launcher` line (Reset settings turns it off). On, the game draws on the engine's own rendering thread (`--render-thread separate`),
+  which the engine calls experimental. The engine reads its thread model only when it starts, so the first process always runs the
+  default model: after Play (or, on a start that skips the screen, before the game loads) it starts the game once more with the option
+  and the user argument `--render-thread-restart`, then quits (`RenderThreadRestart`). The restarted process never restarts again and
+  skips a "show at every start" screen; any other reason still opens the screen. A Play whose settings could not be saved, and an
+  automated run, never restart. If the separate thread fails, the next ordinary start is in the default model: hold Shift (or have
+  "show at every start" on) to reach the screen and turn it off. Measured (2026-11-26, release package, M4 Pro, 2560x1440, HD):
+  walk 87 to 143 fps, scroll 91 to 138, walk and scroll 64 to 105 ([#3420](https://github.com/Simarglok/arcanum-steamwoven/issues/3420)).
+  Not measured: input latency and long sessions.
 - **Install from GOG installer…** (ARC-DEV-074, [research](../workflow/packaging.md) option A) is for a player
   without Windows who has the GOG offline installer (`setup_arcanum_….exe`, Inno Setup 5.6.2, one file). It first looks for
   the free `innoextract` tool (zlib licence; `PATH`, then `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`,

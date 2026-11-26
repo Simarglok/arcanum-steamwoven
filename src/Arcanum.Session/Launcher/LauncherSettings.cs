@@ -43,6 +43,10 @@ public sealed record LauncherSettings(string? GameRoot, GameSource GameSource, G
     /// the held key asks too.</summary>
     public bool HoldToQuit { get; init; } = true;
 
+    /// <summary>ARC-RENDER-3420: the engine draws on its separate rendering thread (off by default; the engine calls it experimental). The
+    /// engine reads its thread model only at its start, so the game restarts once to apply it.</summary>
+    public bool SeparateRenderThread { get; init; }
+
     /// <summary>These settings with <paramref name="check"/>'s ready folder, source and identity; a folder that is not ready throws.</summary>
     public LauncherSettings WithGameFolder(GameFolderCheck check)
     {
@@ -74,7 +78,7 @@ public sealed record LauncherSettingsRead(LauncherSettingsReadStatus Status, Lau
 /// <c>gameSource</c> (<c>gog</c>, <c>other</c>), <c>gameIdentity</c> (null or <c>version</c>, <c>exeBytes</c>, <c>exeSha256</c>,
 /// <c>gog</c>, <c>archives</c>: <c>[{"name","bytes"}]</c> in mount order), <c>showAtStart</c>, <c>rules</c>
 /// (<c>{"active":"steamwoven"|"original"}</c>), <c>display</c> (<c>window</c>: <c>windowed</c>/<c>fullscreen</c>, <c>monitor</c>,
-/// <c>uiScale</c>) and <c>debugMode</c> (ARC-DEV-050; absent is off, so an older build's file reads as before) and <c>holdToQuit</c> (ARC-DEV-2270; absent is on). <c>gameRoot</c> must be a full path of this system. Reading never throws: see <see cref="LauncherSettingsReadStatus"/>.</summary>
+/// <c>uiScale</c>) and <c>debugMode</c> (ARC-DEV-050; absent is off, so an older build's file reads as before) <c>holdToQuit</c> (ARC-DEV-2270; absent is on) and <c>separateRenderThread</c> (ARC-RENDER-3420; absent is off). <c>gameRoot</c> must be a full path of this system. Reading never throws: see <see cref="LauncherSettingsReadStatus"/>.</summary>
 public static class LauncherSettingsCodec
 {
     public const int Schema = 1;
@@ -84,7 +88,7 @@ public static class LauncherSettingsCodec
     public const int MaxArchiveName = GameFolderLocator.MaxPathLength;
     public const int MaxVersionLength = GameFolderLocator.MaxVersionLength;
 
-    private static readonly string[] KnownKeys = ["schema", "gameRoot", "gameSource", "gameIdentity", "showAtStart", "rules", "display", "debugMode", "holdToQuit"];
+    private static readonly string[] KnownKeys = ["schema", "gameRoot", "gameSource", "gameIdentity", "showAtStart", "rules", "display", "debugMode", "holdToQuit", "separateRenderThread"];
     private static readonly string[] DisplayKeys = ["window", "monitor", "uiScale"];
 
     public static LauncherSettingsRead Deserialize(string? json)
@@ -131,6 +135,11 @@ public static class LauncherSettingsCodec
             {
                 if (Boolean(hold) is { } value) settings = settings with { HoldToQuit = value };
                 else defaulted.Add("holdToQuit");
+            }
+            if (root.TryGetPropertyValue("separateRenderThread", out var thread))
+            {
+                if (Boolean(thread) is { } value) settings = settings with { SeparateRenderThread = value };
+                else defaulted.Add("separateRenderThread");
             }
             var unknownRules = new JsonObject();
             if (root.TryGetPropertyValue("rules", out var rules))
@@ -199,6 +208,7 @@ public static class LauncherSettingsCodec
             },
             ["debugMode"] = settings.DebugMode,
             ["holdToQuit"] = settings.HoldToQuit,
+            ["separateRenderThread"] = settings.SeparateRenderThread,
         };
         if (kept?["display"] is JsonObject unknownDisplay)
             foreach (var property in unknownDisplay) root["display"]![property.Key] = property.Value?.DeepClone();

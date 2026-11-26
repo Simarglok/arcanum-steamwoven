@@ -101,10 +101,13 @@ public partial class TerrainViewerApp : Node
             var launcher = args.Remove("--launcher");
             // ARC-DEV-050: --debug-mode turns the debug mode on for either kind of start.
             if (ViewerDebugMode.Take(args)) EnableDebugMode("command line");
+            // ARC-RENDER-3420: the mark of the process restarted for the separate rendering thread.
+            _renderThreadRestarted = RenderThreadRestart.Take(args);
+            if (_renderThreadRestarted) GD.Print("ARC-RENDER-3420 started again with the separate rendering thread");
             // ARC-DEV-046: without command-line inputs the game folder comes from the launcher settings.
             if (args.Count == 0)
             {
-                _ = StartFromGameFolderAsync(launcher);
+                _ = StartFromGameFolderAsync(launcher, _renderThreadRestarted);
                 return;
             }
             if (launcher) throw new ArgumentException("Usage");
