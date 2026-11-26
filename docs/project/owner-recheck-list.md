@@ -1671,3 +1671,13 @@ Known differences (documented, not bugs; each has its issue):
 
 - Will-KOS scripts never veto ([#2821](https://github.com/Simarglok/arcanum-steamwoven/issues/2821)).
 - NPC and holder item moves ([#2827](https://github.com/Simarglok/arcanum-steamwoven/issues/2827)) are not built (examine at dialog start and in the portrait hover is built: HK25, HK26).
+
+## ARC-DEV-3379 — Profiling package for Instruments and the Godot debugger (PR #3434, 2026-11-27)
+
+Tooling, no original behaviour to compare. Build with `./arcanum package mac --profiling`, unlock the Mac and follow
+[the profiling package](../workflow/mac-performance-monitoring.md#profiling-package-arc-dev-3379).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Start the Godot editor with the debug server on the empty project, then the profiling game with `--remote-debug`. Open **Monitors**, then **Visual Profiler** and press **Start**. | Monitors draws graphs of FPS and memory that move; the Visual Profiler lists CPU and GPU time per render step. | open |
+| 2 | With the profiling game running, record **Allocations** in Instruments (the `xctrace` command of that page, or the Instruments app attached to the process). | It records and opens, and no administrator password is asked for. | open |

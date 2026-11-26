@@ -18,7 +18,7 @@ from typing import Any
 
 from . import config, retention
 from .manifests import SUPPORTED_TOOLS, resolve_pointer
-from .package import PLATFORMS, Platform, remove
+from .package import PLATFORMS, PROFILING, Platform, remove
 
 MARKER = "README-DO-NOT-DELETE.md"
 MARKER_TEXT = """# Do not delete this folder by hand
@@ -201,6 +201,7 @@ def _within(path: Path, other: Path) -> bool:
 PACKAGES = "packages"
 PACKAGES_REASON = "artifacts/packages is not the folder ./arcanum package writes (a link or a file); owner decides"
 PLATFORM_NAMES = {"mac": "macOS", "win": "Windows"}
+PACKAGED = (*PLATFORMS.values(), PROFILING)  # every folder ./arcanum package writes (ARC-DEV-3379: the profiling package too)
 PACKAGE_BUILDER = ("local_dev/package.py", "local_dev.package")  # the builder run as a script or as a module
 PACKAGE_FILES = ("BUILD.txt", "README.md", ".DS_Store")
 
@@ -223,7 +224,7 @@ def _bytes(path: Path) -> int | None:
 
 
 def _platform_packages(folder: Path, platform: Platform) -> list[dict[str, Any]]:
-    name = PLATFORM_NAMES[platform.key]
+    name = PLATFORM_NAMES[platform.key] + (" profiling" if platform.profiling else "")
     current = folder / platform.installed
     present = not current.is_symlink() and (current.is_dir() if platform.key == "mac" else current.is_file())
     results = []
@@ -261,7 +262,7 @@ def packages(checkout: Path) -> list[dict[str, Any]]:
     base = artifacts / PACKAGES
     if artifacts.is_symlink() or not base.is_dir() or base.is_symlink():
         return []
-    folders = {platform.folder: platform for platform in PLATFORMS.values()}
+    folders = {platform.folder: platform for platform in PACKAGED}
     results = []
     try:
         children = sorted(base.iterdir())
@@ -320,7 +321,7 @@ def apply_packages(checkout: Path) -> dict[str, Any]:
 
 
 def _platform(folder: Path) -> Platform:
-    return next(platform for platform in PLATFORMS.values() if platform.folder == folder.name)
+    return next(platform for platform in PACKAGED if platform.folder == folder.name)
 
 
 def unmanaged(conf: dict[str, Any], checkout: Path) -> list[dict[str, Any]]:

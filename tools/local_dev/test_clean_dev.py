@@ -192,6 +192,20 @@ class CleanDevTests(unittest.TestCase):
         self.assertIn("player packages", clean.render({"home": "h", "builds": [], "unmanaged": [], "packages": list(found.values()),
                                                        "worktrees": [], "caches": []}))
 
+    def test_the_profiling_package_folder_is_classified_like_a_package(self) -> None:
+        """ARC-DEV-3379: ./arcanum package mac --profiling installs into packages/macos-profiling."""
+        checkout = self.package_fixture(); folder = checkout / "artifacts/packages/macos-profiling"
+        for app in (folder / "Arcanum Steamwoven Profiling.app", folder / "previous/Arcanum Steamwoven Profiling.app"):
+            (app / "Contents/MacOS").mkdir(parents=True)
+        found = {Path(item["path"]).relative_to(folder).as_posix(): item for item in clean.packages(checkout)
+                 if folder in Path(item["path"]).parents}
+        self.assertEqual({path: item["class"] for path, item in found.items()},
+                         {"Arcanum Steamwoven Profiling.app": "keep", "previous": "disposable"})
+        self.assertIn("current macOS profiling package", found["Arcanum Steamwoven Profiling.app"]["reason"])
+        with mock.patch.object(clean, "_processes", return_value=[]):
+            self.assertIn(str(folder / "previous"), clean.apply_packages(checkout)["removed"])
+        self.assertTrue((folder / "Arcanum Steamwoven Profiling.app").is_dir())
+
     def test_apply_packages_removes_only_superseded_ones_and_respects_running_processes(self) -> None:
         checkout = self.package_fixture(); mac = checkout / "artifacts/packages/macos"
         with mock.patch.object(clean, "_processes", return_value=["python3 -B /x/tools/local_dev/package.py mac --ref origin/main"]):

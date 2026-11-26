@@ -1,6 +1,7 @@
 """ARC-DEV-047/ARC-DEV-048: the package command's steps, checks and install, with a fake runner on a synthetic git repository."""
 from __future__ import annotations
 
+import io
 import os
 from pathlib import Path
 import struct
@@ -37,6 +38,8 @@ class PackageTests(unittest.TestCase):
         self.export_text = "dotnet /sdk/dotnet publish ... SDK 8.0.425\n"
         self.smoke_text = ""
         self.signature = "Signature=adhoc\n"
+        self.entitlements = ('Executable=/x\n<?xml version="1.0"?><plist><dict><key>com.apple.security.cs.allow-jit</key><true/>'
+                             '<key>com.apple.security.get-task-allow</key><true/></dict></plist>\n')
         self.windows = {"machine": 0x8664, "subsystem": 2, "name": package.PLAYER_NAME, "description": "Arcanum Steamwoven alpha",
                         "pack": b"GDPC", "feature": package.FEATURE, "assemblies": package.WINDOWS_ASSEMBLIES, "data": 1}
         quiet = mock.patch.object(package, "say"); quiet.start(); self.addCleanup(quiet.stop)
@@ -53,12 +56,17 @@ class PackageTests(unittest.TestCase):
         if "--export-release" in command and command[-2] == "Windows package":
             self.write_windows_export(Path(command[-1]))
             text = self.export_text
-        elif "--export-release" in command:
+        elif "--export-release" in command or "--export-debug" in command:
             product = Path(command[-1])
-            executable = product / package.PLATFORMS["mac"].executable
+            platform = package.PROFILING if "--export-debug" in command else package.PLATFORMS["mac"]
+            executable = product / platform.executable
+            self.project = (cwd / package.PROJECT / "project.godot")
+            self.project_text = self.project.read_text() if self.project.is_file() else ""
             executable.parent.mkdir(parents=True)
             executable.write_text("#!/bin/sh\n"); executable.chmod(0o755)
             text = self.export_text
+        elif command[:2] == ["/usr/bin/codesign", "-d"] and "--entitlements" in command:
+            text = self.entitlements
         elif command[:2] == ["/usr/bin/codesign", "-d"]:
             text = self.signature
         elif "--native-smoke" in command:
@@ -159,6 +167,100 @@ class PackageTests(unittest.TestCase):
             self.smoke_text = text
             with self.assertRaisesRegex(package.PackageError, error):
                 self.run_package(smoke_folder=self.root)
+
+    def commit_viewer_files(self, presets: str | None = None, project: str | None = None) -> None:
+        """The repository's own export presets and project.godot (or the given text) committed into the synthetic one."""
+        folder = self.repo / package.PROJECT
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "export_presets.cfg").write_text(presets if presets is not None else
+                                                   (package.ROOT / package.PROJECT / "export_presets.cfg").read_text())
+        (folder / "project.godot").write_text(project if project is not None else
+                                              (package.ROOT / package.PROJECT / "project.godot").read_text())
+        (self.repo / package.PROFILING_INSTRUCTION).parent.mkdir(parents=True, exist_ok=True)
+        (self.repo / package.PROFILING_INSTRUCTION).write_text("profiling page\n")
+        for arguments in (["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "viewer", "--allow-empty"]):
+            subprocess.run(["git", *arguments], cwd=self.repo, check=True, capture_output=True)
+
+    def run_profiling(self, smoke_folder: Path | None = None) -> Path:
+        with mock.patch.object(package, "game_folder", return_value=smoke_folder):
+            return package.package(package.PROFILING, root=self.repo, output=self.root / "out", ref="HEAD", fetch=False,
+                                   smoke=True, keep_work=False, runner=self.runner, base=self.base)
+
+    def test_the_profiling_package_is_a_debug_export_under_its_own_name_beside_the_player_package(self) -> None:
+        self.commit_viewer_files()
+        player = self.run_package()
+        player_build = (self.root / "out" / "macos" / "BUILD.txt").read_text()
+        marker = player / "marker"; marker.write_text("player")
+        self.assertIn('config/name.steamwoven_package="Arcanum Steamwoven"\n', self.project_text)  # the player's names stay
+        self.assertNotIn("ArcanumProfiling", self.calls[0][1])
+        self.assertNotIn("profiling", player_build)
+        self.calls.clear()
+        installed = self.run_profiling()
+        export, environment = self.calls[3]
+        self.assertEqual(export[-3:-1], ["--export-debug", "macOS profiling"])
+        self.assertNotIn("--export-release", export)
+        self.assertEqual(environment["ArcanumProfiling"], "true")
+        self.assertIn('config/name.steamwoven_package="Arcanum Steamwoven Profiling"\n', self.project_text)
+        self.assertIn('config/custom_user_dir_name.steamwoven_package="Arcanum Steamwoven Profiling"\n', self.project_text)
+        self.assertEqual([Path(command[0]).name for command, _ in self.calls],
+                         ["dotnet", "dotnet", "Godot", "Godot", "codesign", "codesign", "codesign"])
+        self.assertEqual(installed, self.root / "out" / "macos-profiling" / "Arcanum Steamwoven Profiling.app")
+        self.assertTrue((installed / "Contents/MacOS/Arcanum Steamwoven Profiling").is_file())
+        build = (self.root / "out" / "macos-profiling" / "BUILD.txt").read_text()
+        self.assertIn("product Arcanum Steamwoven Profiling.app", build)
+        self.assertIn("never distributed", build)
+        self.assertEqual((self.root / "out" / "macos-profiling" / "README.md").read_text(), "profiling page\n")
+        self.assertEqual(marker.read_text(), "player")  # the player package is neither replaced nor rotated
+        self.assertEqual((self.root / "out" / "macos" / "BUILD.txt").read_text(), player_build)
+        self.assertFalse((self.root / "out" / "macos" / "previous").exists())
+
+    def test_the_callers_shell_cannot_turn_a_player_build_into_a_profiling_one(self) -> None:
+        self.base["ArcanumProfiling"] = "true"
+        self.run_package()
+        self.assertTrue(all("ArcanumProfiling" not in environment for _, environment in self.calls))
+
+    def test_the_profiling_package_without_the_debug_entitlement_is_refused(self) -> None:
+        self.commit_viewer_files()
+        for text in ("<plist><dict><key>com.apple.security.cs.allow-jit</key><true/></dict></plist>",
+                     "<plist><dict><key>com.apple.security.get-task-allow</key><false/></dict></plist>"):
+            self.entitlements = text
+            with self.assertRaisesRegex(package.PackageError, "get-task-allow"):
+                self.run_profiling()
+        self.assertFalse((self.root / "out" / "macos-profiling").exists())
+
+    def test_the_profiling_package_needs_its_preset_and_the_package_name_settings(self) -> None:
+        with self.assertRaisesRegex(package.PackageError, "older than the profiling package"):
+            self.run_profiling()  # the synthetic commit has no presets, as a commit from before ARC-DEV-3379 has no such one
+        self.commit_viewer_files(project='[application]\nconfig/name.steamwoven_package="Other"\n')
+        with self.assertRaisesRegex(package.PackageError, "exactly once"):
+            self.run_profiling()
+        self.assertEqual(self.calls, [])
+
+    def test_the_profiling_smoke_expects_its_own_user_folder(self) -> None:
+        self.commit_viewer_files()
+        head = subprocess.check_output(["git", "-C", str(self.repo), "rev-parse", "HEAD"], text=True).strip()
+        line = f"ARC-DEV-047 build Arcanum Steamwoven alpha · main {head[:10]} · 2026-10-28 user=/Users/p/Library/Application Support/"
+        passes = "ARC-UI-014 native-smoke launcher PASS\nARC-UI-011 native-smoke main menu PASS\n"
+        self.smoke_text = line + "Arcanum Steamwoven Game\n" + passes
+        with self.assertRaisesRegex(package.PackageError, "user folder"):
+            self.run_profiling(smoke_folder=self.root)
+        self.smoke_text = line + "Arcanum Steamwoven Profiling\n" + passes
+        self.run_profiling(smoke_folder=self.root)
+        self.assertIn("own user folder Arcanum Steamwoven Profiling", (self.root / "out" / "macos-profiling" / "BUILD.txt").read_text())
+
+    def test_the_builders_option_selects_the_profiling_package(self) -> None:
+        for words, platform in ((["mac", "--profiling"], package.PROFILING), (["mac"], package.PLATFORMS["mac"]),
+                                (["win"], package.PLATFORMS["win"])):
+            with mock.patch.object(package, "package") as built, mock.patch.object(package, "main_checkout", return_value=self.repo), \
+                    mock.patch.object(package.signal, "signal"):
+                self.assertEqual(package.main(words), 0)
+            self.assertIs(built.call_args.args[0], platform)
+
+    def test_profiling_is_for_mac_only(self) -> None:
+        with mock.patch("sys.stderr", new_callable=io.StringIO) as output, self.assertRaises(SystemExit) as stopped:
+            package.main(["win", "--profiling"])
+        self.assertEqual(stopped.exception.code, 2)
+        self.assertIn("mac only", output.getvalue())
 
     def test_the_windows_build_is_checked_by_its_files_zipped_and_installed(self) -> None:
         installed = self.run_package(smoke_folder=self.root, platform="win")

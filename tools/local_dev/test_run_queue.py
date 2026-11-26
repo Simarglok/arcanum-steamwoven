@@ -828,8 +828,9 @@ class GameDetectionTests(unittest.TestCase):
         self.assertEqual(run_queue.game_roots({**env, run_queue.AUTO_PLAYING_ENV: "off"}), [])
         self.assertEqual(run_queue.game_roots({**env, run_queue.AUTO_PLAYING_ENV: "0"}), [])
         default = run_queue.game_roots({"HOME": "x"})  # the real default
-        self.assertEqual(len(default), 1)
+        self.assertEqual(len(default), 2)  # ARC-DEV-3379: the profiling package counts too (the owner measuring)
         self.assertTrue(default[0].endswith("/artifacts/packages/macos"), default)
+        self.assertTrue(default[1].endswith("/artifacts/packages/macos-profiling"), default)
 
     def test_the_main_checkout_of_a_worktree_is_read_from_its_git_file(self) -> None:
         main = self.root / "main"

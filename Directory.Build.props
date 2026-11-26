@@ -8,7 +8,8 @@
   </PropertyGroup>
   <!-- Godot's release export builds referenced projects in its ExportRelease configuration, which the
        plain SDK would otherwise compile without optimization (only Release optimizes by default). -->
-  <PropertyGroup Condition="'$(Configuration)' == 'ExportRelease'">
+  <!-- ARC-DEV-3379: the profiling package is a debug export (ExportDebug) that must run the game's code as the release export does. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'ExportRelease' or ('$(Configuration)' == 'ExportDebug' and '$(ArcanumProfiling)' == 'true')">
     <Optimize>true</Optimize>
   </PropertyGroup>
 </Project>

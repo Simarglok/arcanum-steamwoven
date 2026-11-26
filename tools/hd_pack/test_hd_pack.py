@@ -11,6 +11,7 @@ import shutil
 import struct
 import tempfile
 import unittest
+from unittest import mock
 import zlib
 
 from tools.hd_pack import hd_pack as hp
@@ -745,6 +746,18 @@ class LayoutTests(unittest.TestCase):
         rc, _, err = run("refresh", "--installed", self.inst, "--backup-root", self.backups, "--task", "ARC-TEST-378")
         self.assertEqual(rc, 2)
         self.assertIn("needs 8-bit RGBA", err)
+
+
+class PackUsersTests(unittest.TestCase):
+    def test_both_packaged_apps_count_as_readers_of_a_pack(self):
+        """ARC-DEV-3379: a running player or profiling package reads the pack, so a relayout refuses."""
+        lines = ["101 /a/macos/Arcanum Steamwoven.app/Contents/MacOS/Arcanum Steamwoven",
+                 "102 /a/macos-profiling/Arcanum Steamwoven Profiling.app/Contents/MacOS/Arcanum Steamwoven Profiling",
+                 "103 /usr/bin/python3 other.py"]
+        done = mock.Mock(stdout="\n".join(lines))
+        with mock.patch.object(hp.subprocess, "run", return_value=done):
+            found = hp.pack_users(Path("/nowhere/pack"))
+        self.assertEqual([item.split()[0] for item in found], ["101", "102"])
 
 
 class FontsPlanTests(unittest.TestCase):

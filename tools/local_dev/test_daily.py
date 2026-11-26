@@ -420,6 +420,16 @@ class LauncherTests(unittest.TestCase):
         command = queued.call_args.args[1]
         self.assertEqual(command[-2:], ["--map-smoke", "PASS (main)"])
         self.assertEqual(queued.call_args.args[0], "export")
+        # ARC-DEV-3379: --profiling reaches the builder (without it the player package would be replaced) and is mac only.
+        for words, forwarded in ((["package", "mac", "--profiling"], True), (["package", "mac"], False)):
+            args = project["parser"]().parse_args(words)
+            with mock.patch.object(run_queue, "run", return_value=0) as queued:
+                self.assertEqual(args.func(args), 0)
+            self.assertEqual("--profiling" in queued.call_args.args[1], forwarded)
+        args = project["parser"]().parse_args(["package", "win", "--profiling"])
+        with mock.patch.object(run_queue, "run", return_value=0) as queued, mock.patch("sys.stderr"):
+            self.assertEqual(args.func(args), 2)
+        queued.assert_not_called()
         args = project["parser"]().parse_args(["daily", "--dry-run", "--force", "--no-fetch", "--keep-work"])
         self.assertEqual((args.dry_run, args.force, args.no_fetch, args.keep_work), (True, True, True, True))
 

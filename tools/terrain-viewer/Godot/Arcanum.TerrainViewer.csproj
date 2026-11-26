@@ -6,8 +6,9 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
   <!-- ARC-UI-3419: the release export ships the game's assemblies precompiled (ReadyToRun), so the first use of a window or a rule
-       does not stall on the JIT compiler; hot methods are still recompiled by tiered compilation. -->
-  <PropertyGroup Condition="'$(Configuration)' == 'ExportRelease'">
+       does not stall on the JIT compiler; hot methods are still recompiled by tiered compilation. The profiling package's debug
+       export (ARC-DEV-3379) is compiled the same way. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'ExportRelease' or ('$(Configuration)' == 'ExportDebug' and '$(ArcanumProfiling)' == 'true')">
     <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
   <ItemGroup>

@@ -196,12 +196,17 @@ def queued(args: argparse.Namespace) -> int:
 
 def package_build(args: argparse.Namespace) -> int:
     """ARC-DEV-047: the packaged alpha from a fresh commit of origin/main into artifacts/packages (docs/workflow/packaging.md)."""
+    if args.profiling and args.platform != "mac":
+        print("package: --profiling is for mac only", file=sys.stderr)
+        return 2
     command = [sys.executable, "-B", str(ROOT / "tools" / "local_dev" / "package.py"), args.platform, "--ref", args.ref,
+               *(["--profiling"] if args.profiling else []),
                *(["--no-fetch"] if args.no_fetch else []), *(["--no-smoke"] if args.no_smoke else []),
                *(["--keep-work"] if args.keep_work else []), *(["--map-smoke", args.map_smoke] if args.map_smoke else [])]
     # ARC-DEV-400: a package build takes the queue's front like the owner's viewer launches (after the runs already holding
     # a place): its turn by arrival time plus 3 of its estimates let the smokes of the lanes pass it for ever.
-    return run_queue.run("export", command, label=f"package {args.platform}", quiet=not args.verbose,
+    label = f"package {args.platform}" + (" profiling" if args.profiling else "")
+    return run_queue.run("export", command, label=label, quiet=not args.verbose,
                          priority=run_queue.FRONT)
 
 
@@ -483,6 +488,9 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("platform", choices=("mac", "win"), help="mac: Arcanum Steamwoven.app, ad-hoc signed; win: the Windows "
                          "11 x64 folder (Arcanum Steamwoven.exe, unsigned) as one zip, file checks only (ARC-DEV-048)")
     command.add_argument("--ref", default="origin/main", help="the commit to package (default origin/main, fetched first)")
+    command.add_argument("--profiling", action="store_true", help="mac only: the local profiling package for Instruments and the "
+                         "Godot remote debugger (debug export with get-task-allow, own name and user folder, "
+                         "artifacts/packages/macos-profiling; never distribute it; ARC-DEV-3379)")
     command.add_argument("--no-fetch", action="store_true", help="do not fetch origin main first")
     command.add_argument("--no-smoke", action="store_true", help="skip the launcher and main menu smoke on the exported app")
     command.add_argument("--keep-work", action="store_true", help="keep the temporary source and export folder for a look")
