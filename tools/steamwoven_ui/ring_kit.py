@@ -4,7 +4,8 @@ cycle arrows and the small right arrow, the three inventory "lil" buttons and th
 
 How each is made (owner decisions of 2026-11-26 in the issue's thread; every part is a full face cut to the ring's circle by an analytic round alpha, no shadow baked):
 
-* `codex`  23, 24, 770, 771: ONE generated set (sheet `pm`: Minus and Plus, three states, drawn large and reduced) with ONE ring, the idle Minus's, over every face; both sizes use the same frames.
+* `codex`  23, 24, 770, 771: ONE generated set (sheet `pm`: Minus and Plus, drawn large and reduced) with ONE ring, the idle Minus's, over every face; both sizes use the same drawings. Only the sheet's IDLE cells are used: the
+  states are made from them as the original makes its own (owner's check of 2026-11-26): hover only lights the sign (`SIGN`), pressed also darkens the dome and lays a small smooth glow round the sign, as wide and as strong as the original's.
 * `marker` 145 to 148: the symbol cut from the generated marker sheet of the map markers 141 to 144 (#3207, one source for both places), on the set's own ring and dome (the idle Minus with its bar taken out); the idle symbol is
   dimmed as the original's frame 0 is dimmer than frame 1.
 * `wedge`  757, 758: that same plate, a straight-edged triangle by rule fitted to the original's red cells (the method of arts 827 and 828, #3272).
@@ -476,20 +477,76 @@ def arrow_face(local_root: Path, ring: Ring, frame: Image, idle: Image, glow: bo
     return face
 
 
+SIGN = {"idle": (169, 0, 0), "hover": (255, 0, 0), "pressed": (255, 94, 94)}   # the original's own colours of the plus and minus sign in the three states
+DOME_PRESSED, DOME_PRESSED_LIGHT = 0.55, 18.0   # a pressed dome keeps this share of its colour and no pixel lighter than this (the original's highlight arc goes out)
+GLOW_PEAK, GLOW_SPREAD = 163.0, 1.69      # the red round a pressed sign: peak x exp(-((distance from the sign's edge + 0.5 cell) / spread)^2), fitted to the original's pressed cells (about 115 one cell out, 40 two cells out, none at three)
+GLOW_GREEN, GLOW_BLUE = 0.17, 0.012       # the glow's green and blue as shares of its red
+
+
+def sign_weights(frame: Image, circle: school_kit.Circle) -> list[float]:
+    """How much of each pixel of a generated idle frame is the red sign (1 inside, soft at its edge, 0 on the dome)."""
+    ux, uy = frame.w / circle.width, frame.h / circle.height
+    out = [0.0] * (frame.w * frame.h)
+    for i in range(frame.w * frame.h):
+        if math.hypot((i % frame.w + 0.5) / ux - circle.cx, (i // frame.w + 0.5) / uy - circle.cy) < SYMBOL_REACH * circle.cut:
+            out[i] = max(0.0, min(1.0, (frame.data[i * 4] - frame.data[i * 4 + 1] - 25) / 60.0))
+    return out
+
+
+def recoloured(face: Image, sign: list[float], colour: tuple[int, int, int]) -> Image:
+    """The sign in `colour`, keeping the generated relief (each pixel's lightness against the sign's mean)."""
+    solid = [face.data[i * 4] for i, w in enumerate(sign) if w > 0.9]
+    if not solid:
+        raise RingError("no red sign in the middle of the generated button")
+    mean = sum(solid) / len(solid)
+    out = Image(face.w, face.h, bytearray(face.data))
+    for i, w in enumerate(sign):
+        if w > 0:
+            shade = max(0.7, min(1.15, face.data[i * 4] / mean))
+            for c in range(3):
+                out.data[i * 4 + c] = int(round(min(255.0, colour[c] * shade) * w + out.data[i * 4 + c] * (1 - w)))
+    return out
+
+
+def pressed_dome(face: Image, circle: school_kit.Circle, sign: list[float]) -> Image:
+    """The dome pushed in: darkened, its highlight out, and a smooth red glow that follows the sign's own outline (`lighten`), as small as the original's."""
+    ux, uy = face.w / circle.width, face.h / circle.height
+    solid = [((i % face.w + 0.5) / ux, (i // face.w + 0.5) / uy) for i, w in enumerate(sign) if w >= 0.5]
+    out = Image(face.w, face.h, bytearray(face.data))
+    for i in range(face.w * face.h):
+        x, y = (i % face.w + 0.5) / ux, (i // face.w + 0.5) / uy
+        if math.hypot(x - circle.cx, y - circle.cy) >= INNER["codex"] * circle.cut:
+            continue
+        colour = [face.data[i * 4 + c] * DOME_PRESSED for c in range(3)]
+        light = 0.3 * colour[0] + 0.59 * colour[1] + 0.11 * colour[2]
+        if light > DOME_PRESSED_LIGHT:
+            colour = [c * DOME_PRESSED_LIGHT / light for c in colour]
+        distance = min(math.hypot(x - a, y - b) for a, b in solid)
+        red = GLOW_PEAK * math.exp(-(((distance + 0.5) / GLOW_SPREAD) ** 2))
+        for c, share in enumerate((1.0, GLOW_GREEN, GLOW_BLUE)):
+            out.data[i * 4 + c] = int(round(max(colour[c], red * share) * (1 - sign[i]) + face.data[i * 4 + c] * sign[i]))
+    return out
+
+
 def codex_face(local_root: Path, ring: Ring, state: str) -> Image:
-    """The placed frame of the state with the ONE ring of the set over it (the idle Minus's, registered on the same circle), brought to the accepted brass."""
+    """The generated IDLE button of the sign with the ONE ring of the set over it (the idle Minus's, registered on the same circle), brought to the accepted brass; the states are made from it as the original makes them: hover only
+    lights the sign, pressed also pushes the dome in with a small glow round the sign."""
     source = ring_named("char_plus" if "plus" in ring.name else "char_minus")
-    offset = symbol_offset(placed_frame_of(local_root, source, "idle", ring.circle), ring.circle)   # one offset for the states of a button
-    face = centred(placed_frame_of(local_root, source, state, ring.circle), ring.circle, offset)
+    placed = placed_frame_of(local_root, source, "idle", ring.circle)
+    face = centred(placed, ring.circle, symbol_offset(placed, ring.circle))
+    sign = sign_weights(face, ring.circle)
+    lit = recoloured(face, sign, SIGN[state])
+    if state == "pressed":
+        lit = pressed_dome(lit, ring.circle, sign)
     donor = placed_frame_of(local_root, ring_named("char_minus"), "idle", ring.circle)
-    for y in range(face.h):
-        for x in range(face.w):
-            weight = ring_weight(ring.circle, face.w, face.h, x, y, INNER["codex"])
+    for y in range(lit.h):
+        for x in range(lit.w):
+            weight = ring_weight(ring.circle, lit.w, lit.h, x, y, INNER["codex"])
             if weight > 0:
-                k = (y * face.w + x) * 4
+                k = (y * lit.w + x) * 4
                 for c in range(3):
-                    face.data[k + c] = int(round(donor.data[k + c] * weight + face.data[k + c] * (1 - weight)))
-    return toned(part_of(ring, face), ring.circle, INNER["codex"])
+                    lit.data[k + c] = int(round(donor.data[k + c] * weight + lit.data[k + c] * (1 - weight)))
+    return toned(part_of(ring, lit), ring.circle, INNER["codex"])
 
 
 def face_of(local_root: Path, frames: Path, ring: Ring, state: str) -> Image:

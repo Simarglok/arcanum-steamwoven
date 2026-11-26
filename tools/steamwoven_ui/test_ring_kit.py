@@ -250,6 +250,22 @@ class FaceTests(unittest.TestCase):
             reds = [x for x in range(a.w) if pixel(a, x, int(minus.circle.cy * a.h / minus.circle.height))[0] > 120 and pixel(a, x, int(minus.circle.cy * a.h / minus.circle.height))[1] < 60]
             self.assertAlmostEqual((min(reds) + max(reds) + 1) / 2, minus.circle.cx * a.w / minus.circle.width, delta=1.5)
 
+    def test_hover_only_lights_the_sign_and_pressed_adds_a_small_glow_on_a_darker_dome(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = tree(folder)
+            frames = root / "census" / "frames"
+            ring = rk.ring_named("char_minus")
+            idle, hover, pressed = (rk.face_of(root, frames, ring, s) for s in ("idle", "hover", "pressed"))
+            c = ring.circle
+            self.assertAlmostEqual(at(ring, idle, c.cx, c.cy)[0], 169, delta=6)
+            self.assertGreater(at(ring, hover, c.cx, c.cy)[0], 240)
+            self.assertGreater(at(ring, pressed, c.cx, c.cy)[1], 70)                      # the pink of the pressed sign
+            away = (c.cx, c.cy + 0.6 * c.cut)
+            self.assertEqual(at(ring, hover, *away), at(ring, idle, *away))              # nothing but the sign changes on hover
+            self.assertLess(at(ring, pressed, *away)[0], at(ring, idle, *away)[0] + 1)   # far from the sign no red, a darker dome
+            near = (c.cx, c.cy + 1.4)
+            self.assertGreater(at(ring, pressed, *near)[0], at(ring, idle, *near)[0] + 30)
+
     def test_the_symbol_buttons_stand_on_the_sets_plate_and_the_idle_symbol_is_dimmed(self):
         with tempfile.TemporaryDirectory() as folder:
             root = tree(folder)
