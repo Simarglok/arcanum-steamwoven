@@ -287,20 +287,41 @@ class FaceTests(unittest.TestCase):
                 upright = (c.cx, c.cy + 0.4 * length)
                 self.assertEqual(at(ring, hover, *upright)[0] > 240, "plus" in name)
 
-    def test_the_symbol_buttons_stand_on_the_sets_plate_and_the_idle_symbol_is_dimmed(self):
+    def test_the_symbol_buttons_stand_on_the_socket_dome_and_the_idle_symbol_is_dimmed(self):
         with tempfile.TemporaryDirectory() as folder:
             root = tree(folder)
             frames = root / "census" / "frames"
             ring = rk.ring_named("mmb_chest")
             idle, lit = rk.face_of(root, frames, ring, "idle"), rk.face_of(root, frames, ring, "pressed")
             x0, y0, x1, y1 = rk.SYMBOL_BOXES[ring.name]
-            self.assertEqual(at(ring, lit, (x0 + x1) / 2, (y0 + y1) / 2)[:3], (240, 240, 240))
-            self.assertAlmostEqual(at(ring, idle, (x0 + x1) / 2, (y0 + y1) / 2)[0], 240 * rk.IDLE_DIM[ring.name], delta=2)
-            plate = rk.empty_plate(root, ring)
+            dx, dy = rk.symbol_shift(ring)
+            middle = ((x0 + x1) / 2 + dx, (y0 + y1) / 2 + dy)
+            self.assertEqual(at(ring, lit, *middle)[:3], (240, 240, 240))
+            self.assertAlmostEqual(at(ring, idle, *middle)[0], 240 * rk.IDLE_DIM[ring.name], delta=2)
+            plate = rk.dome_plate(root, ring)
             centre = at(ring, plate, ring.circle.cx, ring.circle.cy)
             self.assertLess(centre[0], 60)                                             # the bar is gone from the plate
             arrow = rk.ring_named("mpcyclerightbutton")
             self.assertGreater(at(arrow, rk.face_of(root, frames, arrow, "idle"), 11, 11.5)[0], 150)
+
+    def test_a_socket_dome_has_no_ring_and_fills_the_inside_of_the_sockets_ring(self):
+        domes = [r for r in rk.RINGS if r.method in ("marker", "wedge")]
+        self.assertEqual({(r.circle.cx, r.circle.cy, round(r.circle.cut, 3)) for r in domes}, {(11.5, 11.5, rk.SOCKET_DOME_CUT)})
+        with tempfile.TemporaryDirectory() as folder:
+            root = tree(folder)
+            for ring in domes:
+                c = ring.circle
+                plate = rk.dome_plate(root, ring)
+                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    inside = at(ring, plate, c.cx + 0.95 * c.cut * dx, c.cy + 0.95 * c.cut * dy)
+                    self.assertEqual(inside[3], 255, ring.name)
+                    self.assertLess(inside[0], 60, ring.name)                          # the dome to its edge: no brass
+                    self.assertEqual(at(ring, plate, c.cx + 1.03 * c.cut * dx, c.cy + 1.03 * c.cut * dy)[3], 0, ring.name)
+
+    def test_a_socket_domes_symbol_keeps_its_place_on_the_originals_dome(self):
+        for ring in (r for r in rk.RINGS if r.method in ("marker", "wedge")):
+            x, y = rk.ORIGINAL_DOME[ring.art]
+            self.assertEqual(rk.symbol_shift(ring), (ring.circle.cx - x, ring.circle.cy - y))
 
     def test_a_missing_input_is_a_ring_error(self):
         with tempfile.TemporaryDirectory() as folder:

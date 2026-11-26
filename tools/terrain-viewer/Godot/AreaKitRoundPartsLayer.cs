@@ -5,7 +5,7 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>
 /// ARC-UI-3101: the round parts a view draws as separate arts while the kit's background shows (<see cref="AreaKitRoundParts"/>): a child layer of the view that draws each part through the shader of the rules, the art cut to the circle of its ring and
-/// under it the generated soft shadow. A view collects what it would have drawn with <c>DrawTextureRect</c> into a list in its own <c>_Draw</c> and gives it to <see cref="Show"/> at its end; <see cref="Clear"/> hides the layer where the kit does not show
+/// under it the generated soft shadow (a socket dome has none, ARC-UI-3347). A view collects what it would have drawn with <c>DrawTextureRect</c> into a list in its own <c>_Draw</c> and gives it to <see cref="Show"/> at its end; <see cref="Clear"/> hides the layer where the kit does not show
 /// (the view then draws its parts as before). The shadows lie under every part of the layer (a part never takes the shadow of its neighbour). The shader works in the art's own units, so the cut is one device pixel wide at any scale and for the Legacy
 /// frame as for a pack frame; a texture whose size is not the table's art size is drawn as it is. ARC-UI-3320: a part may be a kit face (<see cref="KitItem"/>: the master's own size and straight alpha, already cut to the same circle); it is stretched to the art's rectangle and goes through the same cut and shadow.
 /// </summary>
@@ -47,12 +47,18 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
     /// ARC-UI-3320: the item of a kit face of <paramref name="art"/> at the art's place (<paramref name="place"/>, in the view's units): the rectangle is the table's art size, whatever the master's size (the shader works in the art's units and the
     /// face, already cut to the circle at its own size, is stretched to it), or null when the art is no round part.
     /// </summary>
-    internal static Item? KitItem(int art, Texture2D face, (int X, int Y) place) =>
-        AreaKitRoundParts.Of(art) is { } part ? new Item(art, face, new Rect2(place.X, place.Y, part.Width, part.Height), true) : null;
+    internal static Item? KitItem(int art, Texture2D face, (int X, int Y) place) => KitItem(art, face, (place.X, place.Y), 1f);
 
-    /// <summary>ARC-UI-3347: as <see cref="KitItem(int, Texture2D, ValueTuple{int, int})"/> for a view that draws in screen pixels: the art's rectangle at <paramref name="place"/> (units) times <paramref name="scale"/>.</summary>
-    internal static Item? KitItem(int art, Texture2D face, (float X, float Y) place, float scale) =>
-        AreaKitRoundParts.Of(art) is { } part ? new Item(art, face, new Rect2(place.X * scale, place.Y * scale, part.Width * scale, part.Height * scale), true) : null;
+    /// <summary>
+    /// ARC-UI-3347: as <see cref="KitItem(int, Texture2D, ValueTuple{int, int})"/> for a view that draws in screen pixels: the art's rectangle at <paramref name="place"/> (units) times <paramref name="scale"/>. A socket dome's rectangle moves to the
+    /// socket's centre first (<see cref="AreaKitRoundParts.SocketShift"/>).
+    /// </summary>
+    internal static Item? KitItem(int art, Texture2D face, (float X, float Y) place, float scale)
+    {
+        if (AreaKitRoundParts.Of(art) is not { } part) return null;
+        var (dx, dy) = AreaKitRoundParts.SocketShift(art, place.X, place.Y);
+        return new Item(art, face, new Rect2((place.X + dx) * scale, (place.Y + dy) * scale, part.Width * scale, part.Height * scale), true);
+    }
 
     /// <summary>Hides every part: the view draws its arts as before.</summary>
     internal void Clear()
@@ -80,6 +86,7 @@ internal sealed partial class AreaKitRoundPartsLayer : Control
             var part = AreaKitRoundParts.Of(art)!.Value;
             _parts[i].Place(part, texture, rect, kit);
             _shadows[i].Place(part, null, rect, false);
+            _shadows[i].Visible = !AreaKitRoundParts.IsSocketDome(art);
         }
         _shown = [.. items.Select(item => item.Art)];
     }

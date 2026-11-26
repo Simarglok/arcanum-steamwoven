@@ -59,19 +59,48 @@ public static class AreaKitRoundParts
         [313] = new(32, 31, 15.55f, 14.9f, 14.8f),
         // ARC-UI-3347: the small brass-ringed buttons of the windows, boxes and strip panes (<c>ring_kit.RINGS</c>: the cut radius of the master less <see cref="Trim"/>): the note markers 145 to 148, the quantity pane's All 299, the cycle
         // buttons 757 and 758, the doll, bag and arrange buttons 338 to 340, the dialog box's accept and cancel 823 and 824. The character sheet's plus and minus (23, 24, 770, 771) are not here: they stand in the sheet's sockets.
-        [145] = new(23, 23, 11.5f, 11.5f, 11.1f),
-        [146] = new(23, 23, 11.5f, 11.5f, 11.1f),
-        [147] = new(23, 23, 11.5f, 11.5f, 11.1f),
-        [148] = new(23, 23, 11.5f, 11.5f, 11.1f),
+        // The markers and the cycle buttons are socket domes (<see cref="IsSocketDome"/>): no ring of their own, as wide as the inside of the socket's ring.
+        [145] = new(23, 23, 11.5f, 11.5f, 10.7f),
+        [146] = new(23, 23, 11.5f, 11.5f, 10.7f),
+        [147] = new(23, 23, 11.5f, 11.5f, 10.7f),
+        [148] = new(23, 23, 11.5f, 11.5f, 10.7f),
         [299] = new(23, 23, 11.5f, 11.5f, 11.1f),
-        [757] = new(23, 23, 11.5f, 11.5f, 11.1f),
-        [758] = new(23, 23, 11.5f, 11.5f, 11.1f),
+        [757] = new(23, 23, 11.5f, 11.5f, 10.7f),
+        [758] = new(23, 23, 11.5f, 11.5f, 10.7f),
         [338] = new(28, 27, 13.4f, 12.1f, 12.8f),
         [339] = new(28, 27, 13.4f, 12.1f, 12.8f),
         [340] = new(28, 27, 13.4f, 12.1f, 12.8f),
         [823] = new(28, 29, 13.35f, 13.0f, 12.8f),
         [824] = new(28, 29, 13.35f, 13.0f, 12.8f),
     };
+
+    /// <summary>
+    /// ARC-UI-3347 (owner 2026-11-26): true for the note markers 145 to 148 and the cycle buttons 757 and 758, whose original art is a bare dome standing in a socket the screen paints. The kit's face stands at the socket's centre
+    /// (<see cref="SocketShift"/>) and casts no shadow: the socket's ring lies around it.
+    /// </summary>
+    public static bool IsSocketDome(int art) => art is >= 145 and <= 148 or 757 or 758;
+
+    // The centres of the sockets' gold rings (inner diameter 22.2, outer 26.0 units on arts 200, 765 and 825), in units from the button's table position.
+    private static readonly (float X, float Y) MarkerSocket = (11.4f, 11.15f), FollowerSocket = (11.42f, 11.17f);
+
+    /// <summary>The new character screen's sockets (art 765) by the table position of their button: gender, race and background, left and right.</summary>
+    private static readonly Dictionary<(int X, int Y), (float X, float Y)> NewCharacterSockets = new()
+    {
+        [(42, 281)] = (10.42f, 10.17f), [(255, 282)] = (11.42f, 10.17f),
+        [(42, 331)] = (10.42f, 10.17f), [(255, 332)] = (11.42f, 10.17f),
+        [(42, 381)] = (10.42f, 11.17f), [(255, 382)] = (11.42f, 10.17f),
+    };
+
+    /// <summary>
+    /// How far, in units, the kit's face of <paramref name="art"/> at the table position (<paramref name="x"/>, <paramref name="y"/>) moves so that its centre is the centre of the socket it stands in: nothing for a part that is no socket dome.
+    /// A cycle button outside the new character screen stands in the follower barter's sockets (art 825).
+    /// </summary>
+    public static (float X, float Y) SocketShift(int art, float x, float y)
+    {
+        if (!IsSocketDome(art) || Of(art) is not { } part) return (0f, 0f);
+        var socket = art < 757 ? MarkerSocket : NewCharacterSockets.GetValueOrDefault(((int)MathF.Round(x), (int)MathF.Round(y)), FollowerSocket);
+        return (socket.X - part.Cx, socket.Y - part.Cy);
+    }
 
     /// <summary>The arts that have a round part, in order.</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } = [.. Parts.Keys.Order()];

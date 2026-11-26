@@ -74,6 +74,40 @@ public sealed class AreaKitRoundPartsTests
     }
 
     [TestMethod]
+    public void A_socket_dome_stands_on_its_sockets_centre()
+    {
+        // ARC-UI-3347: the centres of the socket rings measured on the screens, in the screen's own units (the new character body 765, the follower barter 825, the note pane 200).
+        var sockets = new Dictionary<AreaNewCharacterArtButton, (float X, float Y)>
+        {
+            [AreaNewCharacterArtButton.GenderPrevious] = (52.42f, 291.17f), [AreaNewCharacterArtButton.GenderNext] = (266.42f, 292.17f),
+            [AreaNewCharacterArtButton.RacePrevious] = (52.42f, 341.17f), [AreaNewCharacterArtButton.RaceNext] = (266.42f, 342.17f),
+            [AreaNewCharacterArtButton.BackgroundPrevious] = (52.42f, 392.17f), [AreaNewCharacterArtButton.BackgroundNext] = (266.42f, 392.17f),
+        };
+        foreach (var (button, socket) in sockets)
+        {
+            var (art, x, y) = AreaNewCharacterArtLayout.Button(button);
+            AssertCentre(art, x, y, socket);
+        }
+        AssertCentre(AreaBarterArtLayout.CycleLeftArt, AreaBarterArtLayout.CycleLeft.X, AreaBarterArtLayout.CycleLeft.Y, (166.42f, 66.17f));
+        AssertCentre(AreaBarterArtLayout.CycleRightArt, AreaBarterArtLayout.CycleRight.X, AreaBarterArtLayout.CycleRight.Y, (264.42f, 66.17f));
+        foreach (var marker in new[] { 145, 146, 147, 148 }) AssertCentre(marker, 10, 20, (21.4f, 31.15f));
+        // Only the bare domes move and lose the shadow: a ringed button stays at its table position.
+        foreach (var art in AreaKitRoundParts.ArtNumbers)
+        {
+            Assert.AreEqual(art is 145 or 146 or 147 or 148 or 757 or 758, AreaKitRoundParts.IsSocketDome(art), $"art {art}");
+            if (!AreaKitRoundParts.IsSocketDome(art)) Assert.AreEqual((0f, 0f), AreaKitRoundParts.SocketShift(art, 42, 281), $"art {art}");
+        }
+
+        static void AssertCentre(int art, int x, int y, (float X, float Y) socket)
+        {
+            var part = AreaKitRoundParts.Of(art)!.Value;
+            var (dx, dy) = AreaKitRoundParts.SocketShift(art, x, y);
+            Assert.AreEqual(socket.X, x + dx + part.Cx, .005f, $"art {art} at {x},{y}: across");
+            Assert.AreEqual(socket.Y, y + dy + part.Cy, .005f, $"art {art} at {x},{y}: down");
+        }
+    }
+
+    [TestMethod]
     public void The_shader_carries_the_numbers_of_the_rules()
     {
         // The logistic slope of a Gaussian (1.702), the half-pixel edge and the shadow's complement of the cut are written in the shader as in the C# functions.
