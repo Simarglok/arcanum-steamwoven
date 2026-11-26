@@ -65,15 +65,18 @@ BRASS_INNER = (0.80, 0.84)              # shares of the cut radius: from nothing
 BRASS_DARK = (6.0, 16.0)                # CIE L*: a darker pixel (the ring's outline, the gap) keeps its colour, a lighter one takes the tone
 # The burning signs (owner 2026-11-26): the outline is Codex's, the inside the original's own cells as even squares (rule E, as art 299 of #3270). Idle signs of the buttons stay solid.
 CELLED = {"m_dnbut": ("hover", "pressed"), "m_upbut": ("hover", "pressed"), "combineindicator2": ("idle",), "combineindicator3": ("idle",)}
-LAMP = "combineindicator1"              # the red lamp: the original's fine lattice over the whole lens, Codex's dark rim kept
-LAMP_RIM = (0.84, 0.92)                 # shares of the lens radius: from the cells to the generated rim
+LAMP = "combineindicator1"              # the red lamp: the original's fine lattice over the whole floor of its well
+# The wells are countersunk into the brass (owner 2026-11-26): a flat floor without gloss, and round it the wall, in shadow at the top left and lit at the lower right (the kit's light).
+WELL_FLOOR = 9.2                        # units from the well's centre: the floor; from here to the cut, the wall
+WELL_FLOOR_SEEN = 9.5                   # the original's pixels no farther than this give the floor's colours (farther out lies its own edge)
+WELL_FOOT = 0.7                         # the wall's brightness at its foot against its brightness at the lip
+WELL_WALL = ((0.0, (24, 14, 6)), (0.35, (44, 29, 12)), (0.6, (92, 63, 28)), (0.85, (166, 128, 68)), (1.0, (222, 188, 118)))   # the wall's colour by its facing, 0 shadow .. 1 lit; the brass of the wide button's plate
 RED_SIGN = (lambda r, g, b: r - g >= 90 and b >= g, lambda r, g, b: ramp(r - g, 60, 110))   # (is it a sign cell of the original, how much of the generated pixel is sign); b >= g leaves out the orange bevel beside the sign
 PALE_RIM = 100                          # a red sign's cell this pale (green channel) on its rim is the bevel's highlight corner, not the sign
 SIGNS = {"m_dnbut": RED_SIGN, "m_upbut": RED_SIGN,
          "combineindicator2": (lambda r, g, b: r >= 60 and g >= 60, lambda r, g, b: ramp(min(r, g) - b, 50, 110)),
          "combineindicator3": (lambda r, g, b: g >= 100 and r >= 70, lambda r, g, b: ramp(g, 100, 160))}
 SIGN_REACH = {"plate": 0.66, "picture": 0.80}   # shares of the disc's radius within which a sign lies (outside: the ring, the gloss, the rim)
-CLEAR_REACH = 1.2                       # units round the generated sign of a well that are repainted with the lens (the sign is moved onto the original's smaller share)
 CODEX_PAD = 2                           # art units of flat ground round the piece on its square Codex canvas
 GROUND = school_kit.GROUND
 LABEL_FONT = button_kit.LABEL_FONT
@@ -133,6 +136,10 @@ def note_of(ident: str) -> str:
     elif b != DOME and SOURCES[0] == "codex":
         cells = ", its sign filled with the original's cells (rule E)" if uses_cells(b, state) else ""
         what = f"the {state} look of art {b.art} drawn by Codex (under 40 units), round alpha{cells}"
+        if b.name == LAMP:
+            what = f"art {b.art}: the original's lattice on a flat floor in a countersunk brass well, by rule"
+        elif b.kind == "picture":
+            what = f"art {b.art}: the original's cells in the outline of Codex's arrow, on a flat floor in a countersunk brass well"
     else:
         what = f"the old HD pack's {state} frame of art {b.art}, round alpha (pack-first)"
     return f"{what}; ring_button_kit.py, ARC-UI-3269"
@@ -401,30 +408,6 @@ def box_of(points) -> tuple[float, float, float, float]:
     return min(xs), min(ys), max(xs) + 1, max(ys) + 1
 
 
-def clear_lens(frame: Image, circle: Circle, mask: dict[tuple[int, int], float]) -> None:
-    """The generated sign and its glow painted out of one lens: every pixel near the sign takes the middle colour of the sign-free pixels at its distance from the centre."""
-    scale = frame.h / circle.height
-    reach = int(round(CLEAR_REACH * scale))
-    near = {(x + i, y + j) for (x, y), v in mask.items() if v >= 0.05 for i in range(-reach, reach + 1) for j in range(-reach, reach + 1) if i * i + j * j <= reach * reach}
-    rings: dict[int, list[tuple[int, int, int]]] = {}
-    for y in range(frame.h):
-        for x in range(max(0, int((circle.cx - circle.radius) * scale)), min(frame.w, int((circle.cx + circle.radius) * scale) + 1)):
-            away = math.hypot((x + 0.5) / scale - circle.cx, (y + 0.5) / scale - circle.cy)
-            if away <= circle.radius * 0.95 and (x, y) not in near:
-                rings.setdefault(int(away * 2), []).append(tuple(frame.data[(y * frame.w + x) * 4:(y * frame.w + x) * 4 + 3]))
-    middle = {k: tuple(sorted(c[i] for c in v)[len(v) // 2] for i in range(3)) for k, v in rings.items() if len(v) >= 8}
-    if not middle:
-        raise RingError("no sign-free lens to repaint from")
-    for x, y in near:
-        if not (0 <= x < frame.w and 0 <= y < frame.h):
-            continue
-        away = math.hypot((x + 0.5) / scale - circle.cx, (y + 0.5) / scale - circle.cy)
-        if away > circle.radius * 0.9:
-            continue
-        o = (y * frame.w + x) * 4
-        frame.data[o:o + 3] = bytes(middle[min(middle, key=lambda k: abs(k + 0.5 - away * 2))])
-
-
 def blend(frame: Image, x: int, y: int, colour: tuple[int, int, int], share: float) -> None:
     o = (y * frame.w + x) * 4
     frame.data[o:o + 3] = bytes(int(round(colour[i] * share + frame.data[o + i] * (1.0 - share))) for i in range(3))
@@ -448,16 +431,70 @@ def solid(mask: dict[tuple[int, int], float]) -> dict[tuple[int, int], float]:
     return {(x, y): 1.0 if all(map(inside, ((x, y), (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))) else v for (x, y), v in mask.items()}
 
 
+def floor_profile(original: Image, circle: Circle, test) -> list[tuple[int, int, int]]:
+    """The colour of a well's floor by whole units of distance from its centre: the middle colour of the original's pixels there that are no sign."""
+    rings: dict[int, list[tuple[int, ...]]] = {}
+    for y in range(original.h):
+        for x in range(original.w):
+            away = math.hypot(x + 0.5 - circle.cx, y + 0.5 - circle.cy)
+            pixel = tuple(original.data[(y * original.w + x) * 4:(y * original.w + x) * 4 + 4])
+            if away <= WELL_FLOOR_SEEN and pixel[3] and not test(*pixel[:3]):
+                rings.setdefault(int(away), []).append(pixel[:3])
+    if not rings:
+        raise RingError("the original frame shows no floor round its sign")
+    middle = {k: tuple(sorted(c[i] for c in v)[len(v) // 2] for i in range(3)) for k, v in rings.items()}
+    return [middle[min(middle, key=lambda k: (abs(k - ring), -k))] for ring in range(int(WELL_FLOOR_SEEN) + 1)]   # a ring the sign fills takes the next one's
+
+
+def between(stops, at: float) -> tuple[float, ...]:
+    """The colour at `at` on a list of (position, colour), straight between neighbours and flat past the ends."""
+    if at <= stops[0][0]:
+        return stops[0][1]
+    for (a, low), (b, high) in zip(stops, stops[1:]):
+        if at <= b:
+            return tuple(low[i] + (high[i] - low[i]) * (at - a) / (b - a) for i in range(3))
+    return stops[-1][1]
+
+
+def flat_floor(original: Image, b: Button, master: tuple[int, int]) -> Image:
+    """An arrow's wells before anything lies in them: each floor in the original's own colours by distance (flat black; the green well's dim glow), cut round."""
+    part = school_kit.empty_layer(master)
+    for circle in b.circles:
+        across, down = master[0] / circle.width, master[1] / circle.height
+        profile = [(ring + 0.5, colour) for ring, colour in enumerate(floor_profile(original, circle, SIGNS[b.name][0]))]
+        for y in range(master[1]):
+            for x in range(max(0, int((circle.cx - circle.cut - 1) * across)), min(master[0], int((circle.cx + circle.cut + 1) * across) + 1)):
+                alpha = school_kit.coverage(circle, master, x + 0.5, y + 0.5)
+                if alpha > 0:
+                    colour = between(profile, math.hypot((x + 0.5) / across - circle.cx, (y + 0.5) / down - circle.cy))
+                    part.data[(y * master[0] + x) * 4:(y * master[0] + x) * 4 + 4] = bytes((*(int(round(v)) for v in colour), int(round(255 * alpha))))
+    return part
+
+
+def countersink(part: Image, b: Button) -> Image:
+    """The wall of each well over the rim of its part: from `WELL_FLOOR` out to the cut, dark where it faces away from the light (top left), brass-lit where it faces it (lower right), darker at its foot."""
+    for circle in b.circles:
+        across, down = part.w / circle.width, part.h / circle.height
+        for y in range(part.h):
+            for x in range(max(0, int((circle.cx - circle.cut - 1) * across)), min(part.w, int((circle.cx + circle.cut + 1) * across) + 1)):
+                dx, dy = (x + 0.5) / across - circle.cx, (y + 0.5) / down - circle.cy
+                away = math.hypot(dx, dy)
+                share = max(0.0, min(1.0, (away - WELL_FLOOR) * across + 0.5))
+                if share <= 0 or away > circle.cut + 1 or not part.data[(y * part.w + x) * 4 + 3]:
+                    continue
+                facing = 0.5 + 0.5 * (dx + dy) / (math.sqrt(2.0) * away)
+                lift = WELL_FOOT + (1.0 - WELL_FOOT) * ramp(away, WELL_FLOOR, circle.cut - 0.4)
+                blend(part, x, y, tuple(v * lift for v in between(WELL_WALL, facing)), share)
+    return part
+
+
 def celled_well(frame: Image, original: Image, b: Button, master: tuple[int, int]) -> Image:
-    """A well's part with its burning arrows: the generated arrow is painted out of the lens, and the original's cells are laid at the master size, inside the generated
-    outline moved and scaled onto the box of those cells (the generated arrow is larger). The cells are never resampled, so each master pixel inside holds a colour of the
-    original (owner 2026-11-26)."""
+    """A well's part with its burning arrows: the flat floor of the original's colours, on it the original's cells laid at the master size, inside the generated
+    outline moved and scaled onto the box of those cells (the generated arrow is larger), and the countersunk wall round both; nothing else of the generated drawing is
+    used, so no gloss lies in the well. The cells are never resampled, so each master pixel inside holds a colour of the original (owner 2026-11-26)."""
     test, metric = SIGNS[b.name]
     reach = SIGN_REACH[b.kind]
-    cleared = Image(frame.w, frame.h, bytearray(frame.data))
-    for circle in b.circles:
-        clear_lens(cleared, circle, sign_mask(frame, circle, metric, reach))
-    out, outline = cut(cleared, b.circles, master), cut(frame, b.circles, master)
+    out, outline = flat_floor(original, b, master), cut(frame, b.circles, master)
     for circle in b.circles:
         across, down = master[0] / circle.width, master[1] / circle.height
         cells = sign_cells(original, circle, test, reach)
@@ -470,20 +507,19 @@ def celled_well(frame: Image, original: Image, b: Button, master: tuple[int, int
                 source = (math.floor(sx0 + (x + 0.5 - tx0) * (sx1 - sx0) / (tx1 - tx0)), math.floor(sy0 + (y + 0.5 - ty0) * (sy1 - sy0) / (ty1 - ty0)))
                 if mask.get(source, 0) > 0:
                     blend(out, x, y, cell_colour(cells, int((x + 0.5) // across), int((y + 0.5) // down)), mask[source])
-    return out
+    return countersink(out, b)
 
 
 def latticed(frame: Image, original: Image, b: Button) -> Image:
-    """The red lamp: the original's cells over each lens, running out into the generated rim."""
+    """The red lamp: the original's cells over the whole floor of each well (the wall round them is laid on the cut part)."""
     out = Image(frame.w, frame.h, bytearray(frame.data))
     for circle in b.circles:
         scale = frame.h / circle.height
         for y in range(frame.h):
             for x in range(max(0, int((circle.cx - circle.radius) * scale)), min(frame.w, int((circle.cx + circle.radius) * scale) + 1)):
-                share = share_in(circle, (x + 0.5) / scale, (y + 0.5) / scale)
                 k = (int(y // scale) * original.w + int(x // scale)) * 4
-                if share < LAMP_RIM[1] and original.data[k + 3]:
-                    blend(out, x, y, tuple(original.data[k:k + 3]), 1.0 - ramp(share, *LAMP_RIM))
+                if math.hypot((x + 0.5) / scale - circle.cx, (y + 0.5) / scale - circle.cy) <= WELL_FLOOR + 0.5 and original.data[k + 3]:
+                    blend(out, x, y, tuple(original.data[k:k + 3]), 1.0)
     return out
 
 
@@ -685,7 +721,8 @@ def button_parts(local_root: Path, frames: Path, b: Button, dome: str, source: s
     def part_of(state: str) -> Image:
         if b.kind == "picture" and source == "codex" and uses_cells(b, state) and b.name != LAMP:
             return celled_well(frame_of(state), original_frame(frames, b, b.frames[state]), b, master)
-        return cut(frame_of(state), b.circles, master)
+        part = cut(frame_of(state), b.circles, master)
+        return countersink(part, b) if b.name == LAMP and source == "codex" else part
 
     parts = {ident_of(b, state): part_of(state) for state in b.frames}
     if b.kind == "plate":

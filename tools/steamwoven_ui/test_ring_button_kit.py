@@ -197,7 +197,7 @@ class BrassTests(unittest.TestCase):
 class CellTests(unittest.TestCase):
     def test_a_wells_sign_takes_the_originals_cells_unresampled_and_their_share(self):
         b = rk.INDICATORS[1]
-        original = signed(b, 1, 3.0, alpha=0, checker=True)
+        original = signed(b, 1, 3.0, checker=True)
         master = rk.master_of(b)
         out = rk.celled_well(signed(b, rk.CODEX_FRAME_PX, 5.0), original, b, master)
         self.assertEqual((out.w, out.h), master)
@@ -213,7 +213,34 @@ class CellTests(unittest.TestCase):
                     self.assertEqual(at(out, x, y)[:3], colour, (x, y))
                     seen.add(colour)
             self.assertEqual(seen, set(cells.values()))
-            self.assertEqual(at(out, int((x0 - 1.0) * across), int(circle.cy * down))[:3], (10, 10, 4))   # the larger generated sign is painted out
+            self.assertEqual(at(out, int((x0 - 1.0) * across), int(circle.cy * down))[:3], (10, 10, 4))   # beside it the floor: nothing of the larger generated sign
+
+    def test_a_wells_floor_holds_nothing_of_the_generated_lens(self):
+        b = rk.INDICATORS[1]
+        original = signed(b, 1, 3.0, checker=True)
+        glossy = signed(b, rk.CODEX_FRAME_PX, 5.0)
+        for c in b.circles:                                                       # a bright gloss spot above the arrow
+            for y in range(int((c.cy - 8.0) * 8), int((c.cy - 6.5) * 8)):
+                for x in range(int((c.cx - 4.0) * 8), int((c.cx - 2.5) * 8)):
+                    glossy.data[(y * glossy.w + x) * 4:(y * glossy.w + x) * 4 + 3] = bytes((200, 200, 200))
+        master = rk.master_of(b)
+        out = rk.celled_well(glossy, original, b, master)
+        for c in b.circles:
+            across, down = master[0] / c.width, master[1] / c.height
+            self.assertEqual(at(out, int((c.cx - 3.2) * across), int((c.cy - 7.2) * down)), (10, 10, 4, 255))
+
+    def test_the_wall_is_dark_at_the_top_left_and_lit_at_the_lower_right(self):
+        b = rk.INDICATORS[1]
+        master = rk.master_of(b)
+        out = rk.celled_well(signed(b, rk.CODEX_FRAME_PX, 5.0), signed(b, 1, 3.0, checker=True), b, master)
+        for c in b.circles:
+            across, down = master[0] / c.width, master[1] / c.height
+            wall = (rk.WELL_FLOOR + c.cut) / 2 / 2 ** 0.5
+            light = lambda sx, sy: sum(at(out, int((c.cx + sx * wall) * across), int((c.cy + sy * wall) * down))[:3])
+            self.assertLess(light(-1, -1), 100)
+            self.assertGreater(light(1, 1), 300)
+            self.assertLess(light(-1, -1), light(1, -1))
+            self.assertLess(light(1, -1), light(1, 1))
 
     def test_the_inside_of_a_sign_is_full_and_its_outline_stays_soft(self):
         mask = {(x, y): 0.6 for x in range(3) for y in range(3)}
