@@ -248,6 +248,14 @@ class PackageTests(unittest.TestCase):
         self.run_profiling(smoke_folder=self.root)
         self.assertIn("own user folder Arcanum Steamwoven Profiling", (self.root / "out" / "macos-profiling" / "BUILD.txt").read_text())
 
+    def test_the_builders_option_selects_the_profiling_package(self) -> None:
+        for words, platform in ((["mac", "--profiling"], package.PROFILING), (["mac"], package.PLATFORMS["mac"]),
+                                (["win"], package.PLATFORMS["win"])):
+            with mock.patch.object(package, "package") as built, mock.patch.object(package, "main_checkout", return_value=self.repo), \
+                    mock.patch.object(package.signal, "signal"):
+                self.assertEqual(package.main(words), 0)
+            self.assertIs(built.call_args.args[0], platform)
+
     def test_profiling_is_for_mac_only(self) -> None:
         with mock.patch("sys.stderr", new_callable=io.StringIO) as output, self.assertRaises(SystemExit) as stopped:
             package.main(["win", "--profiling"])

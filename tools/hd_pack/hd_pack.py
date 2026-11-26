@@ -670,6 +670,10 @@ def relayout_plan(inst: Path, lm: "layout.LayoutMap") -> dict:
     return {"old": manifest, "oldSha": msha, "new": new_manifest, "manifestBytes": raw, "newSha": hashlib.sha256(raw).hexdigest(), "moves": moves}
 
 
+# The packaged game's app names: the player package and the profiling package (ARC-DEV-3379), which reads packs the same way.
+GAME_APPS = ("Arcanum Steamwoven", "Arcanum Steamwoven Profiling")
+
+
 def pack_users(pack: Path) -> list[str]:
     """Processes that name the pack folder in their command line (a viewer or smoke started with ARC_HD_PACK=..., a launcher run on it) or are the packaged game:
     a relayout moves every file, so a reader running at the same time would see missing frames. Best effort: the environment of a process is not read."""
@@ -683,7 +687,7 @@ def pack_users(pack: Path) -> list[str]:
         pid, _, args = line.strip().partition(" ")
         if pid == str(os.getpid()) or "hd_pack.py" in args:
             continue
-        if any(n in args for n in needles) or "Arcanum Steamwoven.app/Contents/MacOS" in args:
+        if any(n in args for n in needles) or any(f"{app}.app/Contents/MacOS" in args for app in GAME_APPS):
             found.append(f"{pid} {args[:110]}")
     return found
 

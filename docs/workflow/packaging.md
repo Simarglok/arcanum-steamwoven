@@ -108,7 +108,8 @@ these differences. Use: [Mac performance monitoring](mac-performance-monitoring.
 
 A commit older than this option has no `macOS profiling` preset and is refused. `--profiling` is for `mac` only.
 `./arcanum daily` does not build it. `./arcanum clean` treats its folder like a platform's
-([build retention](build-retention.md)), and the launch queue treats a game running from it like the player package.
+([build retention](build-retention.md)), and the launch queue of a checkout with this change treats a game running from
+it like the player package ([details](mac-performance-monitoring.md#profiling-package-arc-dev-3379)).
 
 ## Daily package build (ARC-DEV-062)
 

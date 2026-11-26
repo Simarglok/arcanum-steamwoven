@@ -149,8 +149,11 @@ compiled as for the player (optimized, ReadyToRun). The differences:
   and use this one to find where the time and memory go;
 - the entitlement `get-task-allow`, so Instruments may inspect the process without a password;
 - its own name, bundle id and user folder `~/Library/Application Support/Arcanum Steamwoven Profiling/`, so its saves,
-  settings and logs are separate. The map cache is the player's (`Arcanum Steamwoven Game/map-cache`, a fixed folder for
-  every build).
+  settings, logs and the HD pack folder inside it (`hd-packs`) are separate: before comparing memory or GPU figures,
+  check that both games use the same look and pack. The map cache is the player's (`Arcanum Steamwoven Game/map-cache`,
+  a fixed folder for every build).
+- its Ctrl+B bug reports go beside it, to `artifacts/packages/macos-profiling/reports/`; `./arcanum qa` reads only the
+  player package's folder unless given `--reports-dir`.
 
 To measure with your own saves and settings, quit both games and copy the player's folder over the profiling one (an
 APFS clone; it overwrites the profiling build's files of the same name):
@@ -158,8 +161,10 @@ APFS clone; it overwrites the profiling build's files of the same name):
     mkdir -p "$HOME/Library/Application Support/Arcanum Steamwoven Profiling"
     cp -cRp "$HOME/Library/Application Support/Arcanum Steamwoven Game/." "$HOME/Library/Application Support/Arcanum Steamwoven Profiling/"
 
-While it runs from that folder, the [launch queue](toolchain.md#launch-queue-arc-dev-033) holds the agents' window runs,
-as for the player package.
+While it runs from `artifacts/packages/macos-profiling`, the [launch queue](toolchain.md#launch-queue-arc-dev-033) of a
+checkout that has this change holds its window runs, as for the player package. A checkout from before it (an older
+worktree) does not see this folder, and a menu-bar app started before it must be restarted: for a measurement run
+`./arcanum queue --playing` first (and `--not-playing` after), which every checkout honours.
 
 ### Instruments
 
