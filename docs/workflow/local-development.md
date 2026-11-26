@@ -68,13 +68,9 @@ the load window, exit); it is refused with `--hero`, reaches the viewer as `--ma
 `tools/arcanum-local launch terrain ... --main-menu`, and needs a build exported after ARC-UI-011 (an older build
 refuses the argument). `--debug-mode` (ARC-DEV-050, `area` and `map`; [debug mode](../rendering/area-map-mode.md#debug-mode-arc-dev-050))
 turns the viewer's debug mode on: the world map (W) lists every area and teleports there, from any map; it reaches the
-viewer as the lone `--debug-mode` through `tools/arcanum-local launch terrain ... --debug-mode` (map mode only), and
-`./arcanum` refuses a build whose commit does not hold it (`DEBUG_MODE_COMMIT`), as for the main menu. ARC-UI-012 ([scene flow](../rendering/terrain-viewer.md#scene-flow-arc-ui-012)): `./arcanum area`
+viewer as the lone `--debug-mode` through `tools/arcanum-local launch terrain ... --debug-mode` (map mode only). ARC-UI-012 ([scene flow](../rendering/terrain-viewer.md#scene-flow-arc-ui-012)): `./arcanum area`
 opens the main menu by default, as the game starts with it; `--no-main-menu` starts playing at once with the diagnostic
-PC profile, and `--hero` starts as that hero without the menu. `map NAME` opens the menu only with `--main-menu`. Before
-launching with the menu, `./arcanum` checks that the build's commit holds the main menu (`MAIN_MENU_COMMIT`, the
-ARC-UI-011 merge, in this checkout's history); an older or unknown build is refused with the way out (a fresh export,
-or `--no-main-menu`), and nothing starts. `oracle` ([function oracle](toolchain.md#function-oracle), ARC-DEV-007) runs
+PC profile, and `--hero` starts as that hero without the menu. `map NAME` opens the menu only with `--main-menu`. `oracle` ([function oracle](toolchain.md#function-oracle), ARC-DEV-007) runs
 `tools/original-oracle/oracle.py generate` for the chosen functions (`ORACLE_FUNCTIONS` in
 `tools/local_dev/launch.py`, default all) into `research-private/oracle/`, then their `OriginalExe` tests in
 `tests/Arcanum.Simulation.Tests` with `ARCANUM_ORACLE_REQUIRED=1`, which write their receipts to `docs/verification/receipts`

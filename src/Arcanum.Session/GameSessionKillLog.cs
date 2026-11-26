@@ -77,8 +77,8 @@ public sealed partial class GameSessionOwner
         return Changed();
     }
 
-    /// <summary>The injury cause the original writes for a self-inflicted injury (0x4F5690) and for one dealt by another PC.</summary>
-    private const int SelfInflictedCause = 30286, OtherPcCause = 30287;
+    /// <summary>The injury cause the original writes for a self-inflicted injury (0x4F5690; one dealt by another PC is 30287, which has no case here).</summary>
+    private const int SelfInflictedCause = 30286;
 
     /// <summary>
     /// ARC-UI-097: the kill record of an NPC that died to the hero or to a critter led by the hero (the death function 0x45DA20 calls 0x4F5330 after

@@ -12,8 +12,7 @@ namespace Arcanum.Session.Tests;
 public sealed class TransferParityStateTests
 {
     private const string Virgil = "oid:virgil", Sogg = "oid:sogg", Rat = "oid:rat", Stranger = "oid:stranger";
-    private static readonly SessionCombatant HeroHandle = SessionCombatant.Hero, RatHandle = SessionCombatant.Critter(Rat),
-        StrangerHandle = SessionCombatant.Critter(Stranger);
+    private static readonly SessionCombatant RatHandle = SessionCombatant.Critter(Rat);
     private static readonly ActorPlacement Inside = new(Cave, new(10, 20), NeighborDirection.XPlus);
 
     private static GameSessionOwner Party(params string[] followers)

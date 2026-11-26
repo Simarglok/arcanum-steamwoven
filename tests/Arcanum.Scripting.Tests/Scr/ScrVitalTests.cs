@@ -9,7 +9,7 @@ namespace Arcanum.Scripting.Tests.Scr;
 [TestClass]
 public sealed class ScrVitalTests
 {
-    private const byte Triggerer = 0, Attachee = 1, Extra = 12;
+    private const byte Triggerer = 0, Extra = 12;
     private const int Script = 30282;
     private static readonly ScrObjectRef Eater = Pc, Item = new(1, "item.1");
 

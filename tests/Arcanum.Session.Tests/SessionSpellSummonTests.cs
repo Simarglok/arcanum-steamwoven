@@ -14,7 +14,7 @@ public sealed class SessionSpellSummonTests
     private const int FlashSpell = 22, WallSpell = 21, FlashBasic = 4050, WallBasic = 4031, Flash = FlashBasic + 20, Piece = WallBasic + 20;
     private const string Npc = "npc-a", Wall = "row:wall";
     private const int NpcType = SpellTargetObject.Npc, Blocking = 0, NoBlock = SpellTargetObject.NoBlock;
-    private const ulong Self = 0x1, Tile = 0x8000UL << 32, Empty = 0x40000UL << 32, EmptyImmobiles = 0x80000UL << 32, WallLine = 0x400000UL << 32, Summoned = 0x4000UL << 32;
+    private const ulong Tile = 0x8000UL << 32, Empty = 0x40000UL << 32, EmptyImmobiles = 0x80000UL << 32, WallLine = 0x400000UL << 32, Summoned = 0x4000UL << 32;
     private static readonly SpellLocation HeroTile = new(5, 5), Strike = new(8, 5);
 
     // The hero, an NPC and a blocking wall object where a test puts them; the tiles are open; every direction is 7 (step +1, 0: the wall line runs along x).

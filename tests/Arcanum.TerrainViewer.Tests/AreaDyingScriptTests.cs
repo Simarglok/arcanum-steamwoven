@@ -18,7 +18,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaDyingScriptTests
 {
-    private const byte Attachee = 1, Number = 3, GlobalFlag = 4, Local = 2, Triggerer = 0;
+    private const byte Number = 3, GlobalFlag = 4, Local = 2, Triggerer = 0;
     private const int PassedFlag = 2365, PcKillFlag = 2366, PcType = 15;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);

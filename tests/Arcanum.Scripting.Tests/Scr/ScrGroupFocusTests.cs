@@ -9,7 +9,7 @@ namespace Arcanum.Scripting.Tests.Scr;
 [TestClass]
 public sealed class ScrGroupFocusTests
 {
-    private const byte Triggerer = 0, Looped = 10, EveryGroup = 13, AnyGroup = 14;
+    private const byte EveryGroup = 13, AnyGroup = 14;
     private const int Script = 1160;
 
     private sealed class GroupHost(FakeHost inner) : IScrHost, IScrWorldQueries, IScrGroupQueries

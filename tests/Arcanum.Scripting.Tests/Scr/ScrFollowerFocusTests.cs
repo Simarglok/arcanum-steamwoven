@@ -11,7 +11,7 @@ namespace Arcanum.Scripting.Tests.Scr;
 public sealed class ScrFollowerFocusTests
 {
     private const int Use = 1;
-    private const byte Triggerer = 0, Attachee = 1, EveryFollower = 2, AnyFollower = 3, LocalObject = 11;
+    private const byte Triggerer = 0, EveryFollower = 2, AnyFollower = 3, LocalObject = 11;
 
     private sealed class FollowerHost(FakeHost inner) : IScrHost, IScrGroupQueries, IScrObjectStateQueries, IScrObjectQueries
     {

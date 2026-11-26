@@ -41,13 +41,6 @@ public sealed partial class SessionSpellCasterTests
             id => id == StoreStaff ? new SessionItemSpells(id, SessionSpellCaster.Hero, 5, [10000, 10000, 10000, 10000, 10000], 0, 0, 0, store) : null));
     }
 
-    private static void CastOnce(GameSessionOwner owner, SessionSpellCaster caster, SessionSpellRecord record)
-    {
-        var run = Start(owner, caster, record);
-        Assert.AreEqual(SpellCastGoalOutcome.Started, caster.StartGoal(run, new NoCombat()).Outcome);
-        Assert.AreEqual(GameSessionDisposition.Changed, caster.Release(run)!.Disposition);
-    }
-
     [TestMethod]
     public void A_cast_drains_the_worn_store_before_fatigue_and_sets_the_recharge_event_up()
     {

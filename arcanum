@@ -30,11 +30,6 @@ MODES = {"world": ("world-diagnostic", ("ARC-WORLD-003",))}
 MAP_MODE = ("area", (launch.UNIVERSAL_TASK, "ARC-RENDER-008"))
 # ARC-RENDER-028: `area` is map mode on the main world map, opened as a window around its map-list start (the Crash Site).
 AREA_MAP = "Arcanum1-024-fixed"
-# ARC-UI-012: `area` opens the main menu first, as the game does; builds exported before the menu (ARC-UI-011, merged in
-# this commit) refuse its argument, so such a build is refused here with the way out.
-MAIN_MENU_COMMIT = "309d1236ba3a0a9ed554bc86c696090c3e661d8b"
-# ARC-DEV-050: the debug mode's `--debug-mode` (added in this commit); older builds refuse it as an argument.
-DEBUG_MODE_COMMIT = "33748757d4aaf24ebccb41c1842c27b3a0626797"
 # ARC-DEV-154: the viewer's `--mode area` (the commit that added it; `crash-site-area` stays a permanent alias in the
 # viewer, but the launcher always sends `area`); older builds refuse it as an argument.
 AREA_MODE_COMMIT = "0474cc7ea893edcf1c5d3b9115c3e7292af7fdcf"
@@ -88,16 +83,6 @@ def build_holds(manifest: dict, change: str) -> bool:
         return False
 
 
-def build_has_main_menu(manifest: dict) -> bool:
-    """True when the build's commit contains the main menu (ARC-UI-011) in this checkout's history."""
-    return build_holds(manifest, MAIN_MENU_COMMIT)
-
-
-def build_has_debug_mode(manifest: dict) -> bool:
-    """True when the build's commit contains the debug mode's argument (ARC-DEV-050) in this checkout's history."""
-    return build_holds(manifest, DEBUG_MODE_COMMIT)
-
-
 def build_has_area_mode(manifest: dict) -> bool:
     """True when the build's commit contains the viewer's `--mode area` (ARC-DEV-154) in this checkout's history."""
     return build_holds(manifest, AREA_MODE_COMMIT)
@@ -128,17 +113,6 @@ def run(args: argparse.Namespace) -> int:
         print("The current build was not exported from a commit that holds the viewer's --mode area (ARC-DEV-154; an older build, "
               f"or a commit this checkout does not hold) and refuses it: re-export a fresh {launch.UNIVERSAL_TASK} build, then run "
               f"./arcanum {args.mode} again.", file=sys.stderr)
-        return 2
-    if main_menu and not build_has_main_menu(manifest):
-        print("The current build was not exported from a commit that holds the main menu (ARC-UI-011; an older build, or a "
-              "commit this checkout does not hold) and may not open it: export a fresh "
-              f"{launch.UNIVERSAL_TASK} build, or run ./arcanum {args.mode} with --no-main-menu"
-              + (" (or without --main-menu)" if args.mode == "map" else "") + ".", file=sys.stderr)
-        return 2
-    if getattr(args, "debug_mode", False) and not build_has_debug_mode(manifest):
-        print("The current build was not exported from a commit that holds the debug mode (ARC-DEV-050; an older build, or a "
-              f"commit this checkout does not hold) and may not accept it: export a fresh {launch.UNIVERSAL_TASK} build, or run "
-              f"./arcanum {args.mode} without --debug-mode.", file=sys.stderr)
         return 2
     candidate = f"{ROOT_ID}:{task}:{manifest_path.parent.name}"
     # A real run leaves the terrain launch selection on this build (as `tools/arcanum-local configure
