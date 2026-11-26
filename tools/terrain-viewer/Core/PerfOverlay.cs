@@ -6,6 +6,34 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>ARC-DEV-3389: what a key event means for the performance overlay.</summary>
 public enum PerfOverlayRoute { PassThrough, Toggle, Consumed }
 
+/// <summary>ARC-DEV-3389: what Ctrl+F shows: nothing, the game's own panel, or Apple's Metal Performance HUD.</summary>
+public enum PerfOverlayMode { Off, Overlay, MetalHud }
+
+/// <summary>ARC-DEV-3389: the Ctrl+F cycle, and the system tool that switches the Metal HUD of a running process.</summary>
+public static class PerfOverlayCycle
+{
+    /// <summary>Apple's tool for performance features of a running process (macOS 27).</summary>
+    public const string HudTool = "/usr/bin/metalperftrace";
+    /// <summary>Apple's variable that shows the HUD from a process's start.</summary>
+    public const string LoadVariable = "MTL_HUD_ENABLED";
+
+    /// <summary>The next state: off, the panel, the HUD (only where the system can switch it), off.</summary>
+    public static PerfOverlayMode Next(PerfOverlayMode mode, bool metalHud) => mode switch
+    {
+        PerfOverlayMode.Off => PerfOverlayMode.Overlay,
+        PerfOverlayMode.Overlay when metalHud => PerfOverlayMode.MetalHud,
+        _ => PerfOverlayMode.Off,
+    };
+
+    /// <summary>What a start shows: the HUD when the start's environment asked the system for it and it can be switched, else nothing.</summary>
+    public static PerfOverlayMode Start(Func<string, string?> variable, bool metalHud)
+        => metalHud && variable(LoadVariable) == "1" ? PerfOverlayMode.MetalHud : PerfOverlayMode.Off;
+
+    /// <summary>The tool's arguments that show or hide the HUD of process <paramref name="processId"/>.</summary>
+    public static string[] HudArguments(bool shown, int processId)
+        => ["setup", shown ? "--enable" : "--disable", "hud", "--pid", processId.ToString(CultureInfo.InvariantCulture)];
+}
+
 /// <summary>ARC-DEV-3389: Ctrl+F shows or hides the performance overlay (no key of the original: F under Ctrl is a control code the
 /// game ignores, ARC-INPUT-004). Ctrl alone, no Shift, Alt or Command. The consumed press owns its echoes and its release (also when
 /// Ctrl goes up first), so nothing else sees a late F.</summary>
@@ -82,7 +110,7 @@ public sealed record PerfOverlayReading(
     long? DrawCalls, long? DrawnObjects, long? Primitives,
     long? ResidentBytes, long? VideoBytes, long? ManagedBytes, double? AllocatedBytesPerSecond, double? CpuPercent,
     long? Nodes, long? Objects,
-    int Width, int Height, int? FpsCap = null)
+    int Width, int Height, int? FpsCap = null, bool MetalHudNext = false)
 {
     /// <summary>A byte count above this is a broken counter (the Metal texture monitor underflows to 2^63, issue #3333), not memory.</summary>
     public const long ByteCeiling = 1L << 42;
@@ -95,7 +123,7 @@ public sealed record PerfOverlayReading(
         text.Append("FPS ").Append(frames is { AverageMs: > 0 } f ? Number(1000 / f.AverageMs, "0.0") : "...");
         // The viewer paces itself (the screen's rate while there is activity, lower when idle): a low rate under the cap is not slowness.
         if (FpsCap is { } cap) text.Append("  cap ").Append(cap.ToString(CultureInfo.InvariantCulture));
-        text.Append("   (Ctrl+F hides)\n");
+        text.Append(MetalHudNext ? "   (Ctrl+F: Metal HUD)\n" : "   (Ctrl+F hides)\n");
         text.Append("frame ms   avg ").Append(Number(frames?.AverageMs, "0.0")).Append("  p95 ").Append(Number(frames?.P95Ms, "0.0"))
             .Append("  max ").Append(Number(frames?.MaxMs, "0.0")).Append('\n');
         text.Append("update ms  avg ").Append(Number(frames?.WorkAverageMs, "0.0")).Append("  max ").Append(Number(frames?.WorkMaxMs, "0.0")).Append('\n');

@@ -7,7 +7,7 @@ are this project's own.
 - **Mac:** on a keyboard whose F keys control brightness or volume, hold **fn** with every F key (**fn+F7**,
   **fn+Ctrl+Shift+F10**). **Ctrl** is the Control key on a Mac too, never Command.
 - A, C, F, I, L, R, S, T and W with Ctrl, Alt or Command held do nothing in play, as in the original (the one *Steamwoven* tool
-  among these chords is Ctrl+F, the performance overlay).
+  among these chords is Ctrl+F, the performance overlays).
 - An open window, conversation, menu or the diagnostic palette takes the keys first: the *In play* keys act only while
   none is open.
 
@@ -101,7 +101,7 @@ are this project's own.
 | Key | Action |
 | --- | --- |
 | Ctrl+B | [Bug report](alpha-build.md#9-reporting-a-bug-ctrlb) over anything: Ctrl+Enter (or Command+Enter) sends, Escape cancels |
-| Ctrl+F | Performance overlay shown or hidden (off at every start): frames per second, frame time, main-thread time, draw calls, memory and garbage collections ([what each row means](../rendering/terrain-viewer.md#performance-overlay-arc-dev-3389)) |
+| Ctrl+F | Performance overlays in a cycle: off (every start) → the game's panel (frame rate and frame time, main-thread time, draw calls, memory, garbage collections) → Apple's Metal Performance HUD (a Mac with `metalperftrace`, macOS 27; elsewhere the cycle has no such step) → off ([details](../rendering/terrain-viewer.md#performance-overlay-arc-dev-3389)) |
 | Ctrl+Shift+F9 | Diagnostic palette |
 | Ctrl+Shift+J | Debug mode: the open inventory, loot, barter, identify or repair window changes between the original look and the diagnostic view |
 | Ctrl+Shift+F10 | [Diagnostic panel](alpha-build.md#8-showing-and-hiding-the-diagnostic-panel) shown or hidden |

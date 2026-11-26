@@ -126,6 +126,8 @@ public partial class TerrainViewerApp : Node
         GD.Print($"ARC-DEV-059 viewer start mode={ModeName(arguments.Mode)} map={arguments.AreaMapName ?? "-"} main-menu={arguments.MainMenu} smoke={_nativeSmoke}");
         // ARC-DEV-2279: the soak run's counters (ARC_SOAK_LOG), when asked for.
         StartSoak();
+        // ARC-DEV-3389: the Ctrl+F performance overlay and, where the system can switch it, the Metal HUD.
+        StartPerfOverlay();
         // ARC-DEV-372: the viewer's readers share one index of the game folder per run (a self-test has no game folder and reads none).
         Arcanum.Data.Content.ContentStack.EnableSharing(!SelfTestBootstrap);
         // ARC-DEV-350: the game settings come first, the HD pack source is one of them.

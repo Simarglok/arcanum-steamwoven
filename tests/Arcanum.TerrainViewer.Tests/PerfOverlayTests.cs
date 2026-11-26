@@ -45,6 +45,41 @@ public sealed class PerfOverlayTests
     }
 
     [TestMethod]
+    public void CtrlFCyclesThroughTheMetalHudOnlyWhereItIsLoaded()
+    {
+        Assert.AreEqual(PerfOverlayMode.Overlay, PerfOverlayCycle.Next(PerfOverlayMode.Off, metalHud: true));
+        Assert.AreEqual(PerfOverlayMode.MetalHud, PerfOverlayCycle.Next(PerfOverlayMode.Overlay, metalHud: true));
+        Assert.AreEqual(PerfOverlayMode.Off, PerfOverlayCycle.Next(PerfOverlayMode.MetalHud, metalHud: true));
+        Assert.AreEqual(PerfOverlayMode.Overlay, PerfOverlayCycle.Next(PerfOverlayMode.Off, metalHud: false));
+        Assert.AreEqual(PerfOverlayMode.Off, PerfOverlayCycle.Next(PerfOverlayMode.Overlay, metalHud: false));
+    }
+
+    [TestMethod]
+    public void AStartThatAskedForTheHudCountsAsShowingIt()
+    {
+        static PerfOverlayMode Start(string? value, bool metalHud)
+            => PerfOverlayCycle.Start(name => name == PerfOverlayCycle.LoadVariable ? value : null, metalHud);
+        Assert.AreEqual(PerfOverlayMode.Off, Start(null, true));
+        Assert.AreEqual(PerfOverlayMode.Off, Start("0", true));
+        Assert.AreEqual(PerfOverlayMode.MetalHud, Start("1", true));
+        Assert.AreEqual(PerfOverlayMode.Off, Start("1", false));
+    }
+
+    [TestMethod]
+    public void TheHudToolIsAskedAboutOneProcess()
+    {
+        CollectionAssert.AreEqual(new[] { "setup", "--enable", "hud", "--pid", "42" }, PerfOverlayCycle.HudArguments(true, 42));
+        CollectionAssert.AreEqual(new[] { "setup", "--disable", "hud", "--pid", "42" }, PerfOverlayCycle.HudArguments(false, 42));
+    }
+
+    [TestMethod]
+    public void ThePanelSaysWhatCtrlFDoesNext()
+    {
+        var reading = new PerfOverlayReading(null, null, null, null, null, null, null, null, null, null, null, null, null, null, 800, 600, MetalHudNext: true);
+        StringAssert.StartsWith(reading.Text(), "FPS ...   (Ctrl+F: Metal HUD)\n");
+    }
+
+    [TestMethod]
     public void RateNeedsTwoGrowingSamples()
     {
         var rate = new PerfRate();

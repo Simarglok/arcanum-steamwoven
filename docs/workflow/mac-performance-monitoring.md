@@ -37,7 +37,9 @@ runs, the [launch queue](toolchain.md#launch-queue-arc-dev-033) holds the agents
 
 ## Metal Performance HUD (works)
 
-Start from Terminal:
+In the game itself **Ctrl+F** switches it on and off: it is the third step of the
+[performance overlay](../rendering/terrain-viewer.md#performance-overlay-arc-dev-3389), after the game's own panel. To have
+it from the first frame, start from Terminal:
 
     MTL_HUD_ENABLED=1 "$EXE"
 

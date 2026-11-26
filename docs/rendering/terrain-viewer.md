@@ -3280,12 +3280,21 @@ checks that a prepared frame draws the pixels of a lazily resolved one, that ref
 
 ## Performance overlay (ARC-DEV-3389)
 
-**Ctrl+F** shows and hides a small panel at the right edge, below the top interface bar, in the WORLD and AREA modes, in play, in the main menu and over
-the game's windows. It is off at every start
-and is not saved. It is a diagnostic of this project, no part of the original: Ctrl+F has no action there (F under Ctrl is a
+**Ctrl+F** steps through three states in the WORLD and AREA modes, in play, in the main menu and over the game's windows:
+off, the game's own panel (at the right edge, below the top interface bar) and Apple's **Metal Performance HUD**, then off
+again. It is off at every start and is not saved. It is a diagnostic of this project, no part of the original: Ctrl+F has no action there (F under Ctrl is a
 control code the game ignores, ARC-INPUT-004). It does not toggle while a tool or modal box that takes every key is up (the bug
 report, the owner-checks overlay, the quit question, the HD pack problem box) or on a press while a load is pending. The pointer passes through it, and it reads only: the session and the save do not
 change. Because it is drawn with the game, a bug report taken while it is shown has it on the screenshot.
+
+**The Metal HUD step.** The game asks the system's tool (`/usr/bin/metalperftrace setup --enable|--disable hud --pid
+<own process>`) when the cycle reaches or leaves the step, so nothing is loaded into the game until then, and it works however
+the game was started. The HUD comes up a moment after the key, at the middle of the right edge (`MTL_HUD_ALIGNMENT` of the
+start's environment overrides that). Where the tool is missing (Windows, a macOS without it) the cycle is off, panel, off. A
+start with `MTL_HUD_ENABLED=1` ([Mac performance monitoring](../workflow/mac-performance-monitoring.md)) shows the HUD from
+the start as before; the first Ctrl+F then turns it off. The game cannot see whether the tool's request put the HUD on
+screen: the log line `ARC-DEV-3389 performance overlay mode=` names a refusal of the tool only. The HUD's own figures are
+Apple's; the rows below are the panel's.
 
 The text is written twice a second. Frame, update and collection figures cover the last 3 s.
 
@@ -3308,8 +3317,10 @@ second the text is built and the process read (a few KiB of allocations, which t
 own draw calls, and the renderer's time measurement is on. For monitoring from outside the game (Metal HUD, Instruments) see
 [Mac performance monitoring](../workflow/mac-performance-monitoring.md).
 
-**Smoke.** Stage `report` (also in the map battery): `ARC-DEV-3389 native-smoke perf-overlay PASS`. With
-`ARC_PERF_OVERLAY_CAPTURE=<folder>` a window run saves `before.png` and `shown.png`.
+**Smoke.** Stage `report` (also in the map battery): `ARC-DEV-3389 native-smoke perf-overlay PASS`; a window run on a Mac with
+the tool goes through the HUD step too (it asks the tool; it does not look at the screen). With
+`ARC_PERF_OVERLAY_CAPTURE=<folder>` a window run saves `before.png` and `shown.png` of the viewport and, with the HUD step,
+`window-*.png` captures of the window itself (the HUD is not in the viewport's image; the window is raised for them).
 
 ## Verification and evidence status
 

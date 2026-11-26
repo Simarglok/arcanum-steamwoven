@@ -5,10 +5,10 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-DEV-3389 (perf epic #3377): the in-game performance overlay of the WORLD and AREA modes, off at every start, shown and hidden by
-/// Ctrl+F. While hidden it costs one null test per frame. While shown it records each frame without allocating, writes its text twice a
-/// second and measures the main viewport's render time. It takes no click and reads only: nothing of the session or the save changes.
-/// External tools (Metal HUD, Instruments) are issue #3378's subject.
+/// ARC-DEV-3389 (perf epic #3377): the in-game performance overlay of the WORLD and AREA modes, off at every start. Ctrl+F cycles off,
+/// the panel and, on a macOS that can switch it, Apple's Metal Performance HUD. While the panel is hidden it costs one
+/// null test per frame. While shown it records each frame without allocating, writes its text twice a second and measures the main
+/// viewport's render time. It takes no click and reads only: nothing of the session or the save changes.
 /// </summary>
 public partial class TerrainViewerApp
 {
@@ -17,6 +17,18 @@ public partial class TerrainViewerApp
     /// <summary>Null while the overlay is hidden.</summary>
     private PerfOverlayMeter? _perfMeter;
     private PerfRate _perfAllocated, _perfProcessor;
+    private PerfOverlayMode _perfMode;
+    /// <summary>This run can switch the Metal HUD (a window on a macOS that has the tool).</summary>
+    private bool _metalHud;
+    /// <summary>Why the latest request to the HUD's tool failed, null when it was accepted.</summary>
+    private string? _metalHudProblem;
+
+    /// <summary>Once, at the start: whether the HUD joins the cycle, and whether the start's environment already shows it.</summary>
+    private void StartPerfOverlay()
+    {
+        _metalHud = DisplayServer.GetName() != "headless" && MetalHudSwitch.Available;
+        _perfMode = PerfOverlayCycle.Start(System.Environment.GetEnvironmentVariable, _metalHud);
+    }
 
     /// <summary>After the bug report and the owner checks in the WORLD input route (their windows own every key). True when the event is
     /// the overlay's.</summary>
@@ -27,19 +39,26 @@ public partial class TerrainViewerApp
             key.CtrlPressed, key.ShiftPressed, key.AltPressed, key.MetaPressed);
         if (route == PerfOverlayRoute.PassThrough) return false;
         GetViewport().SetInputAsHandled();
-        if (route == PerfOverlayRoute.Toggle) TogglePerfOverlay();
+        if (route == PerfOverlayRoute.Toggle) ShowPerf(PerfOverlayCycle.Next(_perfMode, _metalHud));
         return true;
     }
 
-    private void TogglePerfOverlay()
+    private void ShowPerf(PerfOverlayMode mode)
     {
-        var show = _perfMeter is null;
-        _perfMeter = show ? new PerfOverlayMeter() : null;
-        _perfAllocated = default; _perfProcessor = default;
-        RenderingServer.ViewportSetMeasureRenderTime(GetViewport().GetViewportRid(), show);
-        if (_perfPanel is null) { _perfPanel = new PerfOverlayPanel(); AddChild(_perfPanel); }
-        _perfPanel.Set(show ? "Measuring..." : null, AreaGameBarPanel.TopInset);
-        GD.Print($"ARC-DEV-3389 performance overlay {(show ? "shown" : "hidden")}");
+        var previous = _perfMode;
+        _perfMode = mode;
+        var show = mode == PerfOverlayMode.Overlay;
+        if (show != (_perfMeter is not null))
+        {
+            _perfMeter = show ? new PerfOverlayMeter() : null;
+            _perfAllocated = default; _perfProcessor = default;
+            RenderingServer.ViewportSetMeasureRenderTime(GetViewport().GetViewportRid(), show);
+            if (_perfPanel is null) { _perfPanel = new PerfOverlayPanel(); AddChild(_perfPanel); }
+            _perfPanel.Set(show ? "Measuring..." : null, AreaGameBarPanel.TopInset);
+        }
+        var hud = mode == PerfOverlayMode.MetalHud;
+        if (hud != (previous == PerfOverlayMode.MetalHud)) _metalHudProblem = MetalHudSwitch.Set(hud);
+        GD.Print($"ARC-DEV-3389 performance overlay mode={mode}" + (_metalHudProblem is null ? "" : $" metal-hud-problem={_metalHudProblem}"));
     }
 
     /// <summary>The viewer's frame update while the overlay is shown: timed, recorded and, when due, written to the panel.</summary>
@@ -85,7 +104,8 @@ public partial class TerrainViewerApp
             Count(Performance.Monitor.ObjectNodeCount), Count(Performance.Monitor.ObjectCount),
             size.X, size.Y,
             // The pacing's target, not Engine.MaxFps: that is the target with the measured correction on it.
-            PacingAutomated || _pacingTarget <= 0 ? null : _pacingTarget);
+            PacingAutomated || _pacingTarget <= 0 ? null : _pacingTarget,
+            _metalHud);
     }
 }
 
