@@ -429,24 +429,48 @@ class CutOutTest(unittest.TestCase):
 
     def test_the_arrow_is_one_shape_in_the_two_ink_colours(self):
         b = sk.button_named("schm_larrow")
-        w, h = sk.INK_SHEET_SIZE
-        sheet = pngio.Image(w, h, bytearray(b"\xff" * (w * h * 4)))
+        sheet = flat_frame(1600, 980, (255, 255, 255))
         self.block(sheet, 100, 200, 700, 800, (30, 5, 0))
         with tempfile.TemporaryDirectory() as tmp:
             self.frames(Path(tmp), b, lambda state: self.block(flat_frame(18, 22, (170, 150, 110)), 2, 3, 16, 20, (120, 85, 30) if state == "idle" else (30, 5, 0)))
-            parts = sk.ink_parts(Path(tmp), sheet, b)
-            with self.assertRaises(sk.SmallError):
-                sk.ink_parts(Path(tmp), flat_frame(100, 100, (255, 255, 255)), b)
+            parts = sk.ink_parts(Path(tmp), sheet, b, None)
         idle, pressed = parts[f"plate.{b.name}"], parts[f"plate.{b.name}_pressed"]
         self.assertEqual(idle.data[3::4], pressed.data[3::4])
         self.assertEqual(idle.pixel(33, 39)[:3], (120, 85, 30))
         self.assertEqual(pressed.pixel(33, 39)[:3], (30, 5, 0))
         self.assertEqual(idle.pixel(1, 1)[3], 0)
 
-    def test_the_trim_clears_only_above_the_edge(self):
-        black = flat_frame(20, 20, (0, 0, 0))
-        out = sk.trimmed(black, (5, 10, 5, 10, -1.0))
-        self.assertEqual((out.pixel(5, 9)[0], out.pixel(5, 10)[0], out.pixel(9, 5)[0], out.pixel(9, 6)[0], out.pixel(4, 0)[0], out.pixel(10, 0)[0]), (255, 0, 255, 0, 0, 0))
+    def test_the_trim_cuts_to_the_line_and_fills_the_notch_under_it(self):
+        sheet = flat_frame(20, 120, (255, 255, 255))
+        self.block(sheet, 0, 0, 20, 4, (0, 0, 0))          # ink above the line
+        self.block(sheet, 0, 30, 20, 40, (10, 0, 0))       # ink under it, a notch between
+        out = sk.trimmed(sheet, (5, 10, 5, 20, 0.0))
+        self.assertEqual([out.pixel(7, y)[0] for y in (2, 19, 20, 29, 35, 50)], [255, 255, 10, 10, 10, 255])
+        self.assertEqual([out.pixel(2, y)[0] for y in (2, 25)], [0, 255])
+
+    def test_another_arrow_sheet_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "glyph-schem-arrows.png"
+            pngio.write(path, flat_frame(8, 8, (255, 255, 255)))
+            with self.assertRaises(sk.SmallError):
+                sk.ink_trim(path, "schm_larrow")
+
+    def test_the_build_path_of_the_parchment_records_its_sheet(self):
+        b = sk.button_named("char_schem_skills")
+        sheet = flat_frame(240, 120, (255, 0, 255))
+        for k in (0, 1):
+            self.block(sheet, k * 120 + 20, 20, k * 120 + 100, 100, (170, 140, 100))
+        with tempfile.TemporaryDirectory() as tmp:
+            self.frames(Path(tmp), b, lambda state: self.block(flat_frame(32, 32, (80, 80, 82)), 6, 4, 26, 28, (170, 140, 100)))
+            pngio.write(Path(tmp) / f"{sk.PAPER_SHEET}.png", sheet)
+            args = ARGS()
+            args.pack, args.local_root, args.frames, args.sheets, args.sp_variant = Path(tmp) / "none", Path(tmp), Path(tmp), Path(tmp), "sp-b"
+            parts, sources = sk.build_parts(args, [b])
+            path = Path(tmp) / "part.png"
+            pngio.write(path, parts[f"plate.{b.name}"])
+            record = sk.record_of(f"plate.{b.name}", b, sources[f"plate.{b.name}"], path, args)
+            self.assertEqual((record["source"]["sheet"], record["source"]["frames"]), (f"{sk.PAPER_SHEET}.png", b.folder))
+            self.assertIsNone(sk.record_of(f"glyph.{b.name}", b, sources[f"glyph.{b.name}"], path, args)["source"])
 
 
 class TableTest(unittest.TestCase):

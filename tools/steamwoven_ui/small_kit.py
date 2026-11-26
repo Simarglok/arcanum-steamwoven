@@ -18,7 +18,7 @@ ARC-UI-3272: the schematics skill button and arrows and the follower cycle arrow
 Per button (TRD SWI-KIT-5; the runtime's convention `SteamwovenKitComposer.ButtonLayers`: face, over it the glyph, over both the overlay `<face>_hover` or `<face>_pressed`):
 
 * `plate.<name>`: the idle face at the plate's master size.
-* `plate.<name>_hover`, `plate.<name>_pressed`: the face of that state; a `rect`, `paper`, `ink`, `wedge` or `codex` part is a full frame (laid over the idle plate it replaces it), a `dome` part is an overlay (the lit symbol, the darkened plate) clipped to the plate.
+* `plate.<name>_hover`, `plate.<name>_pressed`: the face of that state; a `rect`, `wedge` or `codex` part is a full opaque frame (laid over the idle plate it replaces it); a `paper` or `ink` frame has the idle frame's alpha and is meant to take the idle frame's place (laid over it, its soft edge doubles; #3341), a `dome` part is an overlay (the lit symbol, the darkened plate) clipped to the plate.
 * `glyph.<name>`: the symbol of a `dome` button (rule E); an EMPTY layer at the plate's size for the others (the symbol is in the face; the runtime composes a face only with a glyph of its size).
 
 The shared soft shadow of round parts (#3249) is a separate runtime layer, not baked into these parts. The Codex sheets are copied to `local/steamwoven-ui/small-sheets/<sheet>.png` with the runner's provenance record next to them.
@@ -450,12 +450,15 @@ def luminance(p: tuple) -> float:
 
 
 def pressed_shade(idle: Image, pressed: Image, plate: Image) -> Image:
-    """The plate pressed in: darkened where the original's pressed plate is darker than its idle plate (the triangles' cells left out), by the same ratio."""
+    """The plate pressed in: darkened in straight bands where the original's pressed plate is darker than its idle plate (the triangles' cells left out): a cell takes the darker of its row's and its column's median ratio."""
     a, b = (inpaint(f, red_cells(f)) for f in (idle, pressed))
+    cell = [[min(1.0, (luminance(b.pixel(x, y)) + 1.0) / (luminance(a.pixel(x, y)) + 1.0)) for x in range(a.w)] for y in range(a.h)]
+    rows = [sorted(row)[a.w // 2] for row in cell]
+    columns = [sorted(row[x] for row in cell)[a.h // 2] for x in range(a.w)]
     ratio = Image(a.w, a.h, bytearray(a.w * a.h * 4))
     for y in range(a.h):
         for x in range(a.w):
-            v = round(255 * min(1.0, (luminance(b.pixel(x, y)) + 1.0) / (luminance(a.pixel(x, y)) + 1.0)))
+            v = round(255 * min(rows[y], columns[x]))
             ratio.data[(y * a.w + x) * 4:(y * a.w + x) * 4 + 4] = bytes((v, v, v, 255))
     smooth = resample(ratio, plate.w, plate.h)
     out = Image(plate.w, plate.h, bytearray(plate.data))
@@ -493,9 +496,11 @@ PAPER_WARM = 25        # an original cell whose red exceeds its blue by this muc
 PAPER_SHEET = "plate-schem-skills"     # left the idle look, right the lit one
 INK_SHEET = "glyph-schem-arrows"       # left the left arrow, right the right arrow, dark ink on white
 INK_DARK = 70          # an original cell darker than this is ink of the dark state; both states take their colour from those cells
-# the generator copied a one-cell stair of the original at both arrow heads: above the head's slanting edge the sheet is cleared (x from, x to, a point of the edge, its slope; px of the 1605 x 980 sheet)
-INK_SHEET_SIZE = (1605, 980)
+# the generator copied a one-cell stair of the original at both arrow heads: along the head's slanting edge (x from, x to, a point of the edge, its slope; px of the sheet) the ink is cut to that line and the notch under it filled.
+# The lines are measured on one sheet, so only that file is accepted: a new generation needs new lines.
+INK_SHEET_SHA256 = "b5537d5ed85b421766ac6aabce41d434da0b89428275e14f418586f127e699ab"
 INK_TRIM = {"schm_larrow": (180, 300, 30, 306, -1.031), "schm_rarrow": (1305, 1425, 1415, 143, 1.025)}
+INK_NOTCH = 80         # px: the deepest notch under the line that is filled
 
 
 def cells_box(frame: Image, keep) -> tuple[int, int, int, int]:
@@ -544,6 +549,12 @@ def within(content: Image, outline: Image, under: Image, dy: int = 0) -> Image:
     return out
 
 
+def ink_trim(path: Path, name: str) -> tuple:
+    if button_kit.sha256_file(path) != INK_SHEET_SHA256:
+        raise SmallError(f"{path}: not the arrow sheet its head trim is measured on (INK_SHEET_SHA256)")
+    return INK_TRIM[name]
+
+
 def paper_parts(frames: Path, sheet: Image, b: Small) -> dict[str, Image]:
     """The parchment of the schematics button: idle and lit from the two sheet cells, both in the original parchment's place and in the idle outline; pressed is the lit content one original cell lower, as the original moves it."""
     box = cells_box(read_frame(frames, b, b.frames["idle"]), lambda p: p[0] - p[2] >= PAPER_WARM)
@@ -573,26 +584,30 @@ def mean_colour(frame: Image, cells: list[tuple[int, int]]) -> tuple[int, int, i
 
 
 def trimmed(sheet: Image, trim: tuple) -> Image:
+    """The sheet with one straight edge: in the columns of `trim` everything above the line is cleared to white and a notch between the line and the ink under it takes that ink."""
     x0, x1, ax, ay, slope = trim
     out = Image(sheet.w, sheet.h, bytearray(sheet.data))
     for x in range(x0, x1):
-        for y in range(max(0, min(sheet.h, math.ceil(ay + slope * (x - ax))))):
+        top = max(0, min(sheet.h, math.ceil(ay + slope * (x - ax))))
+        for y in range(top):
             out.data[(y * sheet.w + x) * 4:(y * sheet.w + x) * 4 + 4] = b"\xff\xff\xff\xff"
+        ink = next((y for y in range(top, min(sheet.h, top + INK_NOTCH)) if luminance(sheet.pixel(x, y)) < 64), None)
+        if ink is not None:
+            for y in range(top, ink):
+                out.data[(y * sheet.w + x) * 4:(y * sheet.w + x) * 4 + 4] = bytes(sheet.pixel(x, ink))
     return out
 
 
-def ink_parts(frames: Path, sheet: Image, b: Small) -> dict[str, Image]:
+def ink_parts(frames: Path, sheet: Image, b: Small, trim: tuple | None) -> dict[str, Image]:
     """A page arrow as ink alone: one shape from the sheet in the place of the original's ink, light in the idle state and dark when pointed at or pressed (the colours of the original's own ink cells)."""
     idle, pressed = (read_frame(frames, b, b.frames[s]) for s in ("idle", "pressed"))
     cells = [(x, y) for y in range(pressed.h) for x in range(pressed.w) if luminance(pressed.pixel(x, y)) < INK_DARK]
     box = cells_box(pressed, lambda p: luminance(p) < INK_DARK)
-    if (sheet.w, sheet.h) != INK_SHEET_SIZE:
-        raise SmallError(f"the arrow sheet is {sheet.w} x {sheet.h}; its trim is made for {INK_SHEET_SIZE}")
     right = b.name == "schm_rarrow"
-    cell = trimmed(sheet, INK_TRIM[b.name]).crop(sheet.w - sheet.w // 2 if right else 0, 0, sheet.w // 2, sheet.h)
+    cell = (trimmed(sheet, trim) if trim else sheet).crop(sheet.w - sheet.w // 2 if right else 0, 0, sheet.w // 2, sheet.h)
     parts = {}
     for state, number in b.frames.items():
-        colour = mean_colour(read_frame(frames, b, number), cells) if cells else (0, 0, 0)
+        colour = mean_colour(read_frame(frames, b, number), cells)
         parts[f"plate.{b.name}" if state == "idle" else f"plate.{b.name}_{state}"] = placed(ink_alpha(cell, colour), box, b.units, b.master)
     parts[f"glyph.{b.name}"] = Image.blank(*b.master)
     return parts
@@ -695,7 +710,7 @@ def codex_parts(sheets: Path, buttons: list[Small], sp_variant: str = SP_VARIANT
 
 
 def build_parts(args: argparse.Namespace, buttons: list[Small]) -> tuple[dict[str, Image], dict[str, Path | None]]:
-    """All parts of the buttons by family: `rect` from the pack's frames, `wedge` by rule from the original's frames, `dome` by rule from the round plate of #3202, `codex` from the generated sheets. The source file of each part (None for a part made by rule)."""
+    """All parts of the buttons by family: `rect` from the pack's frames, `paper` and `ink` from their Codex sheets, `wedge` by rule on the plate of the Codex sheet `ol`, `dome` by rule from the round plate of #3202, `codex` from the generated sheets. The source file of each part (None for a part made by rule)."""
     parts: dict[str, Image] = {}
     sources: dict[str, Path | None] = {}
     rect = [b for b in buttons if b.family == "rect"]
@@ -718,7 +733,8 @@ def build_parts(args: argparse.Namespace, buttons: list[Small]) -> tuple[dict[st
             p = wedge_parts(frames, sheet_cell(pngio.read(path), sheet, k), [b])
         else:
             path = sheet_path(sheets, PAPER_SHEET if b.family == "paper" else INK_SHEET)
-            p = (paper_parts if b.family == "paper" else ink_parts)(frames, pngio.read(path), b)
+            sheet_image = pngio.read(path)
+            p = paper_parts(frames, sheet_image, b) if b.family == "paper" else ink_parts(frames, sheet_image, b, ink_trim(path, b.name))
         parts.update(p)
         sources.update({ident: None if ident.startswith("glyph.") else path for ident in p})
     codex = [b for b in buttons if b.family == "codex"]
@@ -741,7 +757,7 @@ def owner_of(ident: str) -> Small:
 # --- commands -----------------------------------------------------------------------------------------------------------------
 
 RULES = {
-    "rect": "pack-first (owner 2026-11-25): the old HD pack's frame of this state at the master size, opaque (the stone Add / Remove and the follower arrows, owner 2026-11-25; the schematics skill button and arrows, ARC-UI-3272)",
+    "rect": "pack-first (owner 2026-11-25): the old HD pack's frame of this state at the master size, opaque (kept by the owner: the stone Add / Remove and the follower arrows)",
     "paper": "Codex and rules (owner 2026-11-26, ARC-UI-3272): the parchment and symbol drawn alone on magenta, cut along its edge into the original parchment's place; hover = the lit cell in the idle outline, pressed = it one original cell lower",
     "ink": "Codex and rules (owner 2026-11-26, ARC-UI-3272): the arrow's ink drawn on white, the alpha taken from it, put in the place of the original's ink; each state in the colour of the original's ink cells",
     "wedge": "by rule (owner 2026-11-26, ARC-UI-3272): the olive Codex plate of #3323 without its symbol, cut to the button's shape (pressed in by the original's own darkening), and a straight-edged triangle of the original's red cells",
@@ -795,7 +811,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
         ok = row is not None and row["size"] == list(b.master) and (len(have) == len(b.frames) if b.family == "rect" else True)
         bad += 0 if ok else 1
         print(f"plate.{b.name:24s} art {b.art}  {b.family:6s} {b.units[0]:>2} x {b.units[1]:<2} -> {b.master[0]} x {b.master[1]}  states {','.join(b.frames):22s} {'ok' if ok else 'CHECK'}")
-    print(f"SMALL KIT plan {'PASS' if not bad else 'FAIL'} ({len(SMALL)} rule or pack buttons, {len(GENERATED)} generated)")
+    print(f"SMALL KIT plan {'PASS' if not bad else 'FAIL'} ({len(SMALL)} pack, rule and cut-out buttons, {len(GENERATED)} sheet buttons)")
     return 0 if not bad else 1
 
 
