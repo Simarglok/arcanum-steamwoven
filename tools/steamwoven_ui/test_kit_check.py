@@ -321,7 +321,7 @@ class RealManifestTests(unittest.TestCase):
 
     def test_no_pixels_in_the_manifest(self) -> None:
         text = Path(build_kit.MANIFEST).read_text(encoding="utf-8")
-        self.assertLess(len(text), 400_000)
+        self.assertLess(len(text), 500_000)   # a bound against pixel data, with room for the rows the kit slices add (ARC-UI-3269: past 400,000)
         self.assertNotIn("base64", text)
         self.assertNotIn("data:", text)
 
