@@ -326,8 +326,8 @@ def marker_parts(bases: dict[str, dict]) -> list[dict]:
 
 RING_METHOD_TEXT = {  # method of `ring_kit.py` -> (provenance prefix, what the face is)
     "codex": ("codex", "the generated ring and dome, the sign by rule"),
-    "marker": ("codex", "the #3207 marker symbol on the set's plate"),
-    "wedge": ("codex", "a triangle by rule on the set's plate"),
+    "marker": ("codex", "the #3207 marker symbol on the socket dome"),
+    "wedge": ("codex", "a triangle by rule on the socket dome"),
     "arrow": ("codex", "the arrow by rule E on the set's plate"),
     "pack": ("rule", "the old HD pack's frame"),
 }
@@ -342,16 +342,28 @@ def ring_parts(plates: dict[str, dict]) -> list[dict]:
             continue
         prefix, face = RING_METHOD_TEXT[ring.method]
         canvas = f"a {ring.master[0]} x {ring.master[1]} canvas"
+        bare = " (no ring of its own: the ring is the socket's)" if ring.socket_dome else ""
         for ident, state in ring_kit.idents(ring):
             if state == "idle":
                 continue
-            what = f"EMPTY: the symbol of art {ring.art} is in the faces" if state is None else f"the {state} face of art {ring.art}: {face}"
+            what = f"EMPTY: the symbol of art {ring.art} is in the faces" if state is None else f"the {state} face of art {ring.art}: {face}{bare}"
             parts.append(new_part(ident, ident.split(".")[0], plate["anchor"], list(plate["used_by"]), None, "B-BUTTONS",
                                   f"{what}; ring_kit.py, {canvas}, so the size is open", states=[state or "idle"], master=True, provenance=f"{'rule' if state is None else prefix}:ring_kit:{ident}"))
     return parts
 
 
 RING_PLATES = {f"plate.{r.name}": r for r in ring_kit.RINGS}
+
+
+def ring_idle_note(ring: ring_kit.Ring) -> str:
+    """The note of a small round button's idle face: a ringed button, or (#3347) a socket dome without a ring and without a shadow of any layer."""
+    face = RING_METHOD_TEXT[ring.method][1]
+    if ring.socket_dome:
+        return (f"art {ring.art}, idle face: {face}: no ring of its own, the ring is the socket's; cut to the socket's inner circle by an analytic round alpha, no shadow "
+                "(ring_kit.py, ARC-UI-3270, ARC-UI-3347)")
+    return f"art {ring.art}, idle face: {face}; cut to the ring's circle by an analytic round alpha, the ring in the accepted brass, no shadow (a runtime layer, #3249) (ring_kit.py, ARC-UI-3270)"
+
+
 SMALL_PLATES = {f"plate.{b.name}": b for b in (*small_kit.SMALL, *small_kit.GENERATED)}
 ROUND_HUD_PLATES = {f"plate.{b.name}": b for b in (*round_kit.ROUND_BUTTONS, round_kit.BALL)}
 SKILL_PLATES = {f"plate.{b.name}": b for b in round_kit.SKILL_BUTTONS}
@@ -428,9 +440,9 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["status"], part["provenance"] = "master", ring_button_kit.provenance_of(ident)
             part["note"] = ring_button_kit.note_of(ident)
         if ident in RING_PLATES:  # ARC-UI-3270 (owner decisions of 2026-11-26): one method per family, every ring in the accepted brass
-            prefix, face = RING_METHOD_TEXT[RING_PLATES[ident].method]
-            part["status"], part["provenance"] = "master", f"{prefix}:ring_kit:{ident}"
-            part["note"] = f"art {RING_PLATES[ident].art}, idle face: {face}; cut to the ring's circle by an analytic round alpha, the ring in the accepted brass, no shadow (a runtime layer, #3249) (ring_kit.py, ARC-UI-3270)"
+            ring = RING_PLATES[ident]
+            part["status"], part["provenance"] = "master", f"{RING_METHOD_TEXT[ring.method][0]}:ring_kit:{ident}"
+            part["note"] = ring_idle_note(ring)
         if ident in SMALL_PLATES:
             family = SMALL_PLATES[ident].family
             part["status"], part["provenance"] = "master", f"{SMALL_FAMILY_TEXT[family][0]}:small_kit:{ident}"
