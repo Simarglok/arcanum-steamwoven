@@ -12,7 +12,8 @@ namespace Arcanum.TerrainViewer;
 /// </summary>
 internal static class AreaKitStandIns
 {
-    private static readonly Color Black = new(0f, 0f, 0f), Edge = new(.2f, .24f, .32f), Paper = new(.93f, .88f, .72f), Rule = new(.78f, .7f, .5f);
+    private static readonly Color Black = new(0f, 0f, 0f), Edge = new(.2f, .24f, .32f), Paper = new(.93f, .88f, .72f), Rule = new(.78f, .7f, .5f),
+        Well = new(4f / 255f, 5f / 255f, 9f / 255f); // the black of the kit's cell well (fixtures.py)
     private static readonly HashSet<SteamwovenKitWindow> Drawn = [];
 
     /// <summary>The windows whose stand-ins were drawn since <see cref="ResetForSelfTest"/>, for the smoke (a window that draws none of its own art over the kit has passed here).</summary>
@@ -32,11 +33,13 @@ internal static class AreaKitStandIns
         if (edge) canvas.DrawRect(rect, Edge, false);
     }
 
-    private static void Lines(CanvasItem canvas, float scale, float x, float y, int columns, int rows, float cell, Color colour)
+    /// <summary>The lines after the cells of a grid with its corner at (<paramref name="x"/>, <paramref name="y"/>), none before the first cell; without <paramref name="farEdges"/> none after the last column and row either.</summary>
+    private static void Lines(CanvasItem canvas, float scale, float x, float y, int columns, int rows, float cell, Color colour, bool farEdges)
     {
         var width = Math.Max(1f, scale * .5f);
-        for (var column = 0; column <= columns; column++) canvas.DrawLine(new Vector2((x + column * cell) * scale, y * scale), new Vector2((x + column * cell) * scale, (y + rows * cell) * scale), colour, width);
-        for (var row = 0; row <= rows; row++) canvas.DrawLine(new Vector2(x * scale, (y + row * cell) * scale), new Vector2((x + columns * cell) * scale, (y + row * cell) * scale), colour, width);
+        var skip = farEdges ? 0 : 1;
+        for (var column = 1; column <= columns - skip; column++) canvas.DrawLine(new Vector2((x + column * cell) * scale, y * scale), new Vector2((x + column * cell) * scale, (y + rows * cell) * scale), colour, width);
+        for (var row = 1; row <= rows - skip; row++) canvas.DrawLine(new Vector2(x * scale, (y + row * cell) * scale), new Vector2((x + columns * cell) * scale, (y + row * cell) * scale), colour, width);
     }
 
     private static readonly Color Brass = new(.72f, .55f, .2f), Parchment = new(.8f, .74f, .58f), RedInk = new(.72f, .12f, .1f), Grey = new(.45f, .45f, .5f), DarkWood = new(.2f, .14f, .1f), Pale = new(.72f, .72f, .62f);
@@ -90,14 +93,18 @@ internal static class AreaKitStandIns
         if (!AreaKitFixtures.Draw(canvas, scale, id, x, y)) standIn();
     }
 
-    /// <summary>A grid of <paramref name="columns"/> x <paramref name="rows"/> cells of 32 units with its corner at (<paramref name="x"/>, <paramref name="y"/>): copies of the kit's cell well, else the stand-in's lines over the black pit.</summary>
-    internal static void Cells(CanvasItem canvas, float scale, float x, float y, int columns, int rows)
+    /// <summary>A grid of <paramref name="columns"/> x <paramref name="rows"/> cells of 32 units with its corner at (<paramref name="x"/>, <paramref name="y"/>): copies of the kit's cell well, else the stand-in's lines over the black pit. The lines lie where the original's do (ARC-UI-3342): on the last unit of a cell, none before the first; <paramref name="farEdges"/> false (the paper doll, whose frame takes that place) leaves none after the last column and row.</summary>
+    internal static void Cells(CanvasItem canvas, float scale, float x, float y, int columns, int rows, bool farEdges = true)
     {
         if (AreaKitFixtures.Has("grid.inventory_cells"))
         {
             for (var row = 0; row < rows; row++) for (var column = 0; column < columns; column++) AreaKitFixtures.Draw(canvas, scale, "grid.inventory_cells", x + column * 32, y + row * 32);
+            if (farEdges) return;
+            // The well carries its lines on its far edges: the last unit of the grid is covered with the well's black.
+            Field(canvas, scale, x + columns * 32 - 1, y, 1, rows * 32, Well, edge: false);
+            Field(canvas, scale, x, y + rows * 32 - 1, columns * 32, 1, Well, edge: false);
         }
-        else Lines(canvas, scale, x - .5f, y - .5f, columns, rows, 32, Edge); // ARC-UI-3342: the original's lines lie half a unit before the cells' edges
+        else Lines(canvas, scale, x - .5f, y - .5f, columns, rows, 32, Edge, farEdges);
     }
 
     /// <summary>The pack's pit with its 10 x 12 grid, the five count pits and their five signs (art 221, shared by the inventory, loot, steal and barter windows).</summary>
@@ -136,7 +143,7 @@ internal static class AreaKitStandIns
         Pack(canvas, scale);
         Part(canvas, scale, "fixture.name_pit", 124, 25, () => Field(canvas, scale, 124, 25, 223, 55));
         Part(canvas, scale, "fixture.doll_pit", 18, 100, () => Field(canvas, scale, 18, 100, 330, 300));
-        Cells(canvas, scale, 23, 107, 10, 9);
+        Cells(canvas, scale, 23, 107, 10, 9, farEdges: false);
         Part(canvas, scale, "fixture.weapon_frame", 10, 303, () => QuarterFrame(canvas, scale, 10, 400, 97, true, new(.2f, .05f, .05f)));
         Part(canvas, scale, "fixture.shield_frame", 244, 303, () => QuarterFrame(canvas, scale, 358, 400, 97, false, new(.04f, .05f, .2f)));
         // The arrange legend (690, 192, 78, 32): scattered dots, a red arrow, a small grid.
