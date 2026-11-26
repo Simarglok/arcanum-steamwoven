@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.steamwoven_ui import build_kit, fixtures, label_parts, pngio
+from tools.steamwoven_ui import build_kit, fixtures, label_parts, pngio, sheet_parts
 
 
 def frame_with_letters() -> pngio.Image:
@@ -53,7 +53,7 @@ class LabelPartTests(unittest.TestCase):
             fixture = fixtures.BY_ID[part.ident]
             self.assertTrue(fixture.cut, part.ident)
             self.assertEqual((fixture.width, fixture.height), (part.width, part.height), part.ident)
-        self.assertEqual(sorted(f.ident for f in fixtures.FIXTURES if f.cut), sorted(p.ident for p in label_parts.PARTS))
+        self.assertEqual(sorted(f.ident for f in fixtures.FIXTURES if f.cut), sorted([p.ident for p in label_parts.PARTS] + list(sheet_parts.IDENTS)), "every cut fixture has exactly one cutter (ARC-UI-3299 labels, ARC-UI-3321 solid parts)")
 
     def test_a_cut_fixture_is_a_placed_part_of_the_manifest_and_is_not_drawn(self) -> None:
         manifest = {p["id"]: p for p in build_kit.json.loads(build_kit.MANIFEST.read_text())["parts"]}
