@@ -247,9 +247,9 @@ def dome_hud_parts(plates: dict[str, dict]) -> list[dict]:
 
 
 SMALL_FAMILY_TEXT = {  # family -> (provenance prefix, the idle plate's note, the glyph's note, the overlay's note)
-    "rect": ("rule", "the old HD pack's idle frame of art {art} at the master size, opaque (a pack frame kept as it is: ARC-UI-3206, ARC-UI-3272); the symbol is in the frame",
+    "rect": ("rule", "the old HD pack's idle frame of art {art} at the master size, opaque; the symbol is in the frame",
              "EMPTY: the symbol of art {art} is in the pack's frames", "the pack's {state} frame of art {art}, a full frame laid over the idle plate"),
-    "wedge": ("rule", "by rule from art {art}'s own idle frame: its flat plate cells at the master size and a straight-edged triangle, no pack (its frames are broken) and no Codex (small_kit.py, ARC-UI-3272)",
+    "wedge": ("rule", "by rule from art {art}'s idle frame: flat plate cells and a straight-edged triangle (the pack frames are broken)",
               "EMPTY: the triangle of art {art} is in the plate", "the {state} face of art {art} by the same rule, a full frame laid over the idle plate"),
     "dome": ("rule", "the round face of the bottom strip's buttons (#3202) with the brass ring of the sockets (#2481), 102 x 108 px, no shadow (a runtime layer, #3249); symbol and states by rule E from art {art}'s own frames (small_kit.py, ARC-UI-3323)",
              "the red checkered symbol of art {art} by rule E, with a soft relief of its slot", "what art {art}'s {state} frame adds over its idle frame (rule E, as round_kit.py), clipped to the plate"),
