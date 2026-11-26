@@ -269,24 +269,25 @@ def read_box(image: pngio.Image, box: tuple[int, int, int, int]) -> list[list[li
     return rows
 
 
-def area_resample(planes: list[list[list[float]]], width: int, height: int) -> list[list[list[float]]]:
-    """Exact area average of every plane to width x height (any ratio), separably."""
+def area_resample(planes: list[list[list[float]]], width: int, height: int, window: tuple[float, float, float, float] | None = None) -> list[list[list[float]]]:
+    """Exact area average of every plane to width x height (any ratio), separably. `window` (x0, x1, y0, y1) in source px is the span the output covers (default the whole plane; what lies outside the plane counts as zero)."""
     src_h, src_w = len(planes[0]), len(planes[0][0])
+    x0, x1, y0, y1 = window if window is not None else (0.0, float(src_w), 0.0, float(src_h))
 
-    def weights(src: int, dst: int) -> list[list[tuple[int, float]]]:
-        scale = src / dst
+    def weights(src: int, dst: int, first: float, last: float) -> list[list[tuple[int, float]]]:
+        scale = (last - first) / dst
         table = []
         for d in range(dst):
-            lo, hi = d * scale, (d + 1) * scale
+            lo, hi = first + d * scale, first + (d + 1) * scale
             cells = []
-            for s in range(int(math.floor(lo)), min(int(math.ceil(hi)), src)):
+            for s in range(max(int(math.floor(lo)), 0), min(int(math.ceil(hi)), src)):
                 overlap = min(hi, s + 1) - max(lo, s)
                 if overlap > 0:
                     cells.append((s, overlap / scale))
             table.append(cells)
         return table
 
-    wx, wy = weights(src_w, width), weights(src_h, height)
+    wx, wy = weights(src_w, width, x0, x1), weights(src_h, height, y0, y1)
     out = []
     for plane in planes:
         mid = [[sum(plane[y][s] * w for s, w in cells) for cells in wx] for y in range(src_h)]

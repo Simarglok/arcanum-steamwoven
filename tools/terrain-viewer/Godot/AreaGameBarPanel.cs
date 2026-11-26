@@ -797,8 +797,15 @@ public partial class AreaGameBarPanel : CanvasLayer
                 foreach (var (art, spec) in SteamwovenKitTable.WindowFaces)
                     if (spec.Window == window && SteamwovenKitComposer.WindowFace(set, art) is { } face && LoadFace(set, face) is { } textures) (faces ??= [])[art] = textures;
                 // ARC-UI-3098: the window's fixtures (pits, fields, signs, dials, the ruler, gears, cell wells) that the set holds at the table's size; one missing or not loading is left out and the window draws its stand-in for it.
-                foreach (var id in SteamwovenKitTable.FixturesOf(window))
+                foreach (var id in SteamwovenKitTable.PartsOf(window))
                     if (SteamwovenKitComposer.Fixture(set, id) is { } part && SteamwovenKitStore.Texture(set, part.Id) is { } texture) { (fixtures ??= [])[id] = texture; held.Add(part.Id); }
+                // ARC-UI-3321: the character window is drawn from the kit whole or not at all: with one of its fixtures or sheet button layers missing, its old art stands (no sheet half cut, half stand-in).
+                if (SteamwovenKitTable.NeedsEveryPart(window) && SteamwovenKitTable.PartsOf(window).Where(id => fixtures?.ContainsKey(id) != true).ToArray() is { Length: > 0 } missing)
+                {
+                    GD.Print($"Steamwoven kit: the {window} window keeps its original art, the set lacks {string.Join(", ", missing)}");
+                    (loaded, fixtures, covers, sheets, rounds) = (null, null, null, null, null);
+                    _kitBackground = []; _kitOverlays.Clear(); held.Clear();
+                }
             }
         }
         SteamwovenKitStore.Retain("window", set, held);
