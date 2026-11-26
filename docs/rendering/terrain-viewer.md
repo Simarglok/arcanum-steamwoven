@@ -126,11 +126,12 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
 - **Separate rendering thread (ARC-RENDER-3420).** A checkbox, off by default, stored by Play as `separateRenderThread` of the
   `launcher` line (Reset settings turns it off). On, the game draws on the engine's own rendering thread (`--render-thread separate`),
   which the engine calls experimental. The engine reads its thread model only when it starts, so the first process always runs the
-  default model: after Play (or, on a start that skips the screen, before the game loads) it starts the game once more with the option
-  and the user argument `--render-thread-restart`, then quits (`RenderThreadRestart`). The restarted process never restarts again and
-  skips a "show at every start" screen; any other reason still opens the screen. A Play whose settings could not be saved, and an
-  automated run, never restart. If the separate thread fails, the next ordinary start is in the default model: hold Shift (or have
-  "show at every start" on) to reach the screen and turn it off. Measured (2026-11-26, release package, M4 Pro, 2560x1440, HD):
+  default model: after Play (or on a start that skips the screen), once the game data is ready and before the game loads, it starts
+  the game once more with the option and the user argument `--render-thread-restart`, then quits (`RenderThreadRestart`). The restarted
+  process never restarts again and skips a "show at every start" screen; any other reason still opens the screen. A Play whose settings
+  could not be saved, a game that is asking the quit question, and an automated run never restart. Starts with command-line inputs
+  ignore the setting. If the separate thread crashes, start the game with Shift held (or have "show at every start" on): the screen opens
+  in the default model, where the box can be turned off; a start without the screen restarts into the separate thread again. Measured (2026-11-26, release package, M4 Pro, 2560x1440, HD):
   walk 87 to 143 fps, scroll 91 to 138, walk and scroll 64 to 105 ([#3420](https://github.com/Simarglok/arcanum-steamwoven/issues/3420)).
   Not measured: input latency and long sessions.
 - **Install from GOG installer…** (ARC-DEV-074, [research](../workflow/packaging.md) option A) is for a player

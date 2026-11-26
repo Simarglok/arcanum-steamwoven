@@ -20,7 +20,8 @@ public static class RenderThreadRestart
     /// <summary>Whether this start restarts into the separate rendering thread. An automated run never does.</summary>
     public static bool Needed(bool wanted, bool restarted, bool automated) => wanted && !restarted && !automated;
 
-    /// <summary>The restarted process's command line: the engine option, this start's remaining engine arguments, then the user arguments
+    /// <summary>The restarted process's command line: the engine option, the engine arguments the engine reports for this start (it leaves
+    /// out those it consumed itself, such as <c>--audio-driver</c>), then the user arguments
     /// (without <c>--launcher</c>, whose screen the first process showed) and <see cref="Flag"/>. <paramref name="projectPath"/> is the project folder of a start from sources (the engine consumes its own
     /// <c>--path</c>), null for an exported game.</summary>
     public static string[] Arguments(IEnumerable<string> engine, IEnumerable<string> user, string? projectPath)

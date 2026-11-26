@@ -24,8 +24,8 @@ public sealed class RenderThreadRestartTests
     [TestMethod]
     public void The_restart_keeps_other_arguments_and_drops_the_launcher_request()
         => CollectionAssert.AreEqual(
-            new[] { "--render-thread", "separate", "--path", "/p", "--audio-driver", "Dummy", "--", "--debug-mode", RenderThreadRestart.Flag },
-            RenderThreadRestart.Arguments(["--audio-driver", "Dummy", "--"], ["--launcher", "--debug-mode", RenderThreadRestart.Flag], "/p"));
+            new[] { "--render-thread", "separate", "--path", "/p", "--scene", "Main.tscn", "--", "--debug-mode", RenderThreadRestart.Flag },
+            RenderThreadRestart.Arguments(["--scene", "Main.tscn", "--"], ["--launcher", "--debug-mode", RenderThreadRestart.Flag], "/p"));
 
     [TestMethod]
     public void The_mark_is_taken_from_the_arguments()

@@ -76,11 +76,16 @@ public partial class TerrainViewerApp
         // ARC-DEV-050: the debug mode is off until ticked; Play stores it and turns the run's debug mode on.
         Require(Lines()[6] == "Debug mode: off", "the debug mode is off by default: " + Lines()[6]);
         _launcherPanel.DebugModeForSelfTest(true);
+        // ARC-RENDER-3420: off until ticked; Play stores it (an automated run never restarts for it).
+        Require(Lines()[12] == "Separate rendering thread: off", "the separate rendering thread is off by default: " + Lines()[12]);
+        _launcherPanel.RenderThreadForSelfTest(true);
+        Require(Lines()[12] == "Separate rendering thread: on", "the separate rendering thread is ticked: " + Lines()[12]);
         var debugBefore = DebugMode;
         Require(_launcherPanel.PlayEnabledForSelfTest && Lines()[3] == "Rules: Steamwoven [Original]" && Lines()[4] == "Show at every start: on"
                 && Lines()[6] == "Debug mode: on", "a game folder, Original, show at start and debug mode: " + string.Join(" | ", Lines()));
         await Play();
         Require(DebugMode && Stored().DebugMode, "Play stored the debug mode and turned it on");
+        Require(Stored().SeparateRenderThread, "Play stored the separate rendering thread");
         DebugMode = debugBefore;
         Require(started?.GameRoot is { } root && System.IO.Path.GetFullPath(root) == System.IO.Path.GetFullPath(game) && !_launcherPanel.IsOpen,
             "Play started the chosen folder's map mode: " + started?.GameRoot);

@@ -36,6 +36,8 @@ public partial class TerrainViewerApp
     private Action<TerrainViewerArguments>? _launcherStartForSelfTest;
     /// <summary>ARC-RENDER-3420: this process was restarted for the separate rendering thread, so it never restarts again.</summary>
     private bool _renderThreadRestarted;
+    /// <summary>ARC-RENDER-3420: the start being prepared reads the separate rendering thread as on from the saved settings.</summary>
+    private bool _renderThreadWanted;
     /// <summary>ARC-DEV-069: the first-start preparation of the game data that Play (or a stored folder's start) is waiting for; the self-test awaits it.</summary>
     private Task? _prepareTask;
     /// <summary>The self-test's stand-in for the preparation (a synthetic folder holds no real archives to build from).</summary>
@@ -94,7 +96,7 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-014 launcher reason={reason}");
             if (reason == LauncherShowReason.None)
             {
-                if (RestartForRenderThread(read.Settings)) return;
+                _renderThreadWanted = read.Settings.SeparateRenderThread;
                 // A stored, unchanged folder goes straight on; the game data (prototype files) is checked first and, only when the installation has
                 // none, prepared with the progress on the status line. A failure opens the launcher screen with the reason.
                 await PrepareAndStartAsync(startup.Folder!, null, () =>
@@ -279,22 +281,22 @@ public partial class TerrainViewerApp
                  + $"debugMode={settings.DebugMode} save={saved?.ToString() ?? "skipped (automated run)"}");
         _launcherSettings = settings;
         // ARC-RENDER-3420: the restarted game reads the setting from the file, so a start that could not save it goes on in this process.
-        if (saved == LauncherSettingsSaveStatus.Saved && RestartForRenderThread(settings)) return;
+        _renderThreadWanted = settings.SeparateRenderThread && saved == LauncherSettingsSaveStatus.Saved;
         // ARC-DEV-069: the screen stays open (busy) while the game data is checked and, on a first start, prepared; it closes when the game starts.
         _ = PrepareAndStartAsync(launcher.Folder!, launcher, null);
     }
 
-    /// <summary>ARC-RENDER-3420: when the settings ask for the separate rendering thread and this process was not restarted for it, quits and
-    /// starts the game again with the engine's option; true when it does. The engine reads its thread model only at its start.</summary>
-    private bool RestartForRenderThread(LauncherSettings settings)
+    /// <summary>ARC-RENDER-3420: when the start wants the separate rendering thread and this process was not restarted for it, quits and
+    /// starts the game again with the engine's option; true when it does. The engine reads its thread model only at its start. A game that is
+    /// closing, or asks the quit question (a close request while the start waited), goes on in this process.</summary>
+    private bool RestartForRenderThread()
     {
-        if (!RenderThreadRestart.Needed(settings.SeparateRenderThread, _renderThreadRestarted, ViewerAutomatedStorage.Automated)) return false;
+        if (!RenderThreadRestart.Needed(_renderThreadWanted, _renderThreadRestarted, ViewerAutomatedStorage.Automated) || _exiting || QuitAsking) return false;
         // A start from sources runs on the editor binary, which needs its project folder again.
         var project = OS.HasFeature("editor") ? ProjectSettings.GlobalizePath("res://") : null;
         var arguments = RenderThreadRestart.Arguments(OS.GetCmdlineArgs(), OS.GetCmdlineUserArgs(), project);
         GD.Print($"ARC-RENDER-3420 restarting for the separate rendering thread arguments=[{string.Join(' ', arguments)}]");
         OS.SetRestartOnExit(true, arguments);
-        _launcherPanel?.CloseView();
         GetTree().Quit();
         return true;
     }
@@ -352,6 +354,8 @@ public partial class TerrainViewerApp
             {
                 PrototypeCacheMount.Use(result.MountFolder);
                 if (launcher is not null) { _launcher = null; _launcherPanel?.CloseView(); }
+                // ARC-RENDER-3420: only now, so a first start's preparation of the game data shows its progress and can be cancelled.
+                if (RestartForRenderThread()) return;
                 StartFromLauncher(folder);
                 return;
             }
