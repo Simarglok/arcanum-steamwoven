@@ -251,7 +251,7 @@ public partial class AreaInventoryGridArea : Control
 
     /// <summary>
     /// ARC-UI-2575: with the Steamwoven layout on, puts <paramref name="panel"/> (whose <paramref name="area"/> is the 800 × 400 frame) so the frame lies in the window zone at the layout's unit scale, whatever the panel
-    /// holds around the frame (the switch, the message and quantity rows); false while that layout is not in use (nothing is changed). The one placement of the inventory, loot and barter windows.
+    /// holds around the frame (ARC-UI-2615: nothing in play; without bars, a self-test, the quantity row above it); false while that layout is not in use (nothing is changed). The one placement of the inventory, loot and barter windows.
     /// </summary>
     public static bool PlaceInZone(PanelContainer panel, AreaInventoryGridArea area, Vector2 viewSize)
     {
