@@ -133,7 +133,7 @@ internal sealed class SessionMapChanges
     /// <summary>Records the key's value. A new key counts one; a routed key whose record sits on another map moves it here; the caller checked the budgets.</summary>
     internal void Set(SessionMapId map, MapChangeKey key, long value)
     {
-        Writes++;
+        Wrote(key);
         if (ObjectStateVocabulary.Static(key))
         {
             if (_statics.TryAdd((map, key.Entity!, key.Property), value)) { Total++; Count(_fieldCounts, map, 1); }
@@ -161,7 +161,7 @@ internal sealed class SessionMapChanges
             if (!_statics.Remove((map, key.Entity!, key.Property))) return false;
             Count(_fieldCounts, map, -1);
             Total--;
-            Writes++;
+            Wrote(key);
             return true;
         }
         if (ObjectStateVocabulary.Mobile(key))
@@ -170,12 +170,12 @@ internal sealed class SessionMapChanges
             _fields.Remove((key.Entity!, key.Property));
             Count(_fieldCounts, old.Map, -1);
             Total--;
-            Writes++;
+            Wrote(key);
             return true;
         }
         if (!_maps.TryGetValue(map, out var changes) || !changes.Remove(key)) return false;
         Total--;
-        Writes++;
+        Wrote(key);
         if (changes.Count == 0) _maps.Remove(map);
         return true;
     }
@@ -215,6 +215,38 @@ internal sealed class SessionMapChanges
                 .Select(pair => new MapChange(MapChangeKey.ForEntity(pair.Key.Entity, pair.Key.Property), pair.Value)));
         }
         return rows.OrderBy(row => row.Key, MapChangeKeyComparer.Instance).ToArray();
+    }
+
+    // ARC-RENDER-3418: the written art ids of the last map asked, kept while no art record is written or removed; the viewer
+    // asks several times a frame, while other records change at every AI tick.
+    private long _artWrites;
+    private ArtRows? _arts;
+
+    private sealed record ArtRows(SessionMapId Map, long Writes, IReadOnlyList<(string Entity, uint Art)> Rows);
+
+    /// <summary>The rows of <see cref="ForMap"/> that write an object's art id (an id of 32 bits), as entity and art.</summary>
+    internal IReadOnlyList<(string Entity, uint Art)> ArtsOf(SessionMapId map)
+    {
+        if (_arts is { } kept && kept.Map == map && kept.Writes == _artWrites) return kept.Rows;
+        var rows = new List<MapChange>();
+        static bool Art(string property, long value) => property == SessionObjectArt.Property && value is >= 0 and <= uint.MaxValue;
+        if (_maps.TryGetValue(map, out var changes))
+            foreach (var (key, value) in changes)
+                if (key.Scope == MapChangeScope.Entity && Art(key.Property, value)) rows.Add(new(key, value));
+        foreach (var (id, field) in _fields)
+            if (field.Map == map && Art(id.Property, field.Value)) rows.Add(new(MapChangeKey.ForEntity(id.Entity, id.Property), field.Value));
+        foreach (var (id, value) in _statics)
+            if (id.Map == map && Art(id.Property, value)) rows.Add(new(MapChangeKey.ForEntity(id.Entity, id.Property), value));
+        rows.Sort(static (left, right) => MapChangeKeyComparer.Instance.Compare(left.Key, right.Key));
+        var arts = Array.AsReadOnly(rows.Select(row => (row.Key.Entity!, (uint)row.Value)).ToArray());
+        _arts = new(map, _artWrites, arts);
+        return arts;
+    }
+
+    private void Wrote(MapChangeKey key)
+    {
+        Writes++;
+        if (key.Property == SessionObjectArt.Property) _artWrites++;
     }
 
     /// <summary>The per-map changes the maps section saves (the object fields are not among them), one state per map, ascending.</summary>

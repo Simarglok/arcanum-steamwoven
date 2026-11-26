@@ -23,40 +23,62 @@ public static class EffectModifiers
     public static int Apply(long value, IReadOnlyList<EffectModifier> modifiers)
     {
         ArgumentNullException.ThrowIfNull(modifiers);
-        long percents = 0, adds = 0, multiply = 1, divide = 1;
-        int minimum = Unset, maximum = Unset;
-        foreach (var modifier in modifiers)
+        var changes = new Fold();
+        for (var index = 0; index < modifiers.Count; index++) changes.Add(modifiers[index]);
+        return changes.Result(value);
+    }
+
+    /// <summary>The same aggregation fed one change at a time, in the order of the changes.</summary>
+    internal struct Fold
+    {
+        private long _percents, _adds, _multiply, _divide;
+        private int _minimum, _maximum;
+
+        public Fold() => (_percents, _adds, _multiply, _divide, _minimum, _maximum) = (0, 0, 1, 1, Unset, Unset);
+
+        public void Add(EffectModifier modifier)
         {
             switch (modifier.Operator)
             {
-                case StatModifierOperator.Add: adds = Saturate(adds + modifier.Value); break;
-                case StatModifierOperator.Percent: percents = Saturate(percents + modifier.Value); break;
-                case StatModifierOperator.Multiply: multiply = Saturate(multiply * modifier.Value); break;
+                case StatModifierOperator.Add: _adds = Saturate(_adds + modifier.Value); break;
+                case StatModifierOperator.Percent: _percents = Saturate(_percents + modifier.Value); break;
+                case StatModifierOperator.Multiply: _multiply = Saturate(_multiply * modifier.Value); break;
                 case StatModifierOperator.Divide:
-                    if (modifier.Value == 0) throw new ArgumentOutOfRangeException(nameof(modifiers), "divisor 0");
-                    divide = Saturate(divide * modifier.Value);
+                    if (modifier.Value == 0) throw new ArgumentOutOfRangeException(nameof(modifier), "divisor 0");
+                    _divide = Saturate(_divide * modifier.Value);
                     break;
-                case StatModifierOperator.Minimum: if (minimum == Unset || minimum < modifier.Value) minimum = modifier.Value; break;
-                case StatModifierOperator.Maximum: if (maximum == Unset || maximum > modifier.Value) maximum = modifier.Value; break;
-                default: throw new ArgumentOutOfRangeException(nameof(modifiers));
+                case StatModifierOperator.Minimum: if (_minimum == Unset || _minimum < modifier.Value) _minimum = modifier.Value; break;
+                case StatModifierOperator.Maximum: if (_maximum == Unset || _maximum > modifier.Value) _maximum = modifier.Value; break;
+                default: throw new ArgumentOutOfRangeException(nameof(modifier));
             }
         }
-        var result = Saturate(value);
-        if (percents != 0) result = Saturate(result * (percents + 100) / 100);
-        result = Saturate(result * multiply);
-        result /= divide;
-        result = Saturate(result + adds);
-        if (minimum != Unset && result < minimum) result = minimum;
-        if (maximum != Unset && result > maximum) result = maximum;
-        return (int)result;
+
+        public readonly int Result(long value)
+        {
+            var result = Saturate(value);
+            if (_percents != 0) result = Saturate(result * (_percents + 100) / 100);
+            result = Saturate(result * _multiply);
+            result /= _divide;
+            result = Saturate(result + _adds);
+            if (_minimum != Unset && result < _minimum) result = _minimum;
+            if (_maximum != Unset && result > _maximum) result = _maximum;
+            return (int)result;
+        }
     }
 
     /// <summary>True when every operator is defined, no divide change is 0, the count is at most <paramref name="maxCount"/> and
     /// every magnitude at most <paramref name="maxMagnitude"/>.</summary>
-    public static bool IsValid(IReadOnlyList<EffectModifier>? modifiers, int maxCount, int maxMagnitude) =>
-        modifiers is not null && modifiers.Count <= maxCount && modifiers.All(m =>
-            m.Operator is >= StatModifierOperator.Add and <= StatModifierOperator.Percent &&
-            !(m.Operator == StatModifierOperator.Divide && m.Value == 0) && Math.Abs((long)m.Value) <= maxMagnitude);
+    public static bool IsValid(IReadOnlyList<EffectModifier>? modifiers, int maxCount, int maxMagnitude)
+    {
+        if (modifiers is null || modifiers.Count > maxCount) return false;
+        for (var index = 0; index < modifiers.Count; index++)
+        {
+            var m = modifiers[index];
+            if (m.Operator is < StatModifierOperator.Add or > StatModifierOperator.Percent
+                || m.Operator == StatModifierOperator.Divide && m.Value == 0 || Math.Abs((long)m.Value) > maxMagnitude) return false;
+        }
+        return true;
+    }
 
     private static long Saturate(long value) => Math.Clamp(value, -Saturation, Saturation);
 }

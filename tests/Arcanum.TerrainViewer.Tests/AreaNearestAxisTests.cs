@@ -1,3 +1,4 @@
+using System.Numerics;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -70,6 +71,82 @@ public sealed class AreaNearestAxisTests
         // texels therefore select3, not the decimal-tie index4.
         Assert.AreEqual(3,new AreaNearestAxis(.1f,1,0,1,0,10,false).SourceIndex(0));
         Assert.AreEqual(6,new AreaNearestAxis(.1f,1,0,1,0,10,true).SourceIndex(0));
+    }
+
+    // The rule in big integers, written here on its own: floor((p + 1/2 - origin) / zoom - start) scaled to the source.
+    private static int Exact(float origin, float zoom, int destination, int length, int sourceStart, int sourceSize, bool reflected, int pixel)
+    {
+        static (BigInteger N, BigInteger D) Of(float value)
+        {
+            var bits = BitConverter.SingleToUInt32Bits(value); var exponent = (int)((bits >> 23) & 255);
+            BigInteger mantissa = bits & 0x7fffff; if (exponent != 0) mantissa += 1 << 23;
+            var power = exponent == 0 ? -149 : exponent - 150; if ((bits & 0x80000000) != 0) mantissa = -mantissa;
+            return power >= 0 ? (mantissa << power, 1) : (mantissa, BigInteger.One << -power);
+        }
+        var (on, od) = Of(origin); var (zn, zd) = Of(zoom);
+        var numerator = ((2 * (BigInteger)pixel + 1) * od * zd - 2 * on * zd - 2 * od * zn * destination) * sourceSize;
+        var denominator = 2 * od * zn * length;
+        if (numerator < 0 || numerator >= denominator * sourceSize) return -1;
+        var index = (int)(numerator / denominator);
+        return sourceStart + (reflected ? sourceSize - 1 - index : index);
+    }
+
+    [TestMethod]
+    public void NarrowAndWideRulesMatchTheExactRationalAndTheOutsideTestNeverHidesAPixel()
+    {
+        var random = new Random(29);
+        // Origins and zooms on both sides of the 128-bit path: small fractions, tiny and huge values, subnormals.
+        var origins = new[] { 0f, -0f, 1e-3f, -1e-7f, 1e-20f, float.Epsilon, 0.1f, 1234.5678f, -98765.43f, 4_000_000f, 5e9f, -3e12f, 1e30f };
+        var zooms = new[] { 1f, 2f, .5f, 1.2651956f, .1f, 3.7f, 1e-6f, 1e-12f, 5e9f, float.Epsilon, 1e30f };
+        var narrow = 0; var wide = 0; var hidden = 0;
+        for (var trial = 0; trial < 6000; trial++)
+        {
+            var origin = trial % 2 == 0 ? origins[random.Next(origins.Length)] : random.Next(-5000, 5000) + (float)random.NextDouble();
+            var zoom = trial % 3 == 0 ? zooms[random.Next(zooms.Length)] : (float)(random.NextDouble() * 4 + 0.05);
+            var destination = random.Next(-8000, 8000); var length = trial % 11 == 0 ? random.Next(1, int.MaxValue) : random.Next(1, 600);
+            var sourceStart = random.Next(0, 500); var sourceSize = trial % 7 == 0 ? 65534 - sourceStart : random.Next(1, 600);
+            var reflected = random.Next(2) == 1;
+            var axis = new AreaNearestAxis(origin, zoom, destination, length, sourceStart, sourceSize, reflected);
+            var low = Math.Clamp((double)origin + (double)zoom * destination, -1e8, 1e8);
+            var high = Math.Clamp((double)origin + (double)zoom * ((long)destination + length), -1e8, 1e8);
+            var pixels = new[] { 0, 1, -1, (int)low - 2, (int)low - 1, (int)low, (int)low + 1, (int)high - 1, (int)high, (int)high + 1, (int)high + 2,
+                random.Next(-20000, 20000), int.MaxValue, int.MinValue };
+            var start = pixels[random.Next(pixels.Length - 2)];
+            var key = axis.RowKey(start);
+            _ = key.Wide is null ? narrow++ : wide++;
+            foreach (var pixel in pixels)
+            {
+                var expected = Exact(origin, zoom, destination, length, sourceStart, sourceSize, reflected, pixel);
+                Assert.AreEqual(expected, axis.SourceIndex(pixel), $"trial {trial} {origin:R} {zoom:R} pixel {pixel}");
+                if (AreaNearestAxis.CertainlyOutside(origin, zoom, destination, length, pixel))
+                {
+                    hidden++;
+                    Assert.AreEqual(-1, expected, $"trial {trial} {origin:R} {zoom:R} pixel {pixel} is inside");
+                }
+                var offset = (long)pixel - start;
+                if (offset is >= -100000 and <= 100000) Assert.AreEqual(expected, key.SourceIndex((int)offset), $"trial {trial} row offset {offset}");
+            }
+            Assert.AreEqual(key, new AreaNearestAxis(origin, zoom, destination, length, sourceStart, sourceSize, reflected).RowKey(start), $"trial {trial}");
+        }
+        Assert.IsTrue(narrow > 1000 && wide > 100 && hidden > 1000, $"both paths and the outside test ran: {narrow}/{wide}/{hidden}");
+    }
+
+    [TestMethod]
+    public void TheNarrowPathAllocatesNothing()
+    {
+        var sum = 0;
+        void Run()
+        {
+            for (var i = 0; i < 2000; i++)
+            {
+                var axis = new AreaNearestAxis(1234.5678f + i, 1.2651956f, i, 78, 0, 78, false);
+                sum += axis.SourceIndex(1300 + i) + axis.RowKey(1200).SourceIndex(100);
+            }
+        }
+        Run();
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        Run();
+        Assert.AreEqual(0, GC.GetAllocatedBytesForCurrentThread() - before, $"sum {sum}");
     }
 
     [TestMethod]

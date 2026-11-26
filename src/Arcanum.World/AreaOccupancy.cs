@@ -61,26 +61,58 @@ public static class AreaOccupancyRules
     public static AreaStepVerdict Apply(AreaStepAssessment assessment, CellCoord from, NeighborDirection direction, AreaOccupancy? occupancy)
     {
         ArgumentNullException.ThrowIfNull(assessment);
+        return Overlay(assessment, from, direction, occupancy?.Moved, occupancy?.Occupied, passing: false);
+    }
+
+    // The overlay: the moved records, the held cells and, for a passing mover, the step's PC and NPC records moved too.
+    // ARC-RENDER-3418: every step a path search looks at comes through here, so no set is copied for it.
+    private static AreaStepVerdict Overlay(AreaStepAssessment assessment, CellCoord from, NeighborDirection direction,
+        IReadOnlySet<AreaObjectKey>? moved, IReadOnlySet<CellCoord>? occupied, bool passing)
+    {
         var raw = new AreaStepVerdict(assessment.Coverage, assessment.Disposition, assessment.ReasonCode, false);
-        if (occupancy is null || occupancy.IsEmpty || assessment.Coverage == CardinalTraversalCoverage.Unsupported ||
+        var empty = (moved?.Count ?? 0) == 0 && (occupied?.Count ?? 0) == 0 && !(passing && AnyCritter(assessment));
+        if (empty || assessment.Coverage == CardinalTraversalCoverage.Unsupported ||
             assessment.ReasonCode is "DESTINATION_TERRAIN_BLOCKED" or "WALL_EDGE_BLOCKED" or "PATH_BRANCH_UNAVAILABLE") return raw;
         AreaStepVerdict Verdict(CardinalTraversalCoverage coverage, CardinalTraversalDisposition? disposition, string reason) =>
             new(coverage, disposition, reason, coverage != raw.Coverage || disposition != raw.Disposition || reason != raw.ReasonCode);
 
-        var blocker = assessment.Objects.FirstOrDefault(o => o.Disposition == CardinalTraversalDisposition.Blocked && !occupancy.Moved.Contains(o.Key));
-        if (blocker is not null)
-            return Verdict(CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked,
-                blocker.Role == AreaStepObjectRole.Destination ? "DESTINATION_OBJECT_BLOCKER" : "SHOULDER_OBJECT_BLOCKER");
-        if (occupancy.Occupied.Contains(RoutePlanner.Neighbor(from, direction)))
-            return Verdict(CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, DestinationActor);
-        var d = (int)direction;
-        if ((d & 1) == 0 && (occupancy.Occupied.Contains(RoutePlanner.Neighbor(from, (NeighborDirection)((d + 7) % 8))) ||
-            occupancy.Occupied.Contains(RoutePlanner.Neighbor(from, (NeighborDirection)(d + 1)))))
-            return Verdict(CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, ShoulderActor);
-        if (assessment.Gaps.Any(gap => gap.Object is not { } key || !occupancy.Moved.Contains(key)))
-            return Verdict(CardinalTraversalCoverage.Unknown, null, "REQUIRED_EVIDENCE_UNAVAILABLE");
+        for (var index = 0; index < assessment.Objects.Count; index++)
+        {
+            var blocker = assessment.Objects[index];
+            if (blocker.Disposition == CardinalTraversalDisposition.Blocked && !Moved(assessment, blocker.Key, moved, passing))
+                return Verdict(CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked,
+                    blocker.Role == AreaStepObjectRole.Destination ? "DESTINATION_OBJECT_BLOCKER" : "SHOULDER_OBJECT_BLOCKER");
+        }
+        if (occupied is { Count: > 0 })
+        {
+            if (occupied.Contains(RoutePlanner.Neighbor(from, direction)))
+                return Verdict(CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, DestinationActor);
+            var d = (int)direction;
+            if ((d & 1) == 0 && (occupied.Contains(RoutePlanner.Neighbor(from, (NeighborDirection)((d + 7) % 8))) ||
+                occupied.Contains(RoutePlanner.Neighbor(from, (NeighborDirection)(d + 1)))))
+                return Verdict(CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, ShoulderActor);
+        }
+        for (var index = 0; index < assessment.Gaps.Count; index++)
+            if (assessment.Gaps[index].Object is not { } key || !Moved(assessment, key, moved, passing))
+                return Verdict(CardinalTraversalCoverage.Unknown, null, "REQUIRED_EVIDENCE_UNAVAILABLE");
         return Verdict(CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open,
             assessment.WindowJump is not null ? "WINDOW_JUMP" : "COMPLETE_NONBLOCKING_EVIDENCE");
+    }
+
+    private static bool Moved(AreaStepAssessment assessment, AreaObjectKey key, IReadOnlySet<AreaObjectKey>? moved, bool passing)
+    {
+        if (moved?.Contains(key) == true) return true;
+        if (!passing) return false;
+        for (var index = 0; index < assessment.Objects.Count; index++)
+            if (assessment.Objects[index] is { ObjectType: PcType or NpcType } critter && critter.Key.Equals(key)) return true;
+        return false;
+    }
+
+    private static bool AnyCritter(AreaStepAssessment assessment)
+    {
+        for (var index = 0; index < assessment.Objects.Count; index++)
+            if (assessment.Objects[index].ObjectType is PcType or NpcType) return true;
+        return false;
     }
 
     public const int PcType = 15, NpcType = 16;
@@ -98,9 +130,12 @@ public static class AreaOccupancyRules
         return new AreaOccupancy((occupancy?.Moved ?? (IEnumerable<AreaObjectKey>)[]).Concat(critters), []);
     }
 
-    /// <summary><see cref="Apply"/> for a mover that passes living critters (<see cref="PassingCritters"/>).</summary>
-    public static AreaStepVerdict ApplyPassingCritters(AreaStepAssessment assessment, CellCoord from, NeighborDirection direction, AreaOccupancy? occupancy) =>
-        Apply(assessment, from, direction, PassingCritters(assessment, occupancy));
+    /// <summary><see cref="Apply"/> for a mover that passes living critters, with the overlay of <see cref="PassingCritters"/>.</summary>
+    public static AreaStepVerdict ApplyPassingCritters(AreaStepAssessment assessment, CellCoord from, NeighborDirection direction, AreaOccupancy? occupancy)
+    {
+        ArgumentNullException.ThrowIfNull(assessment);
+        return Overlay(assessment, from, direction, occupancy?.Moved, occupied: null, passing: true);
+    }
 
     /// <summary>The route verdict of an overlaid step: only Supported Open is Open.</summary>
     public static RouteStepVerdict Route(AreaStepVerdict verdict) => verdict.Coverage switch

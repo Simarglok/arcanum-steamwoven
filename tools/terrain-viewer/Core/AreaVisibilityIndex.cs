@@ -1,3 +1,4 @@
+using System.Numerics;
 using Arcanum.Data.Terrain;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -16,11 +17,15 @@ public sealed class AreaVisibilityIndex
     private readonly Dictionary<(int X, int Y), int[]> _cells;
     private readonly int _count;
     private readonly int[] _all;
+    // ARC-RENDER-3418: a moving view asks every frame, so the marks and the answer are reused.
+    private readonly ulong[] _marks;
+    private readonly List<int> _found = [];
 
     public AreaVisibilityIndex(IReadOnlyList<TerrainRect> destinations)
     {
         ArgumentNullException.ThrowIfNull(destinations);
         _count = destinations.Count; _all = Enumerable.Range(0, _count).ToArray();
+        _marks = new ulong[(_count + 63) / 64];
         var cells = new Dictionary<(int X, int Y), List<int>>();
         for (var index = 0; index < destinations.Count; index++)
         {
@@ -41,7 +46,8 @@ public sealed class AreaVisibilityIndex
     public int Count => _count;
     public int CellCount => _cells.Count;
 
-    /// <summary>Ascending indices of the commands that may meet [left, right] x [top, bottom].</summary>
+    /// <summary>Ascending indices of the commands that may meet [left, right] x [top, bottom]. The list is the index's own:
+    /// it holds until the next call, and calls are made by one thread.</summary>
     public IReadOnlyList<int> Candidates(double left, double top, double right, double bottom)
     {
         if (!double.IsFinite(left) || !double.IsFinite(top) || !double.IsFinite(right) || !double.IsFinite(bottom)) return _all;
@@ -51,13 +57,22 @@ public sealed class AreaVisibilityIndex
         var (x0, x1) = (FloorDiv((long)Math.Floor(left)), FloorDiv((long)Math.Floor(right)));
         var (y0, y1) = (FloorDiv((long)Math.Floor(top)), FloorDiv((long)Math.Floor(bottom)));
         if ((double)(x1 - x0 + 1) * (y1 - y0 + 1) > ScanFraction * _cells.Count) return _all;
-        var seen = new HashSet<int>(); var result = new List<int>();
+        int first = _marks.Length, last = -1;
         for (var y = y0; y <= y1; y++)
         for (var x = x0; x <= x1; x++)
             if (_cells.TryGetValue((x, y), out var list))
-                foreach (var index in list) if (seen.Add(index)) result.Add(index);
-        result.Sort();
-        return result;
+            {
+                foreach (var index in list) _marks[index >> 6] |= 1UL << index;
+                // A cell's list is ascending and never empty.
+                first = Math.Min(first, list[0] >> 6); last = Math.Max(last, list[^1] >> 6);
+            }
+        _found.Clear();
+        for (var word = first; word <= last; word++)
+        {
+            for (var bits = _marks[word]; bits != 0; bits &= bits - 1) _found.Add((word << 6) + BitOperations.TrailingZeroCount(bits));
+            _marks[word] = 0;
+        }
+        return _found;
     }
 
     private static int FloorDiv(long value) => (int)Math.Floor(value / (double)CellSize);

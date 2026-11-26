@@ -341,6 +341,9 @@ public partial class TerrainViewerApp
         Transform2D transform, int screenX, int screenY)
     {
         var d = command.Destination; var s = command.Source;
+        // ARC-RENDER-3418: the hover asks every body of the map at each moving frame; most are nowhere near the pixel.
+        if (AreaNearestAxis.CertainlyOutside(transform.Origin.X, transform.X.X, d.X, d.Width, screenX)
+            || AreaNearestAxis.CertainlyOutside(transform.Origin.Y, transform.Y.Y, d.Y, d.Height, screenY)) return 0;
         var x = new AreaNearestAxis(transform.Origin.X, transform.X.X, d.X, d.Width, s.X, s.Width, command.FlipX).SourceIndex(screenX);
         var y = new AreaNearestAxis(transform.Origin.Y, transform.Y.Y, d.Y, d.Height, s.Y, s.Height, command.FlipY).SourceIndex(screenY);
         if (x < 0 || y < 0) return 0;
