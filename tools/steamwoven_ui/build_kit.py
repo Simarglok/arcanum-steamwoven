@@ -33,6 +33,7 @@ from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import hardware_kit  # noqa: E402
 from tools.steamwoven_ui import marker_kit  # noqa: E402
 from tools.steamwoven_ui import popup_kit  # noqa: E402
+from tools.steamwoven_ui import ring_kit  # noqa: E402
 from tools.steamwoven_ui import wide_button_kit  # noqa: E402
 from tools.steamwoven_ui import disc_kit  # noqa: E402
 from tools.steamwoven_ui import parchment_kit  # noqa: E402
@@ -279,7 +280,7 @@ def small_parts(plates: dict[str, dict]) -> list[dict]:
     return parts
 
 
-def ring_parts(plates: dict[str, dict]) -> list[dict]:
+def ringed_parts(plates: dict[str, dict]) -> list[dict]:
     """ARC-UI-3269, slice 3b of B-BUTTONS: the glyph and the hover and pressed plate of the thick brass-ringed round buttons and of the wide schematic button's dome (`ring_button_kit.py`); each sits where its plate sits."""
     parts = []
     for b in ring_button_kit.BUTTONS:
@@ -295,7 +296,7 @@ def ring_parts(plates: dict[str, dict]) -> list[dict]:
     return parts
 
 
-RING_IDLE = frozenset(ring_button_kit.ident_of(b, "idle") for b in ring_button_kit.BUTTONS)
+RINGED_IDLE = frozenset(ring_button_kit.ident_of(b, "idle") for b in ring_button_kit.BUTTONS)
 
 
 def marker_parts(bases: dict[str, dict]) -> list[dict]:
@@ -310,6 +311,34 @@ def marker_parts(bases: dict[str, dict]) -> list[dict]:
     return parts
 
 
+RING_METHOD_TEXT = {  # method of `ring_kit.py` -> (provenance prefix, what the face is)
+    "codex": ("codex", "the generated ring and dome, the sign by rule"),
+    "marker": ("codex", "the #3207 marker symbol on the set's plate"),
+    "wedge": ("codex", "a triangle by rule on the set's plate"),
+    "arrow": ("codex", "the arrow by rule E on the set's plate"),
+    "pack": ("rule", "the old HD pack's frame"),
+}
+
+
+def ring_parts(plates: dict[str, dict]) -> list[dict]:
+    """ARC-UI-3270, slice 3c of B-BUTTONS: the glyph and the pressed and hover plate of every small brass-ringed button (`ring_kit.py`)."""
+    parts = []
+    for ring in ring_kit.RINGS:
+        plate = plates.get(f"plate.{ring.name}")
+        if plate is None:  # a census without the button (a test's synthetic one)
+            continue
+        prefix, face = RING_METHOD_TEXT[ring.method]
+        canvas = f"a {ring.master[0]} x {ring.master[1]} canvas"
+        for ident, state in ring_kit.idents(ring):
+            if state == "idle":
+                continue
+            what = f"EMPTY: the symbol of art {ring.art} is in the faces" if state is None else f"the {state} face of art {ring.art}: {face}"
+            parts.append(new_part(ident, ident.split(".")[0], plate["anchor"], list(plate["used_by"]), None, "B-BUTTONS",
+                                  f"{what}; ring_kit.py, {canvas}, so the size is open", states=[state or "idle"], master=True, provenance=f"{'rule' if state is None else prefix}:ring_kit:{ident}"))
+    return parts
+
+
+RING_PLATES = {f"plate.{r.name}": r for r in ring_kit.RINGS}
 SMALL_PLATES = {f"plate.{b.name}": b for b in (*small_kit.SMALL, *small_kit.GENERATED)}
 ROUND_HUD_PLATES = {f"plate.{b.name}": b for b in (*round_kit.ROUND_BUTTONS, round_kit.BALL)}
 SKILL_PLATES = {f"plate.{b.name}": b for b in round_kit.SKILL_BUTTONS}
@@ -382,9 +411,13 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
             part["status"], part["provenance"] = "master", f"rule:parchment_kit:{ident}"
             part["note"] = (f"the idle face of art {part['source_arts'][-1]}: the old HD pack's frame (pack-first rule) resampled to the master, the alpha the ring's ellipse united with the four corner triangles (parchment_kit.py, ARC-UI-3205); the symbol is in the frame" if ident in BOX_PLATES else
                             f"the {'lit' if ident.endswith('_on') else 'refused'} face of art {part['source_arts'][-1]}: the old HD pack's frame of that state (green or red corners kept), the same alpha (parchment_kit.py, ARC-UI-3205)")
-        if ident in RING_IDLE:  # ARC-UI-3269: the thick brass-ringed buttons, the wide button's dome and its two wells
+        if ident in RINGED_IDLE:  # ARC-UI-3269: the thick brass-ringed buttons, the wide button's dome and its two wells
             part["status"], part["provenance"] = "master", ring_button_kit.provenance_of(ident)
             part["note"] = ring_button_kit.note_of(ident)
+        if ident in RING_PLATES:  # ARC-UI-3270 (owner decisions of 2026-11-26): one method per family, every ring in the accepted brass
+            prefix, face = RING_METHOD_TEXT[RING_PLATES[ident].method]
+            part["status"], part["provenance"] = "master", f"{prefix}:ring_kit:{ident}"
+            part["note"] = f"art {RING_PLATES[ident].art}, idle face: {face}; cut to the ring's circle by an analytic round alpha, the ring in the accepted brass, no shadow (a runtime layer, #3249) (ring_kit.py, ARC-UI-3270)"
         if ident in SMALL_PLATES:
             family = SMALL_PLATES[ident].family
             part["status"], part["provenance"] = "master", f"{SMALL_FAMILY_TEXT[family][0]}:small_kit:{ident}"
@@ -411,8 +444,9 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
     parts.extend(new_parts())
     parts.extend(dome_hud_parts({p["id"]: p for p in parts if p["id"] in SKILL_PLATES or p["id"] in DISC_PLATES or p["id"] in SCHOOL_PLATES}))
     parts.extend(small_parts({p["id"]: p for p in parts if p["id"] in SMALL_PLATES}))
-    parts.extend(ring_parts({p["id"]: p for p in parts if p["id"] in RING_IDLE and p["id"].startswith("plate.")}))
+    parts.extend(ringed_parts({p["id"]: p for p in parts if p["id"] in RINGED_IDLE and p["id"].startswith("plate.")}))
     parts.extend(marker_parts({p["id"]: p for p in parts if p["id"] in marker_kit.PARTS}))
+    parts.extend(ring_parts({p["id"]: p for p in parts if p["id"] in RING_PLATES}))
     by_art = {s: p for p in parts for s in p["source_arts"]}
     # Layers over a part (draw order, bottom first): the end caps over a HUD strip, the grid layer over a backdrop that paints it in today.
     for art, layers in (("335", hardware_build.layers_of("board.charcreatebottombar")), ("336", hardware_build.layers_of("board.charcreatetopbar")),
