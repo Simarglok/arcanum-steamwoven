@@ -65,6 +65,28 @@ class FixtureTests(unittest.TestCase):
         sheet = fixtures.draw("grid.schematic")
         self.assertEqual(sheet.pixel(5, 5)[3], 0, "the ruling leaves the paper clear between its lines")
 
+    def test_the_item_grids_lines_lie_where_the_original_has_them(self) -> None:
+        """ARC-UI-3342: the original's lines are one unit wide on the last column and row of units of each cell, and one unit before the first."""
+        cell = fixtures.draw("grid.inventory_cells")
+        across = _line_centres([cell.pixel(x, cell.h // 2)[:3] for x in range(cell.w)], cell.w / 32)
+        down = _line_centres([cell.pixel(cell.w // 2, y)[:3] for y in range(cell.h)], cell.h / 32)
+        for centres in (across, down):
+            self.assertEqual(len(centres), 1, centres)
+            self.assertAlmostEqual(centres[0], 31.5, delta=0.1)
+        # The outer left and top lines are the pit's: (pit id, the pit's corner, the grid's corner, columns, rows) in window units.
+        grids = (("fixture.pack_pit", (366, 6), (368, 8), 10, 12), ("fixture.doll_pit", (18, 100), (23, 107), 10, 9),
+                 ("fixture.holder_pit_loot", (6, 134), (8, 136), 10, 8), ("fixture.holder_pit_barter", (6, 166), (8, 168), 10, 7))
+        for ident, (pit_x, pit_y), (x0, y0), columns, rows in grids:
+            for variant in fixtures.VARIANTS:
+                pit, part = fixtures.draw(ident, variant), BY(ident)
+                sx, sy = pit.w / part.width, pit.h / part.height
+                middle_x, middle_y = round((x0 - pit_x + 16 * columns + 8) * sx), round((y0 - pit_y + 16 * rows + 8) * sy)
+                left = [pit_x + c for c in _line_centres([pit.pixel(x, middle_y)[:3] for x in range(pit.w)], sx)]
+                top = [pit_y + c for c in _line_centres([pit.pixel(middle_x, y)[:3] for y in range(pit.h)], sy)]
+                for found, origin in ((left, x0), (top, y0)):
+                    nearest = min(found, key=lambda c: abs(c - (origin - 0.5)))
+                    self.assertAlmostEqual(nearest, origin - 0.5, delta=0.2, msg=f"{ident} {variant}: {found}")
+
     def test_build_writes_the_masters(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             written = fixtures.build(Path(folder), "flat", {"fixture.count_pit", "grid.inventory_cells"})
@@ -75,6 +97,19 @@ class FixtureTests(unittest.TestCase):
 
 def BY(ident: str) -> fixtures.Fixture:
     return fixtures.BY_ID[ident]
+
+
+def _line_centres(pixels: list, scale: float) -> list[float]:
+    """The centres, in units, of the runs of the grid line's colour along a row or column of pixels at `scale` pixels per unit."""
+    centres, start = [], None
+    for i, rgb in enumerate([*pixels, None]):
+        inside = rgb is not None and tuple(rgb) == fixtures.EDGE
+        if inside and start is None:
+            start = i
+        elif not inside and start is not None:
+            centres.append((start + i) / 2 / scale)
+            start = None
+    return centres
 
 
 if __name__ == "__main__":

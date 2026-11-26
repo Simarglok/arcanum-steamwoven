@@ -66,7 +66,7 @@ class Fixture:
 INV = ("G01", "G17")
 INV_FAMILY = ("G01", "G02", "G03", "G04", "G17", "M10")
 FIXTURES: tuple[Fixture, ...] = (
-    Fixture("grid.inventory_cells", 32, 32, INV_FAMILY, "one cell well of the item grids (black, thin line on its top and left edges); the pack's 10 x 12, the doll's 10 x 9 and the holder's 10 x 7 or 10 x 8 are copies of it"),
+    Fixture("grid.inventory_cells", 32, 32, INV_FAMILY, "one cell well of the item grids (black, thin line on its last column and row of units, where the original has it); the pack's 10 x 12, the doll's 10 x 9 and the holder's 10 x 7 or 10 x 8 are copies of it"),
     Fixture("fixture.pack_pit", 324, 388, INV_FAMILY, "the pack's pit at 366, 6 with its inner line round the 10 x 12 grid at 368, 8"),
     Fixture("fixture.doll_pit", 330, 300, INV, "the paper doll's pit at 18, 100 with its inner line round the 10 x 9 grid at 23, 107"),
     Fixture("fixture.holder_pit_loot", 324, 260, ("G02", "G04"), "the body's or container's grid pit at 6, 134 (10 x 8 cells at 8, 136)"),
@@ -97,6 +97,8 @@ FIXTURES: tuple[Fixture, ...] = (
 )
 BY_ID = {fixture.ident: fixture for fixture in FIXTURES}
 
+# ARC-UI-3342: the original paints a grid line one unit wide on the last column and row of units of each 32-unit cell (and one unit before the first cell); the kit's 2 px line is centred there.
+LINE_AT = -0.5
 Colour = tuple[int, int, int]
 BLACK: Colour = (4, 5, 9)
 EDGE: Colour = (62, 74, 98)
@@ -232,8 +234,9 @@ def _pit(c: Canvas, variant: str, inner: tuple[float, float, float, float] | Non
     c.rect(0, 0, c.w, c.h, BLACK)
     _trim(c, 0, 0, c.w, c.h, variant)
     if inner:
+        # The outer lines of the grid laid over this rectangle, half a unit before its edges: the left and top ones show beside the cells, which cover the other two with their own.
         x, y, w, h = inner
-        c.frame(c.X(x), c.Y(y), c.X(x + w), c.Y(y + h), 2, EDGE)
+        c.frame(c.X(x + LINE_AT) - 1, c.Y(y + LINE_AT) - 1, c.X(x + w + LINE_AT) + 1, c.Y(y + h + LINE_AT) + 1, 2, EDGE)
 
 
 def _quarter(c: Canvas, right: bool, fill: Colour, variant: str) -> None:
@@ -373,8 +376,9 @@ def draw(ident: str, variant: str = "brass") -> pngio.Image:
     c = Canvas(width, height, (fixture.width, fixture.height))
     if ident == "grid.inventory_cells":
         c.rect(0, 0, width, height, BLACK)
-        c.rect(0, 0, width, 2, EDGE)
-        c.rect(0, 0, 2, height, EDGE)
+        x, y = c.X(fixture.width + LINE_AT), c.Y(fixture.height + LINE_AT)
+        c.rect(x - 1, 0, x + 1, height, EDGE)
+        c.rect(0, y - 1, width, y + 1, EDGE)
     elif ident == "fixture.pack_pit":
         _pit(c, variant, (2, 2, 320, 384))
     elif ident == "fixture.doll_pit":

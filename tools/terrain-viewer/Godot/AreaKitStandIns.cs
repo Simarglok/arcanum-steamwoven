@@ -97,7 +97,7 @@ internal static class AreaKitStandIns
         {
             for (var row = 0; row < rows; row++) for (var column = 0; column < columns; column++) AreaKitFixtures.Draw(canvas, scale, "grid.inventory_cells", x + column * 32, y + row * 32);
         }
-        else Lines(canvas, scale, x, y, columns, rows, 32, Edge);
+        else Lines(canvas, scale, x - .5f, y - .5f, columns, rows, 32, Edge); // ARC-UI-3342: the original's lines lie half a unit before the cells' edges
     }
 
     /// <summary>The pack's pit with its 10 x 12 grid, the five count pits and their five signs (art 221, shared by the inventory, loot, steal and barter windows).</summary>
