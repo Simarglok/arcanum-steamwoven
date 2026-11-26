@@ -34,21 +34,23 @@ public partial class TerrainViewerApp
         _perfMode = PerfOverlayCycle.Start(System.Environment.GetEnvironmentVariable, _metalHud is not null);
     }
 
-    /// <summary>Puts the HUD where the panel sits (right edge, under the top bar) for the window as it is now.</summary>
-    private void PlaceMetalHud()
+    /// <summary>Puts the HUD where the panel sits (right edge, under the top bar) for the window as it is now; with
+    /// <paramref name="load"/> (a step of the cycle) also loads it when it is not.</summary>
+    private void PlaceMetalHud(bool load)
     {
         var window = DisplayServer.WindowGetSize();
         _metalHudPlace = (window, AreaGameBarPanel.TopInset);
         // The bar's height is in the viewport's units; the HUD is placed in the window's.
         var perUnit = window.Y / Math.Max(1.0, GetViewport().GetVisibleRect().Size.Y);
         var (x, y) = PerfOverlayCycle.HudPosition(window.X, AreaGameBarPanel.TopInset * perUnit, _metalHud!.Scale);
-        _metalHudProblem = _metalHud.Show(x, y);
+        if (load) _metalHudProblem = _metalHud.Show(x, y);
+        else _metalHud.Place(x, y);
     }
 
     /// <summary>Per frame while the HUD is shown: it is placed again when the window or the top bar changed.</summary>
     private void FollowMetalHud()
     {
-        if (_metalHudPlace != (DisplayServer.WindowGetSize(), AreaGameBarPanel.TopInset)) PlaceMetalHud();
+        if (_metalHudPlace != (DisplayServer.WindowGetSize(), AreaGameBarPanel.TopInset)) PlaceMetalHud(load: false);
     }
 
     /// <summary>After the bug report and the owner checks in the WORLD input route (their windows own every key). True when the event is
@@ -78,7 +80,7 @@ public partial class TerrainViewerApp
             _perfPanel.Set(show ? "Measuring..." : null, AreaGameBarPanel.TopInset);
         }
         _metalHudProblem = null;
-        if (mode == PerfOverlayMode.MetalHud) PlaceMetalHud();
+        if (mode == PerfOverlayMode.MetalHud) PlaceMetalHud(load: true);
         else if (previous == PerfOverlayMode.MetalHud) _metalHud!.Hide();
         GD.Print($"ARC-DEV-3389 performance overlay mode={mode}" + (_metalHudProblem is null ? "" : $" metal-hud-problem={_metalHudProblem}"));
     }

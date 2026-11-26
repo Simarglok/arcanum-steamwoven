@@ -3295,8 +3295,8 @@ edge, below the top interface bar, and moves with the window's size. It has no s
 width measured on macOS 27.2 (a fifth of the window's pixels, at least 300); the margin may differ on another macOS. This
 place overrides `MTL_HUD_ALIGNMENT` and `MTL_HUD_POSITION_X`/`Y` of the start's environment. The HUD comes up a moment after
 the first request. Where the tool is missing (Windows, a macOS without it) the cycle is off, panel, off. A start with
-`MTL_HUD_ENABLED=1` ([Mac performance monitoring](../workflow/mac-performance-monitoring.md)) shows the HUD from the start, in
-the same place; the first Ctrl+F then turns it off. The game cannot see whether the HUD is on screen: the log line
+`MTL_HUD_ENABLED=1` ([Mac performance monitoring](../workflow/mac-performance-monitoring.md)) shows the HUD from the start; where
+the tool exists (macOS 27) the game puts it in the same place and the first Ctrl+F then turns it off. The game cannot see whether the HUD is on screen: the log line
 `ARC-DEV-3389 performance overlay mode=` names a failed request to the tool only (a tool that failed is asked again at the
 next step; one that did not answer in 2 s is not). The HUD's own figures are Apple's; the rows below are the panel's.
 

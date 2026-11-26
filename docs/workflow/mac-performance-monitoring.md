@@ -43,7 +43,8 @@ it from the first frame, start from Terminal:
 
     MTL_HUD_ENABLED=1 "$EXE"
 
-The game then puts the HUD where its own panel stands (the right edge, below the top bar), whichever way it was started.
+Where `metalperftrace` exists (macOS 27) the game then puts the HUD where its own panel stands (the right edge, below the top
+bar), whichever way it was started.
 
 **You see** an overlay at the top right: chip, resolution, Metal and app memory, FPS, GPU ms, frame interval and its
 graph. More lines (thermal state, present delay, encoder CPU time):

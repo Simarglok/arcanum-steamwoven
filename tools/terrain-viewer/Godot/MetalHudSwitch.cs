@@ -31,12 +31,16 @@ internal sealed class MetalHudSwitch
             ? new(layer) : null;
     }
 
-    /// <summary>Shows the HUD with its top left corner at (<paramref name="x"/>, <paramref name="y"/>) in the window's points, loading it
-    /// first when the process has not. Null when that went through, else why the tool did not load it (the tool accepts any process id, so
-    /// an accepted request is not proof the HUD is on screen).</summary>
+    /// <summary>Has the HUD shown with its top left corner at (<paramref name="x"/>, <paramref name="y"/>) in the window's points, once
+    /// it is loaded. Asks the system nothing.</summary>
+    public void Place(int x, int y) => Apply(PerfOverlayCycle.HudProperties(true, x, y));
+
+    /// <summary><see cref="Place"/>, then loads the HUD when the process has not. Null when that went through, else why the tool did not
+    /// load it (the tool accepts any process id, so an accepted request is not proof the HUD is on screen). May wait for the tool: for a
+    /// key press, never per frame.</summary>
     public string? Show(int x, int y)
     {
-        Apply(PerfOverlayCycle.HudProperties(true, x, y));
+        Place(x, y);
         // Never ask twice: a second request while the first is loading, or for a HUD already there, has left it invisible.
         if (_loadAsked || LoadLibrary("/usr/lib/libMTLHud.dylib", NoLoad) != IntPtr.Zero) return null;
         try
@@ -45,10 +49,13 @@ internal sealed class MetalHudSwitch
             foreach (var argument in PerfOverlayCycle.HudLoadArguments(System.Environment.ProcessId)) start.ArgumentList.Add(argument);
             using var tool = Process.Start(start);
             if (tool is null) return "the tool did not start";
+            // Both pipes are drained while waiting: a full one would hold the tool up.
+            _ = tool.StandardOutput.ReadToEndAsync();
+            var error = tool.StandardError.ReadToEndAsync();
             // A tool that did not answer may still have been heard: it counts as asked.
             if (!tool.WaitForExit(ToolTimeoutMs)) { _loadAsked = true; tool.Kill(); return "the tool did not answer"; }
             _loadAsked = tool.ExitCode == 0;
-            return _loadAsked ? null : $"exit {tool.ExitCode}: {tool.StandardError.ReadToEnd().Trim()}";
+            return _loadAsked ? null : $"exit {tool.ExitCode}: {(error.Wait(ToolTimeoutMs) ? error.Result.Trim() : "")}";
         }
         catch (Exception failure) when (failure is Win32Exception or InvalidOperationException or System.IO.IOException) { return failure.Message; }
     }
