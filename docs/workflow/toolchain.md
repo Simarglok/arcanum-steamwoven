@@ -893,7 +893,7 @@ without the flag).
 
 ### Minimized window draw (ARC-DEV-045)
 
-On macOS (Godot 4.7.2, compatibility renderer) a window that cannot draw (`DisplayServer.window_can_draw()` false, seen
+On macOS (Godot 4.7.2, compatibility renderer; measured on OpenGL, not re-measured on the Metal renderer of ARC-DEV-3145) a window that cannot draw (`DisplayServer.window_can_draw()` false, seen
 when the window is minimized) keeps its process frames but the engine skips every draw: `frame_post_draw` never fires,
 so each `FramePostDraw` await of a self-test or smoke waits for its timeout (the cause of the export's exit 124 found in
 ARC-DEV-043). Two throttles make such a run slow as well: the engine sleeps the low-processor time (6.9 ms) after every
@@ -1535,6 +1535,8 @@ python3 -B tools/steamwoven_ui/school_kit.py sheet --out FILE [--only NAME,...] 
 
 `plate.<name>` is the pack's idle frame, `plate.<name>_hover` and `_pressed` the hover and pressed frames in full, `glyph.<name>` an empty layer (for the three Codex-redrawn buttons the frames are the generated images registered onto the pack frames' geometry, all three states or none). The circle of every art (the ring's gold circle and the cut's half unit) and the shadow's numbers are read from the viewer's `tools/terrain-viewer/Core/AreaKitRoundParts.cs`, one source for the part's edge and the run-time shadow; the alpha is analytic (one pixel wide), the colour outside the circle is carried inward before the stretch to the master's size, so no old background reaches the edge. Each part's provenance record (`provenance/rule/<id>.json`) names the pack frame's sha256 and the index's sha12; the three symbols the pack reads wrongly (art 74, 86, 56: `CODEX_SYMBOLS`) are redrawn by Codex on the pack frame (source `codex` in the record, with the generation record and the placed frame's hash).
 Tests: `python3 -B -m unittest tools.steamwoven_ui.test_school_kit` (in the batched `tools/local_dev/run_tests.py`).
+
+Viewer (ARC-UI-3320): the kit smoke (`./arcanum smoke pr --stages bar --env ARC_AREA_BAR_STEAMWOVEN=1 --env ARC_HD_PACK=<pack> --env ARC_STEAMWOVEN_VARIANTS=kit --env ARC_STEAMWOVEN_SIZES=2560x1440`) writes the 28 plates, their two overlays and the empty glyphs flat into its synthetic kit, reads back the idle and pressed face on the three pages' round buttons and the circle cut, and repeats the pages with a set that has no round plate (the art's own frames through the layer). A look capture adds `--env ARC_AREA_BAR_CAPTURE=<prefix> --env ARC_STEAMWOVEN_KIT_LOOK=<folder with plate.<name>[_hover|_pressed].png masters>` (the page colour reads of the three pages stay; the plate colour reads are skipped); the pages' captures are `<prefix>-hud-steamwoven-kit-2560x1440-sheet-<page>.png` (kit parts), `...-roundless.png` (kit sheet, the art's own buttons) and `...-own.png` (no kit sheet).
 
 ## Controller test evidence summariser (ARC-GPAD-1376)
 

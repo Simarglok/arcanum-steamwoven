@@ -97,8 +97,8 @@ public partial class AreaCharacterSheetSpellsView : Control
 
     private int Frames(int art) => _art.TryGetValue(art, out var frames) ? frames.Length : 1;
 
-    private int Frame(int art, AreaCharacterSheetSpellsLayout.Hit hit, bool selected = false) => selected ? AreaGameBarLayout.Frame(AreaBarButtonLook.Down, Math.Max(1, Frames(art)))
-        : AreaCharacterArtDraw.Frame(Frames(art), _pressed is not null, _pressed == hit, _hovered == hit);
+    private int Frame(int art, AreaCharacterSheetSpellsLayout.Hit hit, bool selected = false, int? frames = null) => selected ? AreaGameBarLayout.Frame(AreaBarButtonLook.Down, Math.Max(1, frames ?? Frames(art)))
+        : AreaCharacterArtDraw.Frame(frames ?? Frames(art), _pressed is not null, _pressed == hit, _hovered == hit);
 
     private AreaCharacterSheetSpellsLayout.Hit? HitAt(Vector2 at) => _spells is null ? null : AreaCharacterSheetSpellsLayout.HitAt(at.X, at.Y, _spells,
         art => Art(art) is { } texture ? (texture.GetWidth(), texture.GetHeight()) : null, ReadOnly);
@@ -142,10 +142,13 @@ public partial class AreaCharacterSheetSpellsView : Control
         for (var college = 0; college < AreaCharacterSheetSpellsLayout.Colleges; college++)
         {
             var art = AreaCharacterSheetSpellsLayout.CollegeArt(college);
-            var tab = Art(art, Frame(art, new(AreaCharacterSheetSpellsLayout.Part.CollegeTab, college), selected: college == _spells.College));
+            var hit = new AreaCharacterSheetSpellsLayout.Hit(AreaCharacterSheetSpellsLayout.Part.CollegeTab, college);
+            var tab = Art(art, Frame(art, hit, selected: college == _spells.College));
             var place = AreaCharacterSheetSpellsLayout.CollegeTab(college);
-            // ARC-UI-3101: over the kit's sheet the ring goes through the round-part layer.
-            if (_kitSheet.Shown && AreaKitRoundPartsLayer.Applies(art, tab)) rings.Add(new(art, tab!, new Rect2(place.X, place.Y, tab!.GetWidth(), tab.GetHeight())));
+            // ARC-UI-3320: over the kit's sheet the ring is the kit's face of the button in its look (idle, pressed, hover) where the kit holds one.
+            if (_kitSheet.Shown && AreaKitSheets.RoundFace(art, Frame(art, hit, selected: college == _spells.College, frames: 3)) is { } face && AreaKitRoundPartsLayer.KitItem(art, face, place) is { } kit) rings.Add(kit);
+            // ARC-UI-3101: else over the kit's sheet the ring goes through the round-part layer as the art's own frame.
+            else if (_kitSheet.Shown && AreaKitRoundPartsLayer.Applies(art, tab)) rings.Add(new(art, tab!, new Rect2(place.X, place.Y, tab!.GetWidth(), tab.GetHeight())));
             else DrawArt(tab, place);
         }
         if (rings.Count > 0) _round.Show(rings); else _round.Clear();

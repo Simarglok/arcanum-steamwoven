@@ -428,6 +428,46 @@ public sealed class SteamwovenKitTests
     }
 
     [TestMethod]
+    public void The_round_faces_are_the_round_parts_art_for_art_and_each_has_its_own_plate()
+    {
+        // ARC-UI-3320: the sixteen college rings, the four skill groups and the eight disciplines: the arts of the round-part table, no more and no less, one plate each.
+        CollectionAssert.AreEquivalent(AreaKitRoundParts.ArtNumbers.ToArray(), SteamwovenKitTable.RoundFaces.Keys.ToArray());
+        Assert.AreEqual(28, SteamwovenKitTable.RoundFaces.Values.Distinct().Count());
+        Assert.IsTrue(SteamwovenKitTable.RoundFaces.Values.All(id => id.StartsWith("plate.", StringComparison.Ordinal) && SteamwovenKitSet.ValidId(id)));
+        // The names are those of #3204's manifest rows (a college is s_<college>, a school <name>_but).
+        Assert.AreEqual("plate.s_conveyance", SteamwovenKitTable.RoundFaces[11]);
+        Assert.AreEqual("plate.s_temporal", SteamwovenKitTable.RoundFaces[122]);
+        Assert.AreEqual("plate.social_but", SteamwovenKitTable.RoundFaces[304]);
+        Assert.AreEqual("plate.therapeutics_but", SteamwovenKitTable.RoundFaces[313]);
+    }
+
+    [TestMethod]
+    public void A_round_button_is_its_idle_face_and_the_pressed_and_hover_faces_of_its_own_size()
+    {
+        var set = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.s_air", 42, 42), new("plate.s_air_pressed", 42, 42), new("plate.s_air_hover", 42, 42), new("glyph.s_air", 42, 42)]);
+        var face = SteamwovenKitComposer.RoundFace(set, 38)!;
+        Assert.AreEqual("plate.s_air", face.Idle.Id);
+        Assert.AreEqual("plate.s_air_pressed", face.Pressed!.Value.Id);
+        Assert.AreEqual("plate.s_air_hover", face.Hover!.Value.Id);
+        CollectionAssert.AreEqual(new[] { "plate.s_air", "plate.s_air_pressed", "plate.s_air_hover" }, face.Parts.Select(part => part.Id).ToArray());
+        // The glyph is an empty layer (the symbol is in the plate): the face stands without it.
+        var bare = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.social_but", 60, 57)]);
+        var social = SteamwovenKitComposer.RoundFace(bare, 304)!;
+        Assert.AreEqual("plate.social_but", social.Idle.Id);
+        Assert.IsNull(social.Pressed);
+        Assert.IsNull(social.Hover);
+        // A state of another size is left out; the idle face is the one that must be there.
+        var odd = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.s_air", 42, 42), new("plate.s_air_pressed", 21, 21), new("plate.s_air_hover", 42, 42)]);
+        Assert.IsNull(SteamwovenKitComposer.RoundFace(odd, 38)!.Pressed);
+        Assert.IsNotNull(SteamwovenKitComposer.RoundFace(odd, 38)!.Hover);
+        var noIdle = SteamwovenKitSet.FromParts(SteamwovenStep.Half, "/kit/x1-2", [new("plate.s_air_hover", 42, 42), new("plate.s_air_pressed", 42, 42)]);
+        Assert.IsNull(SteamwovenKitComposer.RoundFace(noIdle, 38));
+        // An art that is no round part, or a button of another set, has no face.
+        Assert.IsNull(SteamwovenKitComposer.RoundFace(set, 1));
+        Assert.IsNull(SteamwovenKitComposer.RoundFace(set, 74));
+    }
+
+    [TestMethod]
     public void A_face_without_its_glyph_or_with_one_of_another_size_is_not_drawn_from_the_kit()
     {
         // ARC-UI-3096 (AC1): the plate alone would be a button without its symbol, so the whole button stays the generated or legacy art.

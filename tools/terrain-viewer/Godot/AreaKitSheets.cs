@@ -5,7 +5,7 @@ namespace Arcanum.TerrainViewer;
 /// <summary>
 /// ARC-UI-3035 (census G06 to G10): the kit sheets the character sheet's pages lay over the kit's background (<c>backdrop.char_maint</c> of ARC-UI-2461) in place of their own panel arts 29, 30, 31 and 567. The bar panel publishes
 /// the sheets of the set (the table's size at the step) exactly while it draws the character window's kit background under the open window; the pages read them as they read the window zone (one bar panel lives at a time) and redraw on
-/// <see cref="Changed"/>. A page whose sheet is not here draws its own art as before; nothing is published without a complete kit background, with the HD option off or after the window closes.
+/// <see cref="Changed"/>. ARC-UI-3320: with the sheets go the faces of the pages' round buttons (<see cref="RoundFace"/>). A page whose sheet is not here draws its own art as before; nothing is published without a complete kit background, with the HD option off or after the window closes.
 /// </summary>
 internal static class AreaKitSheets
 {
@@ -20,12 +20,27 @@ internal static class AreaKitSheets
     /// <summary>The sheets shown by the kit changed; the pages redraw.</summary>
     internal static event Action? Changed;
 
-    internal static void Publish(IReadOnlyDictionary<int, Texture2D>? sheets)
+    private static readonly Dictionary<int, Texture2D[]> HeldRound = [];
+
+    /// <summary>
+    /// ARC-UI-3320: the kit face of the round button the page shows with <paramref name="art"/> in the look of <paramref name="frame"/> (the original's frame order: 0 idle, 1 pressed, 2 hover; a state the set lacks is the idle face), or null (the button
+    /// keeps the art's own frame). The faces are straight-alpha textures of the master's size, cut to the ring's circle; they are drawn through the round-part layer.
+    /// </summary>
+    internal static Texture2D? RoundFace(int art, int frame) =>
+        HeldRound.TryGetValue(art, out var faces) ? faces[Math.Clamp(frame, 0, faces.Length - 1)] : null;
+
+    /// <summary>The arts whose round button draws from the kit now, for the self-test.</summary>
+    internal static IReadOnlyCollection<int> RoundShownForSelfTest => [.. HeldRound.Keys.Order()];
+
+    /// <summary>Publishes the sheets and, with them, the round buttons' faces (three textures each, idle, pressed, hover); null clears them.</summary>
+    internal static void Publish(IReadOnlyDictionary<int, Texture2D>? sheets, IReadOnlyDictionary<int, Texture2D[]>? rounds = null)
     {
-        var same = Held.Count == (sheets?.Count ?? 0) && (sheets is null || sheets.All(pair => Held.TryGetValue(pair.Key, out var held) && ReferenceEquals(held, pair.Value)));
+        var same = Held.Count == (sheets?.Count ?? 0) && (sheets is null || sheets.All(pair => Held.TryGetValue(pair.Key, out var held) && ReferenceEquals(held, pair.Value)))
+            && HeldRound.Count == (rounds?.Count ?? 0) && (rounds is null || rounds.All(pair => HeldRound.TryGetValue(pair.Key, out var held) && held.SequenceEqual(pair.Value)));
         if (same) return;
-        Held.Clear();
+        Held.Clear(); HeldRound.Clear();
         if (sheets is not null) foreach (var pair in sheets) Held[pair.Key] = pair.Value;
+        if (rounds is not null) foreach (var pair in rounds) HeldRound[pair.Key] = pair.Value;
         Changed?.Invoke();
     }
 }

@@ -23,7 +23,8 @@ public partial class TerrainViewerApp
         KitCharacter = new(0.3f, 0.3f, 0.3f), KitSkillsSheet = new(0.8f, 0.2f, 0.2f), KitTechSheet = new(0.2f, 0.8f, 0.2f), KitSpellsSheet = new(0.2f, 0.2f, 0.8f), KitSchemesSheet = new(0.8f, 0.8f, 0.2f),
         KitLogSide = new(0.1f, 0.3f, 0.7f), KitLogBook = new(0.7f, 0.4f, 0.1f), KitSchematic = new(0.1f, 0.5f, 0.3f),
         KitSaveTop = new(0.85f, 0.45f, 0.65f), KitSaveBody = new(0.35f, 0.65f, 0.25f), KitSaveBottom = new(0.25f, 0.35f, 0.75f), KitPremadeBody = new(0.6f, 0.25f, 0.55f), KitNewCharBody = new(0.25f, 0.6f, 0.6f),
-        KitFixture = new(0.95f, 0.95f, 0.2f), KitHardware = new(0.5f, 0.45f, 0.3f);
+        KitFixture = new(0.95f, 0.95f, 0.2f), KitHardware = new(0.5f, 0.45f, 0.3f),
+        KitRound = new(0.1f, 0.9f, 0.6f), KitRoundPressed = new(0.9f, 0.1f, 0.9f), KitRoundHover = new(0.6f, 0.95f, 0.9f);
 
     /// <summary>The synthetic kit: part, master size and colour. The strips are the manifest's provisional 150 and 570 px; the caps are 120 px wide.</summary>
     private static IReadOnlyList<(string Id, int Width, int Height, Color Colour)> SyntheticKitParts { get; } =
@@ -62,6 +63,13 @@ public partial class TerrainViewerApp
         ("backdrop.createcharacterbase", 2880, 1440, KitNewCharBody),
         // ARC-UI-3098: the fixtures, flat (a part the windows draw at its place is the one colour; ARC_STEAMWOVEN_KIT_FIXTURES=DIR takes the real ones of tools/steamwoven_ui/fixtures.py from a baked root for a look capture).
         .. SteamwovenKitTable.FixtureUnits.Select(pair => (pair.Key, SteamwovenKitTable.MasterOf(pair.Value.Width), SteamwovenKitTable.MasterOf(pair.Value.Height), KitFixture)),
+        // ARC-UI-3320: the 28 round buttons of the sheet's pages (#3204): idle, pressed and hover face, flat (the layer cuts them to the ring's circle), at about 3.5 master px to the unit on the 6 px grid, and the empty glyph.
+        .. SteamwovenKitTable.RoundFaces.SelectMany(pair =>
+        {
+            var part = AreaKitRoundParts.Of(pair.Key)!.Value;
+            var (width, height) = (6 * (int)Math.Round(part.Width * 3.5 / 6), 6 * (int)Math.Round(part.Height * 3.5 / 6));
+            return new (string Id, int Width, int Height, Color Colour)[] { (pair.Value, width, height, KitRound), (pair.Value + "_pressed", width, height, KitRoundPressed), (pair.Value + "_hover", width, height, KitRoundHover), ("glyph." + pair.Value["plate.".Length..], width, height, KitGlyph) };
+        }),
     ];
 
     /// <summary>Writes the synthetic set of <paramref name="step"/> under <paramref name="root"/> (parts named in <paramref name="without"/> left out, their records too).</summary>
@@ -549,11 +557,14 @@ public partial class TerrainViewerApp
     /// ARC-UI-3035 (census G06 to G09; the NPC sheet G10 is the same window in the same interface mode, read-only): the open sheet takes the kit's character backdrop, and each page lays its kit sheet over it, read back by pixel, in
     /// place of its own panel art (29, 30, 31, 567); the sheets go with the window. With <paramref name="kitSheets"/> false the set lacks the four sheets: the background is still the kit's and every page keeps its own art (the fallback).
     /// </summary>
-    private async Task CheckKitSheetPagesAsync(AreaGameBarPanel panel, string tag, Func<int, Task> frames, Action<bool, string> require, bool kitSheets = true)
+    private async Task CheckKitSheetPagesAsync(AreaGameBarPanel panel, string tag, Func<int, Task> frames, Action<bool, string> require, bool kitSheets = true, bool kitRounds = true)
     {
         OpenSheet(); await frames(5);
         require(SheetOpen && panel.KitForSelfTest.Background is [{ PartId: "backdrop.char_maint" }], $"[{tag}] the open sheet takes the kit's character backdrop (got {string.Join(",", panel.KitForSelfTest.Background.Select(draw => draw.PartId))})");
         require(kitSheets ? AreaKitSheets.ShownForSelfTest.SequenceEqual([29, 30, 31, 567]) : AreaKitSheets.ShownForSelfTest.Count == 0, $"[{tag}] the page sheets are {(kitSheets ? "the kit's" : "left to the pages' own art")} (got {string.Join(",", AreaKitSheets.ShownForSelfTest)})");
+        // ARC-UI-3320: the kit's round-button faces are published with the sheets while the set holds them: all 28 buttons, or none when the set has no plate for any.
+        require(kitRounds ? AreaKitSheets.RoundShownForSelfTest.SequenceEqual(SteamwovenKitTable.RoundFaces.Keys.Order()) : AreaKitSheets.RoundShownForSelfTest.Count == 0,
+            $"[{tag}] the round buttons' faces are {(kitRounds ? "the kit's, all 28" : "none (the set has no plate)")} (got {AreaKitSheets.RoundShownForSelfTest.Count})");
         var view = _sheetPanel!.ArtViewForSelfTest!;
         // A corner of the page's rectangle holds no text or button: the probe reads the sheet colour of the page's kit part.
         var pages = new (AreaSheetTab Tab, string Name, Func<bool> Visible, Func<bool> Shown, Func<double, double, Vector2> Point, Color Colour)[]
@@ -580,10 +591,33 @@ public partial class TerrainViewerApp
             require(rounds.SequenceEqual(expectedRounds), $"[{tag}] the {page.Name} page draws its round buttons {(kitSheets ? "through the round-part layer" : "as they are")} (got {string.Join(",", rounds)})");
             using var shot = GetViewport().GetTexture().GetImage();
             var ratio = new Vector2(shot.GetWidth(), shot.GetHeight()) / GetViewport().GetVisibleRect().Size;
-            var at = page.Point(3, 321);
-            var probe = shot.GetPixel(Math.Clamp((int)(at.X * ratio.X), 0, shot.GetWidth() - 1), Math.Clamp((int)(at.Y * ratio.Y), 0, shot.GetHeight() - 1));
+            Color PixelAt(Vector2 point) => shot.GetPixel(Math.Clamp((int)(point.X * ratio.X), 0, shot.GetWidth() - 1), Math.Clamp((int)(point.Y * ratio.Y), 0, shot.GetHeight() - 1));
+            var probe = PixelAt(page.Point(3, 321));
             require(Near(probe, page.Colour) == kitSheets, $"[{tag}] the {page.Name} page's pixels are {(kitSheets ? "" : "not ")}its kit sheet's colour (got {probe})");
-            await CaptureHudAsync("steamwoven-" + tag + "-sheet-" + page.Name + (kitSheets ? "" : "-own"), frames);
+            // ARC-UI-3320: over the kit's sheet and the kit's plates the middle of a round button is its plate's colour (the selected one, the first of its row, is its pressed face), a corner of its art's rectangle is cut away (not the plate's colour);
+            // otherwise (no kit sheet, or a set without the plates) it is the art's own frame, never the flat colour.
+            const int selected = 0;
+            List<(int Art, (int X, int Y) Place)> tabs = page.Name switch
+            {
+                "skills" => [.. Enumerable.Range(0, AreaCharacterSheetPagesLayout.Groups).Select(group => (AreaCharacterSheetPagesLayout.GroupTabArtBase + group, AreaCharacterSheetPagesLayout.GroupTab(group)))],
+                "tech" => [.. Enumerable.Range(0, AreaCharacterSheetPagesLayout.Disciplines).Select(discipline => (AreaCharacterSheetPagesLayout.DisciplineArtBase + discipline, AreaCharacterSheetPagesLayout.DisciplineTab(discipline)))],
+                "spells" => [.. Enumerable.Range(0, AreaCharacterSheetSpellsLayout.Colleges).Select(college => (AreaCharacterSheetSpellsLayout.CollegeArt(college), AreaCharacterSheetSpellsLayout.CollegeTab(college)))],
+                _ => [],
+            };
+            // A look capture (ARC_STEAMWOVEN_KIT_LOOK) puts the real plates in place of the flat colours, so the colour reads are skipped.
+            if (tabs.Count > 0 && System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_LOOK") is not { Length: > 0 })
+            {
+                Vector2 Middle(int index) { var part = AreaKitRoundParts.Of(tabs[index].Art)!.Value; return page.Point(tabs[index].Place.X + part.Cx, tabs[index].Place.Y + part.Cy); }
+                var drawsKit = kitSheets && kitRounds;
+                require(Near(PixelAt(Middle(1)), KitRound) == drawsKit, $"[{tag}] the {page.Name} page's second round button is {(drawsKit ? "" : "not ")}the kit's idle face (got {PixelAt(Middle(1))})");
+                require(Near(PixelAt(Middle(selected)), KitRoundPressed) == drawsKit, $"[{tag}] the {page.Name} page's selected round button is {(drawsKit ? "" : "not ")}the kit's pressed face (got {PixelAt(Middle(selected))})");
+                if (drawsKit)
+                {
+                    var corner = tabs[1];
+                    require(!Near(PixelAt(page.Point(corner.Place.X + 0.5, corner.Place.Y + 0.5)), KitRound), $"[{tag}] the {page.Name} page's round button is cut to its circle (the art's corner is not the plate's colour)");
+                }
+            }
+            await CaptureHudAsync("steamwoven-" + tag + "-sheet-" + page.Name + (!kitSheets ? "-own" : kitRounds ? "" : "-roundless"), frames);
         }
         require(SteamwovenKitStore.ResidentForSelfTest.Count(path => System.IO.Path.GetFileName(path).StartsWith("sheet.", StringComparison.Ordinal)) == (kitSheets ? 4 : 0), $"[{tag}] the open sheet holds {(kitSheets ? "its four kit sheets" : "no kit sheet")} in memory");
         EndSheet(); await frames(3);
@@ -689,6 +723,7 @@ public partial class TerrainViewerApp
         var noMapRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-nomap-").FullName;
         var fixturelessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-fixtureless-").FullName;
         var noGlyphRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-noglyph-").FullName;
+        var roundlessRoot = System.IO.Directory.CreateTempSubdirectory("arc-steamwoven-kit-roundless-").FullName;
         var savedHd = _gameSettings.HdInterface;
         var done = new HashSet<(string, SteamwovenStep)>();
         void Ensure(string where, string folder, SteamwovenStep step, params string[] without)
@@ -864,6 +899,12 @@ public partial class TerrainViewerApp
                 panel.Relayout();
                 await frames(4);
                 await CheckKitSheetPagesAsync(panel, tag, frames, require, kitSheets: false);
+                // ARC-UI-3320: a set whose round plates are missing keeps its sheets and every round button draws the art's own frame through the layer (ARC-UI-3101), no face of the kit.
+                Ensure("roundless", roundlessRoot, step, [.. SteamwovenKitTable.RoundFaces.Values.SelectMany(id => new[] { id, id + "_pressed", id + "_hover", "glyph." + id["plate.".Length..] })]);
+                SteamwovenKitStore.UseRoot(roundlessRoot);
+                panel.Relayout();
+                await frames(4);
+                await CheckKitSheetPagesAsync(panel, tag, frames, require, kitRounds: false);
                 // ARC-UI-3037: the covered windows draw none of their own background art over the kit's, and all of it without.
                 SteamwovenKitStore.UseRoot(root);
                 panel.Relayout();
@@ -936,7 +977,7 @@ public partial class TerrainViewerApp
             SyncInterfaceHd();
             panel.Relayout();
             await frames(3);
-            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, noMapRoot, backdroplessRoot, noGlyphRoot, fixturelessRoot })
+            foreach (var folder in new[] { root, fallbackRoot, sheetlessRoot, roundlessRoot, noMapRoot, backdroplessRoot, noGlyphRoot, fixturelessRoot })
                 try { System.IO.Directory.Delete(folder, true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { GD.Print("ARC-UI-2461 synthetic kit not removed: " + folder); }
         }
     }
