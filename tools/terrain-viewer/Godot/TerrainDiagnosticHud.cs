@@ -120,6 +120,7 @@ public partial class TerrainDiagnosticHud : CanvasLayer
         if (_failure is null) return;
         _failure.Text = _failureText ?? string.Empty;
         _failure.Visible = _failureText is not null && !PanelShown;
+        ApplyLeftInset();
     }
 
     // ARC-INPUT-003: a short notice (the last reserved key) shown in the sticky header, above the scrolled detail, so it
@@ -138,17 +139,28 @@ public partial class TerrainDiagnosticHud : CanvasLayer
         ResizeForViewport();
     }
 
+    // ARC-UI-024: the follower frames' right edge; the panel and the failure line take it while they are shown.
+    private float _leftInset;
+
     /// <summary>ARC-UI-024: starts the panel right of the follower frames down the window's left edge (the window x of their right
     /// edge; 0 without them), which would otherwise cover its left end.</summary>
     internal void SetLeftInset(float inset)
     {
-        if (_panel is null || _panel.OffsetLeft == 16 + inset) return;
-        _panel.OffsetLeft = 16 + inset;
-        if (_failure is not null) _failure.OffsetLeft = 16 + inset;
+        _leftInset = inset;
+        ApplyLeftInset();
     }
 
-    /// <summary>Self-test (ARC-UI-1994): the left inset last set by <see cref="SetLeftInset"/>.</summary>
-    internal float LeftInsetForSelfTest => _panel is null ? 0 : _panel.OffsetLeft - 16;
+    // ARC-UI-3419: moving a hidden panel still lays out its long wrapped status text again (about 10 ms in the frame after every window open and
+    // close, when the follower frames leave and come back), so a hidden control takes the inset when it is shown.
+    private void ApplyLeftInset()
+    {
+        var left = 16 + _leftInset;
+        if (_panel is { Visible: true } panel && panel.OffsetLeft != left) panel.OffsetLeft = left;
+        if (_failure is { Visible: true } failure && failure.OffsetLeft != left) failure.OffsetLeft = left;
+    }
+
+    /// <summary>Self-test (ARC-UI-1994): the shown panel's left inset; a hidden panel's is the one last set by <see cref="SetLeftInset"/>.</summary>
+    internal float LeftInsetForSelfTest => _panel is { Visible: true } panel ? panel.OffsetLeft - 16 : _leftInset;
 
     private void ResizeForViewport()
     {
