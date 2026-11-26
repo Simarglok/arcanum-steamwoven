@@ -311,7 +311,7 @@ public partial class TerrainCanvas
     internal ActorDiagnosticPlacementInput? AreaActorPlacementForSelfTest => _areaActorPlacement;
     /// <summary>ARC-WORLD-1149: where the hero is drawn now, for the light a check reads at a cell (null: no area is shown).</summary>
     internal ActorDiagnosticPlacementInput? AreaActorPlacementNow => _areaActorPlacement;
-    private (StationaryLightLattice Lattice, AreaCarriedBinding Binding)? _areaCarriedLattice;
+    private (StationaryLightLattice Lattice, byte[] Lighter, byte[] Darker, AreaCarriedBinding Binding)? _areaCarriedLattice;
     /// <summary>ARC-DEV-335 (V7d, ledger LT12): the lighting with the critters' carried lights, made from the hero's placement at each
     /// submission (the hero's light moves with it); null draws no carried light. The terrain, the bodies and the actor take it from the next
     /// submission.</summary>
@@ -323,38 +323,60 @@ public partial class TerrainCanvas
     private AreaCarriedBinding AreaCarried(StationaryLightLattice lattice)
     {
         if (_areaCarriedLattice is { } known && ReferenceEquals(known.Lattice, lattice)) return known.Binding;
-        DisposeAreaCarried();
-        ImageTexture Texture(IReadOnlyList<byte> rows)
+        var (lighter, darker, bounds) = LatticeRows(lattice);
+        // The carried lattice is made again at every submission, mostly with the rows already shown.
+        if (_areaCarriedLattice is { } shown && SameSize(shown.Binding.Lattice, bounds))
         {
-            using var image = Image.CreateFromData(lattice.Columns, lattice.Rows, false, Image.Format.Rgba8, rows.ToArray());
-            return ImageTexture.CreateFromImage(image);
+            Rewrite(shown.Binding.Lighter, bounds, shown.Lighter, lighter); Rewrite(shown.Binding.Darker, bounds, shown.Darker, darker);
+            var kept = shown.Binding.Lattice == bounds ? shown.Binding : shown.Binding with { Lattice = bounds };
+            _areaCarriedLattice = (lattice, lighter, darker, kept); return kept;
         }
-        var binding = new AreaCarriedBinding(Texture(lattice.Lighter), Texture(lattice.Darker), new(lattice.FirstColumn, lattice.FirstRow, lattice.Columns, lattice.Rows));
-        _areaCarriedLattice = (lattice, binding); return binding;
+        DisposeAreaCarried();
+        var binding = new AreaCarriedBinding(LatticeTexture(bounds, lighter), LatticeTexture(bounds, darker), bounds);
+        _areaCarriedLattice = (lattice, lighter, darker, binding); return binding;
     }
     private void DisposeAreaCarried()
     {
         if (_areaCarriedLattice is { } old) { old.Binding.Lighter.Dispose(); old.Binding.Darker.Dispose(); }
         _areaCarriedLattice = null;
     }
-    private (StationaryLightLattice Lattice, AreaLatticeBinding Binding)? _areaLattice;
+    private (StationaryLightLattice Lattice, byte[] Lighter, byte[] Darker, AreaLatticeBinding Binding)? _areaLattice;
     private AreaLatticeBinding AreaLattice(StationaryLightLattice lattice)
     {
         if (_areaLattice is { } known && ReferenceEquals(known.Lattice, lattice)) return known.Binding;
-        DisposeAreaLattice();
-        ImageTexture Texture(IReadOnlyList<byte> rows)
+        var (lighter, darker, bounds) = LatticeRows(lattice);
+        if (_areaLattice is { } shown && SameSize(shown.Binding.Lattice, bounds))
         {
-            using var image = Image.CreateFromData(lattice.Columns, lattice.Rows, false, Image.Format.Rgba8, rows.ToArray());
-            return ImageTexture.CreateFromImage(image);
+            Rewrite(shown.Binding.Lighter, bounds, shown.Lighter, lighter); Rewrite(shown.Binding.Darker, bounds, shown.Darker, darker);
+            var kept = shown.Binding.Lattice == bounds ? shown.Binding : shown.Binding with { Lattice = bounds };
+            _areaLattice = (lattice, lighter, darker, kept); return kept;
         }
-        var binding = new AreaLatticeBinding(Texture(lattice.Lighter), Texture(lattice.Darker), new(lattice.FirstColumn, lattice.FirstRow, lattice.Columns, lattice.Rows));
-        _areaLattice = (lattice, binding); return binding;
+        DisposeAreaLattice();
+        var binding = new AreaLatticeBinding(LatticeTexture(bounds, lighter), LatticeTexture(bounds, darker), bounds);
+        _areaLattice = (lattice, lighter, darker, binding); return binding;
     }
     // Materials still holding the textures keep their own references; this drops the canvas's.
     private void DisposeAreaLattice()
     {
         if (_areaLattice is { } old) { old.Binding.Lighter.Dispose(); old.Binding.Darker.Dispose(); }
         _areaLattice = null;
+    }
+    // ARC-RENDER-3362: a lattice of the size already shown is written into the shown textures (nothing where its rows are the same), so the binding stays and the terrain
+    // items send nothing for it: a new pair of textures made every one of them (hundreds) send its light again, at every submission under a carried light.
+    private static (byte[] Lighter, byte[] Darker, Vector4I Bounds) LatticeRows(StationaryLightLattice lattice) =>
+        (lattice.Lighter.ToArray(), lattice.Darker.ToArray(), new(lattice.FirstColumn, lattice.FirstRow, lattice.Columns, lattice.Rows));
+    private static bool SameSize(Vector4I shown, Vector4I next) => shown.Z == next.Z && shown.W == next.W;
+    private static Image LatticeImage(Vector4I bounds, byte[] rows) => Image.CreateFromData(bounds.Z, bounds.W, false, Image.Format.Rgba8, rows);
+    private static ImageTexture LatticeTexture(Vector4I bounds, byte[] rows)
+    {
+        using var image = LatticeImage(bounds, rows);
+        return ImageTexture.CreateFromImage(image);
+    }
+    private static void Rewrite(ImageTexture texture, Vector4I bounds, byte[] shown, byte[] next)
+    {
+        if (shown.AsSpan().SequenceEqual(next)) return;
+        using var image = LatticeImage(bounds, next);
+        texture.Update(image);
     }
     private Color AreaRoofLight()
     {
