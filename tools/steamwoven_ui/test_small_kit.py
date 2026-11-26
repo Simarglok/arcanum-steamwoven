@@ -400,6 +400,16 @@ class ToneTest(unittest.TestCase):
     def test_the_symbol_is_the_dark_brown_or_the_bright_red(self):
         self.assertEqual([sk.symbolness(*c) for c in ((90, 45, 10), (230, 20, 10), (210, 180, 130))], [1.0, 1.0, 0.0])
 
+    def test_a_lit_symbol_keeps_a_solid_outline_and_has_even_cells_inside(self):
+        part = flat_frame(32, 32, (200, 170, 100))
+        for y in range(8, 24):
+            for x in range(8, 24):
+                part.data[(y * 32 + x) * 4:(y * 32 + x) * 4 + 4] = bytes((230, 20, 10, 255))
+        out = sk.lit_cells(part, (8, 8))   # cells of 4 px
+        self.assertEqual({out.pixel(x, 8)[0] for x in range(8, 24)} | {out.pixel(9, y)[0] for y in range(8, 24)}, {230}, "the outline is solid")
+        self.assertEqual([out.pixel(x, 13)[0] for x in (13, 17, 21)], [230 if (13 // 4 + 13 // 4) % 2 == 0 else 156, 156 if (17 // 4 + 13 // 4) % 2 else 230, 230 if (21 // 4 + 13 // 4) % 2 == 0 else 156])
+        self.assertEqual(out.pixel(2, 2), (200, 170, 100, 255))
+
     def test_a_cell_without_paper_is_an_error(self):
         with self.assertRaises(sk.SmallError):
             sk.toned(flat_frame(4, 4, (90, 45, 10)), (1.0, 1.0, 1.0))

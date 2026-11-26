@@ -495,6 +495,9 @@ STRAY = 3              # a lone solid pixel left by the keying (a corner of the 
 PAPER_WARM = 25        # an original cell whose red exceeds its blue by this much is parchment or symbol; the stone round it is grey
 PAPER_LIGHT = 1.18     # the sheet's tone: the hue of the original sheet's mean colour, this much lighter (light cream; ARC-UI-3272, owner 2026-11-26)
 PAPER_TEXTURE = 0.5    # the share of the generated paper's own light and dark that is kept (the owner asked for a weaker texture)
+LIT_RIM = 2            # master px of the lit symbol's solid outline
+LIT_DARK = 0.68        # the darker cell of a lit symbol, as a share of the bright one's colour
+LIT_SAMPLES = 4        # sub-samples a side for a cell edge inside a master pixel
 PAPER_SHEET = "plate-schem-skills"     # left the idle look, right the lit one
 INK_SHEET = "glyph-schem-arrows"       # left the left arrow, right the right arrow, dark ink on white
 INK_DARK = 70          # an original cell darker than this is ink of the dark state; both states take their colour from those cells
@@ -585,6 +588,23 @@ def toned(cut: Image, target: tuple[float, float, float]) -> Image:
     return out
 
 
+def lit_cells(part: Image, units: tuple[int, int]) -> Image:
+    """A lit symbol as the kit draws one (owner 2026-11-26): a solid outline and inside it even cells, a checker one original cell wide, in two tones of its own colour."""
+    w, h = part.w, part.h
+    red = [part.data[i * 4 + 3] > 0 and symbolness(*part.data[i * 4:i * 4 + 3]) >= 0.5 for i in range(w * h)]
+    out = Image(w, h, bytearray(part.data))
+    n = LIT_SAMPLES
+    for y in range(LIT_RIM, h - LIT_RIM):
+        for x in range(LIT_RIM, w - LIT_RIM):
+            if not all(red[yy * w + xx] for yy in range(y - LIT_RIM, y + LIT_RIM + 1) for xx in range(x - LIT_RIM, x + LIT_RIM + 1)):
+                continue
+            dark = sum((int((x + (i + 0.5) / n) * units[0] / w) + int((y + (j + 0.5) / n) * units[1] / h)) % 2 for j in range(n) for i in range(n)) / (n * n)
+            for k in range(3):
+                o = (y * w + x) * 4 + k
+                out.data[o] = round(out.data[o] * (1.0 - dark * (1.0 - LIT_DARK)))
+    return out
+
+
 def paper_parts(frames: Path, sheet: Image, b: Small) -> dict[str, Image]:
     """The parchment of the schematics button: idle and lit from the two sheet cells, both in the original parchment's place and in the idle outline; pressed is the lit content one original cell lower, as the original moves it."""
     original = read_frame(frames, b, b.frames["idle"])
@@ -595,7 +615,7 @@ def paper_parts(frames: Path, sheet: Image, b: Small) -> dict[str, Image]:
     target = tuple(PAPER_LIGHT * v for v in mean_colour(original, bare))
     idle, lit = (placed(toned(cut_from_magenta(sheet.crop(k * (sheet.w // 2), 0, sheet.w // 2, sheet.h)), target), box, b.units, b.master) for k in (0, 1))
     fit.decontaminate(idle, 255, fit.EDGE_RADIUS)
-    hover = within(lit, idle, idle)
+    hover = within(lit_cells(lit, b.units), idle, idle)
     return {f"plate.{b.name}": idle, f"plate.{b.name}_hover": hover, f"plate.{b.name}_pressed": within(hover, idle, hover, round(b.master[1] / b.units[1])), f"glyph.{b.name}": Image.blank(*b.master)}
 
 
@@ -793,7 +813,7 @@ def owner_of(ident: str) -> Small:
 
 RULES = {
     "rect": "pack-first (owner 2026-11-25): the old HD pack's frame of this state at the master size, opaque (kept by the owner: the stone Add / Remove and the follower arrows)",
-    "paper": "Codex and rules (owner 2026-11-26, ARC-UI-3272): the parchment and symbol drawn alone on magenta, cut along its edge into the original parchment's place; hover = the lit cell in the idle outline, pressed = it one original cell lower",
+    "paper": "Codex and rules (owner 2026-11-26, ARC-UI-3272): the parchment and symbol drawn alone on magenta, cut along its edge into the original parchment's place, the paper toned by rule; hover = the lit cell, its symbol an outline with even cells inside, in the idle outline; pressed = it one original cell lower",
     "ink": "Codex and rules (owner 2026-11-26, ARC-UI-3272): the arrow's ink drawn on white, the alpha taken from it, put in the place of the original's ink; each state in the colour of the original's ink cells",
     "wedge": "by rule (owner 2026-11-26, ARC-UI-3272): the olive Codex plate of #3323 without its symbol, cut to the button's shape (pressed in by the original's own darkening), and a straight-edged triangle of the original's red cells",
     "dome": "by rule (owner 2026-11-25): the accepted round face of #3202 + the brass ring of the sockets (#2481) + the symbol by rule E from the original's own frames, states as in #3202",
