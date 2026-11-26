@@ -4,8 +4,9 @@
 Two sources (`--source`), by size:
 
 * Parts UNDER ABOUT 40 UNITS (the three ringed buttons, 36 to 38 units, and the wells, 22 units): `codex` (owner rule of 2026-11-26, #3272): each state generated large by Codex from the original (and the pack frame as a hint of the
-  materials) on a square canvas of flat grey, registered onto the original's circle (`codex-place`), reduced once to the master; a ringed button's brass takes the tone of the accepted strip brass (#3259, #3260). `pack` keeps the pack cut
-  for comparison.
+  materials) on a square canvas of flat grey, registered onto the original's circle (`codex-place`), reduced once to the master; a ringed button's brass takes the tone of the accepted strip brass (#3259, #3260). A BURNING SIGN (the yellow and
+  green arrows of the wells, the arrows of 9 and 10 on hover and press) keeps Codex's outline only: inside lie the original's cells as even squares (rule E, owner 2026-11-26), a well's outline brought onto the original's smaller share; the red lamp
+  takes the original's fine lattice. Idle signs stay solid. `pack` keeps the pack cut for comparison.
 * The wide button's dome (art 357, 51 units), `--dome`: `pack` is pack-first (rule P): the player's own HD-pack frame of each state; `olive` is the accepted olive plate of #3202 (`masters/plate.combat_button.png`), enlarged to the dome's
   circle, its pressed look the darkening of art 357's own pressed frame (rule E, `button_kit.render_crisp`).
 
@@ -62,6 +63,17 @@ CODEX_FRAME_PX = 8                      # px per art unit of a placed Codex fram
 BRASS_REFS = ("hardware.hud_ring", "hardware.menu_ring")   # the accepted brass of the strips' metal (#3259, #3260): a generated ring takes its tone (it came back yellower and lighter)
 BRASS_INNER = (0.80, 0.84)              # shares of the cut radius: from nothing to the whole tone change (inside lie the black gap and the dome)
 BRASS_DARK = (6.0, 16.0)                # CIE L*: a darker pixel (the ring's outline, the gap) keeps its colour, a lighter one takes the tone
+# The burning signs (owner 2026-11-26): the outline is Codex's, the inside the original's own cells as even squares (rule E, as art 299 of #3270). Idle signs of the buttons stay solid.
+CELLED = {"m_dnbut": ("hover", "pressed"), "m_upbut": ("hover", "pressed"), "combineindicator2": ("idle",), "combineindicator3": ("idle",)}
+LAMP = "combineindicator1"              # the red lamp: the original's fine lattice over the whole lens, Codex's dark rim kept
+LAMP_RIM = (0.84, 0.92)                 # shares of the lens radius: from the cells to the generated rim
+RED_SIGN = (lambda r, g, b: r - g >= 90 and b >= g, lambda r, g, b: ramp(r - g, 60, 110))   # (is it a sign cell of the original, how much of the generated pixel is sign); b >= g leaves out the orange bevel beside the sign
+PALE_RIM = 100                          # a red sign's cell this pale (green channel) on its rim is the bevel's highlight corner, not the sign
+SIGNS = {"m_dnbut": RED_SIGN, "m_upbut": RED_SIGN,
+         "combineindicator2": (lambda r, g, b: r >= 60 and g >= 60, lambda r, g, b: ramp(min(r, g) - b, 50, 110)),
+         "combineindicator3": (lambda r, g, b: g >= 100 and r >= 70, lambda r, g, b: ramp(g, 100, 160))}
+SIGN_REACH = {"plate": 0.66, "picture": 0.80}   # shares of the disc's radius within which a sign lies (outside: the ring, the gloss, the rim)
+CLEAR_REACH = 1.2                       # units round the generated sign of a well that are repainted with the lens (the sign is moved onto the original's smaller share)
 CODEX_PAD = 2                           # art units of flat ground round the piece on its square Codex canvas
 GROUND = school_kit.GROUND
 LABEL_FONT = button_kit.LABEL_FONT
@@ -119,7 +131,8 @@ def note_of(ident: str) -> str:
     if b == DOME and DOMES[0] == "olive":
         what = "the olive plate of #3202 enlarged to the dome of art 357, round alpha" if state == "idle" else "overlay: the darkening of art 357's pressed frame (rule E)"
     elif b != DOME and SOURCES[0] == "codex":
-        what = f"the {state} look of art {b.art} drawn large by Codex (under 40 units), reduced, round alpha"
+        cells = ", its sign filled with the original's cells (rule E)" if uses_cells(b, state) else ""
+        what = f"the {state} look of art {b.art} drawn by Codex (under 40 units), round alpha{cells}"
     else:
         what = f"the old HD pack's {state} frame of art {b.art}, round alpha (pack-first)"
     return f"{what}; ring_button_kit.py, ARC-UI-3269"
@@ -337,6 +350,131 @@ def toned(frame: Image, circle: Circle, source: Stats, target: Stats) -> Image:
     return out
 
 
+# --- the signs as the original's cells --------------------------------------------------------------------------------------------
+
+def share_in(circle: Circle, x: float, y: float) -> float:
+    return math.hypot(x - circle.cx, y - circle.cy) / circle.radius
+
+
+def without_pale_rim(cells: dict[tuple[int, int], tuple[int, int, int]]) -> dict[tuple[int, int], tuple[int, int, int]]:
+    return {(x, y): c for (x, y), c in cells.items() if c[1] < PALE_RIM or all(k in cells for k in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))}
+
+
+def sign_cells(original: Image, circle: Circle, test, reach: float) -> dict[tuple[int, int], tuple[int, int, int]]:
+    """The original's cells of the sign in one disc, and their colours."""
+    cells = {}
+    for y in range(original.h):
+        for x in range(original.w):
+            r, g, b, a = original.data[(y * original.w + x) * 4:(y * original.w + x) * 4 + 4]
+            if a and share_in(circle, x + 0.5, y + 0.5) <= reach and test(r, g, b):
+                cells[(x, y)] = (r, g, b)
+    if not cells:
+        raise RingError("the original frame holds no sign cell")
+    return cells
+
+
+def cell_colour(cells: dict[tuple[int, int], tuple[int, int, int]], x: int, y: int) -> tuple[int, int, int]:
+    """The colour of a cell inside the outline: its own, or (the outline reaches past the original's stair) the nearest sign cell's of the same checker parity, so the lattice stays even."""
+    if (x, y) in cells:
+        return cells[(x, y)]
+    same = [k for k in cells if (k[0] + k[1]) % 2 == (x + y) % 2] or list(cells)
+    return cells[min(same, key=lambda k: ((k[0] - x) ** 2 + (k[1] - y) ** 2, k))]
+
+
+def sign_mask(frame: Image, circle: Circle, metric, reach: float) -> dict[tuple[int, int], float]:
+    """The generated sign of one disc: frame pixel -> how much of it is sign."""
+    scale = frame.h / circle.height
+    mask = {}
+    for y in range(frame.h):
+        for x in range(max(0, int((circle.cx - circle.radius) * scale)), min(frame.w, int((circle.cx + circle.radius) * scale) + 1)):
+            if share_in(circle, (x + 0.5) / scale, (y + 0.5) / scale) <= reach:
+                value = metric(*frame.data[(y * frame.w + x) * 4:(y * frame.w + x) * 4 + 3])
+                if value > 0:
+                    mask[(x, y)] = value
+    if not any(v >= 0.5 for v in mask.values()):
+        raise RingError("the generated frame holds no sign")
+    return mask
+
+
+def box_of(points) -> tuple[float, float, float, float]:
+    xs, ys = [p[0] for p in points], [p[1] for p in points]
+    return min(xs), min(ys), max(xs) + 1, max(ys) + 1
+
+
+def clear_lens(frame: Image, circle: Circle, mask: dict[tuple[int, int], float]) -> None:
+    """The generated sign and its glow painted out of one lens: every pixel near the sign takes the middle colour of the sign-free pixels at its distance from the centre."""
+    scale = frame.h / circle.height
+    reach = int(round(CLEAR_REACH * scale))
+    near = {(x + i, y + j) for (x, y), v in mask.items() if v >= 0.05 for i in range(-reach, reach + 1) for j in range(-reach, reach + 1) if i * i + j * j <= reach * reach}
+    rings: dict[int, list[tuple[int, int, int]]] = {}
+    for y in range(frame.h):
+        for x in range(max(0, int((circle.cx - circle.radius) * scale)), min(frame.w, int((circle.cx + circle.radius) * scale) + 1)):
+            away = math.hypot((x + 0.5) / scale - circle.cx, (y + 0.5) / scale - circle.cy)
+            if away <= circle.radius * 0.95 and (x, y) not in near:
+                rings.setdefault(int(away * 2), []).append(tuple(frame.data[(y * frame.w + x) * 4:(y * frame.w + x) * 4 + 3]))
+    middle = {k: tuple(sorted(c[i] for c in v)[len(v) // 2] for i in range(3)) for k, v in rings.items() if len(v) >= 8}
+    if not middle:
+        raise RingError("no sign-free lens to repaint from")
+    for x, y in near:
+        if not (0 <= x < frame.w and 0 <= y < frame.h):
+            continue
+        away = math.hypot((x + 0.5) / scale - circle.cx, (y + 0.5) / scale - circle.cy)
+        if away > circle.radius * 0.9:
+            continue
+        o = (y * frame.w + x) * 4
+        frame.data[o:o + 3] = bytes(middle[min(middle, key=lambda k: abs(k + 0.5 - away * 2))])
+
+
+def blend(frame: Image, x: int, y: int, colour: tuple[int, int, int], share: float) -> None:
+    o = (y * frame.w + x) * 4
+    frame.data[o:o + 3] = bytes(int(round(colour[i] * share + frame.data[o + i] * (1.0 - share))) for i in range(3))
+
+
+def celled(frame: Image, original: Image, b: Button) -> Image:
+    """A generated frame with its burning sign filled by the original's cells as even squares: the outline is the generated one; a well's outline is moved and scaled onto the box of the original's cells (the generated arrow is larger)."""
+    test, metric = SIGNS[b.name]
+    reach = SIGN_REACH[b.kind]
+    out = Image(frame.w, frame.h, bytearray(frame.data))
+    for circle in b.circles:
+        scale = frame.h / circle.height
+        cells = sign_cells(original, circle, test, reach)
+        if SIGNS[b.name] is RED_SIGN:
+            cells = without_pale_rim(cells)
+        mask = sign_mask(frame, circle, metric, reach)
+        if b.kind == "picture":
+            sx0, sy0, sx1, sy1 = box_of([k for k, v in mask.items() if v >= 0.5])
+            tx0, ty0, tx1, ty1 = (v * scale for v in box_of(cells))
+            clear_lens(out, circle, mask)
+            placed = {}
+            for y in range(int(ty0), int(math.ceil(ty1))):
+                for x in range(int(tx0), int(math.ceil(tx1))):
+                    source = (int(sx0 + (x + 0.5 - tx0) * (sx1 - sx0) / (tx1 - tx0)), int(sy0 + (y + 0.5 - ty0) * (sy1 - sy0) / (ty1 - ty0)))
+                    if mask.get(source, 0) > 0:
+                        placed[(x, y)] = mask[source]
+            mask = placed
+        for (x, y), value in mask.items():
+            blend(out, x, y, cell_colour(cells, int(x // scale), int(y // scale)), value)
+    return out
+
+
+def latticed(frame: Image, original: Image, b: Button) -> Image:
+    """The red lamp: the original's cells over each lens, running out into the generated rim."""
+    out = Image(frame.w, frame.h, bytearray(frame.data))
+    for circle in b.circles:
+        scale = frame.h / circle.height
+        for y in range(frame.h):
+            for x in range(max(0, int((circle.cx - circle.radius) * scale)), min(frame.w, int((circle.cx + circle.radius) * scale) + 1)):
+                share = share_in(circle, (x + 0.5) / scale, (y + 0.5) / scale)
+                k = (int(y // scale) * original.w + int(x // scale)) * 4
+                if share < LAMP_RIM[1] and original.data[k + 3]:
+                    blend(out, x, y, tuple(original.data[k:k + 3]), 1.0 - ramp(share, *LAMP_RIM))
+    return out
+
+
+def uses_cells(b: Button, state: str) -> bool:
+    return b.name == LAMP or state in CELLED.get(b.name, ())
+
+
 # --- the Codex frames -------------------------------------------------------------------------------------------------------------
 
 STATE_WORDS = {"idle": "IDLE", "hover": "HOVER (the pointer is over it)", "pressed": "PRESSED (held down)"}
@@ -522,6 +660,9 @@ def button_parts(local_root: Path, frames: Path, b: Button, dome: str, source: s
     def frame_of(state: str) -> Image:
         if b != DOME and source == "codex":
             frame = pngio.read(codex_frame(local_root, b, state))
+            if uses_cells(b, state):
+                original = original_frame(frames, b, b.frames[state])
+                frame = latticed(frame, original, b) if b.name == LAMP else celled(frame, original, b)
             return toned(frame, b.circles[0], *tone) if tone else frame
         return pack_frame(local, b, state)[0]
 
@@ -553,6 +694,8 @@ def record_of(local_root: Path, frames: Path, b: Button, ident: str, dome: str, 
         sources[f"outbox/{CODEX_BATCH}/{item}.png"] = {"sha256": button_kit.sha256_file(outbox / f"{item}.png"), "generation_record": str(generation.relative_to(local_root)) if generation.is_file() else "MISSING",
                                                       "generation_sha256": button_kit.sha256_file(generation) if generation.is_file() else None}
         sources[f"work/{CODEX_BATCH}/placed/{b.name}-f{b.frames[state]}"] = {"sha256": button_kit.sha256_file(codex_frame(local_root, b, state))}
+        if uses_cells(b, state):
+            sources[f"census/{b.folder}/f{b.frames[state]}"] = {"sha256": button_kit.sha256_file(frames / b.folder / f"f{b.frames[state]}.png"), "use": "the sign's cells (rule E)"}
         if b in RINGED:
             if state != "idle":   # the idle frame sets the ring's tone change for every state
                 sources[f"work/{CODEX_BATCH}/placed/{b.name}-f{b.frames['idle']}"] = {"sha256": button_kit.sha256_file(codex_frame(local_root, b, "idle")), "use": "brass tone of the ring"}

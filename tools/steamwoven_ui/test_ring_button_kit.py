@@ -28,6 +28,23 @@ def discs(b: rk.Button, scale: int, colour, outside=OUTSIDE, alpha: int = 255) -
     return image
 
 
+SIGN_COLOURS = {"m_dnbut": (255, 0, 0), "m_upbut": (255, 0, 0), "combineindicator1": (200, 30, 30), "combineindicator2": (220, 220, 60), "combineindicator3": (100, 200, 90)}
+
+
+def signed(b: rk.Button, scale: int, half: float, alpha: int = 255, checker: bool = False) -> pngio.Image:
+    """Dark discs, each with a square sign of `half` units round its centre; `checker`: every other unit cell of the sign is dimmer (the original's dither)."""
+    image = discs(b, scale, (10, 10, 4), alpha=alpha)
+    colour = SIGN_COLOURS.get(b.name, (200, 30, 30))
+    for c in b.circles:
+        for y in range(image.h):
+            for x in range(image.w):
+                ux, uy = (x + 0.5) / scale, (y + 0.5) / scale
+                if abs(ux - c.cx) <= half and abs(uy - c.cy) <= half:
+                    dim = checker and (int(ux) + int(uy)) % 2
+                    image.data[(y * image.w + x) * 4:(y * image.w + x) * 4 + 4] = bytes((*(tuple(v * 3 // 4 for v in colour) if dim else colour), 255))
+    return image
+
+
 def tree(folder: str, buttons) -> Path:
     """`<folder>/local/steamwoven-ui` with the pack frames (4x), the original frames and the olive plate; returns that folder."""
     root = Path(folder) / "local" / "steamwoven-ui"
@@ -39,7 +56,8 @@ def tree(folder: str, buttons) -> Path:
         frames.mkdir(parents=True)
         for number in b.frames.values():
             pngio.write(pack / "interface" / f"{b.name}-f{number:03d}.png", discs(b, 4, COLOURS[number]))
-            pngio.write(frames / f"f{number}.png", discs(b, 1, COLOURS[number], alpha=0))
+            lit = any(rk.uses_cells(b, s) and n == number for s, n in b.frames.items())
+            pngio.write(frames / f"f{number}.png", signed(b, 1, 3.0, alpha=0, checker=True) if lit else discs(b, 1, COLOURS[number], alpha=0))
             rows.append(f"x\tbuttons\t{b.name}\t{number}\tinterface/{b.name}-f{number:03d}.png\t1\t1\t4\t4\ts\t\tunreviewed\tabc123def456")
     (pack / "index.tsv").write_text("\n".join(rows) + "\n", encoding="utf-8")
     (root / "masters").mkdir()
@@ -176,6 +194,41 @@ class BrassTests(unittest.TestCase):
         self.assertTrue(all(abs(a - e) <= 2 for a, e in zip(ring[:3], (120, 90, 40))), ring)
 
 
+class CellTests(unittest.TestCase):
+    def test_a_wells_sign_takes_the_originals_cells_and_share(self):
+        b = rk.INDICATORS[1]
+        scale = rk.CODEX_FRAME_PX
+        original = signed(b, 1, 3.0, alpha=0, checker=True)
+        out = rk.celled(signed(b, scale, 5.0), original, b)
+        for circle in b.circles:
+            cells = rk.sign_cells(original, circle, rk.SIGNS[b.name][0], rk.SIGN_REACH[b.kind])
+            x0, y0, x1, y1 = rk.box_of(cells)
+            for cx, cy in ((x0, y0), (x0 + 1, y0), (x1 - 1, y1 - 1)):
+                self.assertEqual(at(out, int((cx + 0.5) * scale), int((cy + 0.5) * scale))[:3], cells[(cx, cy)], (cx, cy))
+            self.assertNotEqual(cells[(x0, y0)], cells[(x0 + 1, y0)])                      # the dither survives
+            self.assertEqual(at(out, int((x0 - 1.0) * scale), int(circle.cy * scale))[:3], (10, 10, 4))   # the larger generated sign is painted out
+
+    def test_a_buttons_sign_keeps_the_generated_outline(self):
+        b = rk.RINGED[1]
+        scale = rk.CODEX_FRAME_PX
+        out = rk.celled(signed(b, scale, 4.0), signed(b, 1, 3.0, alpha=0, checker=True), b)
+        c = b.circles[0]
+        self.assertIn(at(out, int((c.cx - 3.8) * scale), int(c.cy * scale))[:3], ((255, 0, 0), (191, 0, 0)))
+        self.assertEqual(at(out, int((c.cx - 5.0) * scale), int(c.cy * scale))[:3], (10, 10, 4))
+
+    def test_the_pale_corner_of_a_red_signs_bevel_is_left_out(self):
+        cells = {(x, y): (200, 0, 0) for x in range(3) for y in range(3)}
+        cells[(1, 1)] = cells[(2, 2)] = (255, 150, 150)
+        kept = rk.without_pale_rim(cells)
+        self.assertIn((1, 1), kept)          # the highlight in the middle stays
+        self.assertNotIn((2, 2), kept)
+        self.assertFalse(rk.RED_SIGN[0](176, 86, 73))      # the orange bevel is no sign cell
+
+    def test_only_burning_signs_and_the_lamp_take_cells(self):
+        self.assertTrue(rk.uses_cells(rk.RINGED[1], "hover") and rk.uses_cells(rk.INDICATORS[0], "idle"))
+        self.assertFalse(rk.uses_cells(rk.RINGED[1], "idle") or rk.uses_cells(rk.RINGED[0], "pressed") or rk.uses_cells(rk.DOME, "idle"))
+
+
 class BuildTests(unittest.TestCase):
     def test_the_pack_build_writes_every_part_and_its_record(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -199,7 +252,7 @@ class BuildTests(unittest.TestCase):
                 if b == rk.DOME:
                     continue
                 for state, number in b.frames.items():
-                    pngio.write(placed / f"{b.name}-f{number}.png", discs(b, rk.CODEX_FRAME_PX, (230, 180, 40)))
+                    pngio.write(placed / f"{b.name}-f{number}.png", signed(b, rk.CODEX_FRAME_PX, 5.0) if rk.uses_cells(b, state) else discs(b, rk.CODEX_FRAME_PX, (230, 180, 40)))
                     pngio.write(outbox / f"{rk.codex_item(b, state)}.png", discs(b, 1, (230, 180, 40)))
             out = Path(folder) / "out"
             with contextlib.redirect_stdout(io.StringIO()):
