@@ -144,7 +144,7 @@ public partial class LauncherPanel : CanvasLayer
         // ARC-RENDER-3420: the engine's separate rendering thread; Play restarts the game once to apply it.
         _renderThread = new CheckBox
         {
-            Name = "RenderThread", Text = "Separate rendering thread (experimental): more frames, may crash; Play restarts the game once", FocusMode = Control.FocusModeEnum.None,
+            Name = "RenderThread", Text = "Separate rendering thread (experimental, may crash); restarts once", FocusMode = Control.FocusModeEnum.None,
             Modulate = dark,
         };
         _renderThread.Toggled += on => { if (!_rendering) RenderThreadRequested?.Invoke(on); };
