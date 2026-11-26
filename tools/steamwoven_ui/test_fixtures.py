@@ -85,6 +85,21 @@ class FixtureTests(unittest.TestCase):
                 for found, size in ((row, part.width), (column, part.height)):
                     self.assertTrue(all(c < 1 or c > size - 1 for c in found), f"{ident} {variant}: {found}")
 
+    def test_every_grid_s_lines_meet_the_original_s(self) -> None:
+        """ARC-UI-3342: the cell well laid as the viewer lays it gives the first and last grey line of the original's art, per grid, read from the player's arts 221, 223, 234 and 235 (numbers only)."""
+        cell = fixtures.draw("grid.inventory_cells")
+        (across,), (down,) = (_line_centres([cell.pixel(x, cell.h // 2)[:3] for x in range(cell.w)], cell.w / 32),
+                              _line_centres([cell.pixel(cell.w // 2, y)[:3] for y in range(cell.h)], cell.h / 32))
+        # (grid, corner, cells, the viewer draws the far edges, the original's first and last line column, first and last line row: window unit indexes)
+        for name, (x0, y0), (columns, rows), far, xs, ys in (("pack", (368, 8), (10, 12), True, (399, 687), (39, 391)), ("doll", (23, 107), (10, 9), False, (54, 310), (138, 362)),
+                                                             ("loot", (8, 136), (10, 8), True, (39, 327), (167, 391)), ("barter", (8, 168), (10, 7), True, (39, 327), (199, 391))):
+            for origin, count, centre, (first, last) in ((x0, columns, across, xs), (y0, rows, down, ys)):
+                laid = [origin + 32 * k + centre for k in range(count if far else count - 1)]
+                original = [unit + 0.5 for unit in range(first, last + 1, 32)]
+                self.assertEqual(len(laid), len(original), name)
+                for ours, theirs in zip(laid, original):
+                    self.assertAlmostEqual(ours, theirs, delta=0.1, msg=name)
+
     def test_build_writes_the_masters(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             written = fixtures.build(Path(folder), "flat", {"fixture.count_pit", "grid.inventory_cells"})
