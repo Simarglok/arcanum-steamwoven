@@ -90,6 +90,26 @@ install's `.incoming-*`, as DISPOSABLE with its size; `./arcanum clean --apply` 
 and refuses while a package run is going (ARC-DEV-055, [build retention](build-retention.md)). Packages
 are local: the tool never commits, uploads or publishes them; giving a copy to a tester is the owner's own private act.
 
+## Profiling package (ARC-DEV-3379)
+
+    ./arcanum package mac --profiling     # for the owner's own measurements; never distributed
+
+The same flow as `package mac` (fetch, `git archive`, restore, build, import, export, checks, menu smoke, install), with
+these differences. Use: [Mac performance monitoring](mac-performance-monitoring.md#profiling-package-arc-dev-3379).
+
+| Step | Player package | Profiling package |
+|---|---|---|
+| Export | `--export-release "macOS package"` | `--export-debug "macOS profiling"`: the same custom feature `steamwoven_package`, so the game behaves as the player's |
+| C# code | `ExportRelease`: optimized, ReadyToRun | `ExportDebug` with the MSBuild property `ArcanumProfiling` (set only by this option; removed from the caller's environment): optimized, ReadyToRun too |
+| Name and user folder | `Arcanum Steamwoven`, `Arcanum Steamwoven Game` | `Arcanum Steamwoven Profiling` for both: the two settings are rewritten in the extracted `project.godot` only (the build fails if either line is not there exactly once) |
+| Bundle id | `org.arcanumsteamwoven.game` | `org.arcanumsteamwoven.profiling` |
+| Signature | ad-hoc | ad-hoc with `com.apple.security.get-task-allow` (checked; without it nothing is installed) |
+| Installed to | `artifacts/packages/macos/` | `artifacts/packages/macos-profiling/`, with `BUILD.txt` (a `profiling` line), this build's monitoring page as `README.md` and its own `previous/`; logs in `artifacts/packages/logs/macos-profiling/` |
+
+A commit older than this option has no `macOS profiling` preset and is refused. `--profiling` is for `mac` only.
+`./arcanum daily` does not build it. `./arcanum clean` treats its folder like a platform's
+([build retention](build-retention.md)), and the launch queue treats a game running from it like the player package.
+
 ## Daily package build (ARC-DEV-062)
 
 The complete smoke run (the Crash Site smoke, the map batteries and every stage) runs only here, and only when `main` changed since the last package

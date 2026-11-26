@@ -32,6 +32,7 @@ runs, the [launch queue](toolchain.md#launch-queue-arc-dev-033) holds the agents
 | Numbers for a session that already happened, nothing set up before | `metalperftrace collect` |
 | Per-frame times for a p95 | HUD log |
 | CPU time in macOS libraries (the game's own code is unnamed) | Instruments (`xctrace`) |
+| Allocations in Instruments, the Godot editor's Monitors and Visual Profiler | the [profiling package](#profiling-package-arc-dev-3379) |
 | Memory of the process | `footprint`, `vmmap` |
 | .NET garbage collections | the `Resources` line of the Ctrl+B report, `ARC_PERF_PROBE=1` ([timing probe](toolchain.md#timing-probe-and-the-perf-stages-arc-dev-367)) |
 
@@ -106,8 +107,9 @@ test run's log elsewhere, so it does not rotate the game's own logs (works).
 
 **You see** `Project FPS: 59 (16.94 mspf)` each second. `MTL_HUD_ENABLED=1` can be added in front.
 
-The Godot editor's remote Monitors and Visual Profiler need a debug build; the package is a release export
-([#3379](https://github.com/Simarglok/arcanum-steamwoven/issues/3379); *not run*).
+The Godot editor's remote Monitors and Visual Profiler need a debug build: the player package is a release export and,
+given `--remote-debug`, **stops at once** (`ERROR: `--remote-debug` was specified on the command line, but this Godot
+binary was compiled without debug. Aborting.`). Use the [profiling package](#profiling-package-arc-dev-3379).
 
 ## Instruments (`xctrace`)
 
@@ -126,6 +128,73 @@ System Trace 60 MB and Game Performance 30 MB for 5 s. Limits:
   macOS frameworks and the .NET runtime libraries were named. Use `ARC_PERF_PROBE=1` for the C# side.
 - **Game Memory does not work** as a short attach: a 5 s recording wrote 10 GB and was still saving after 90 s, when it
   was stopped (90 s counted from the start of the command). Delete such a `.trace`.
+- **Allocations on the player package asks for an administrator password** (ARC-DEV-3379, 2026-11-26, Developer mode off,
+  Mac locked): macOS requested the right `com.apple.dt.instruments.process.analysis` (system log, process `authd`), and
+  with nobody to answer `xctrace` recorded nothing until it was stopped. The log showed an older password entry as
+  expired after 10 hours, so it may pass without a question after a recent one (*not run*). On the
+  [profiling package](#profiling-package-arc-dev-3379) it records without a password.
+
+## Profiling package (ARC-DEV-3379)
+
+A second copy of the game for measuring, built on this Mac and **never distributed**:
+
+    ./arcanum package mac --profiling        # fetch origin main, build that commit, smoke it, install it
+
+It lands in `artifacts/packages/macos-profiling/Arcanum Steamwoven Profiling.app` of the main checkout; the player
+package is not touched ([packaging](packaging.md#profiling-package-arc-dev-3379)). Same commit and same game code,
+compiled as for the player (optimized, ReadyToRun). The differences:
+
+- the Godot **debug** engine template (with the engine's debug checks, and the debug flavour of the C# engine API), so
+  it is expected to run slower than the player package: take **fps and frame-time baselines from the player package**,
+  and use this one to find where the time and memory go;
+- the entitlement `get-task-allow`, so Instruments may inspect the process without a password;
+- its own name, bundle id and user folder `~/Library/Application Support/Arcanum Steamwoven Profiling/`, so its saves,
+  settings and logs are separate. The map cache is the player's (`Arcanum Steamwoven Game/map-cache`, a fixed folder for
+  every build).
+
+To measure with your own saves and settings, quit both games and copy the player's folder over the profiling one (an
+APFS clone; it overwrites the profiling build's files of the same name):
+
+    mkdir -p "$HOME/Library/Application Support/Arcanum Steamwoven Profiling"
+    cp -cRp "$HOME/Library/Application Support/Arcanum Steamwoven Game/." "$HOME/Library/Application Support/Arcanum Steamwoven Profiling/"
+
+While it runs from that folder, the [launch queue](toolchain.md#launch-queue-arc-dev-033) holds the agents' window runs,
+as for the player package.
+
+### Instruments
+
+The commands above, with `GAME='Arcanum Steamwoven Profiling'`. Checked on the package of this change (2026-11-26,
+Developer mode off, Mac locked, launcher screen, 5 s each): Time Profiler, **Allocations** (statistics for 348
+categories, no password asked) and Game Performance attached and saved their traces. Time Profiler still leaves most of
+the engine's and the game's own frames unnamed ([#3391](https://github.com/Simarglok/arcanum-steamwoven/issues/3391)).
+
+    xctrace record --template 'Allocations' --attach "$(pgrep -nx 'Arcanum Steamwoven Profiling')" --time-limit 10s --no-prompt --output alloc.trace
+    open alloc.trace
+
+### Godot editor: Monitors and Visual Profiler
+
+The editor listens, the game connects to it. Open the editor on an empty project of its own, **not** on the repository's
+project (the editor writes into the project it opens). The project needs a main scene, or `--debug-server` starts no
+server (with an empty project and no main scene nothing listened on port 6007). Once:
+
+    D="$HOME/arcanum-profiling-debugger"; mkdir -p "$D"
+    printf 'config_version=5\n\n[application]\n\nconfig/name="Arcanum profiling debugger"\nrun/main_scene="res://empty.tscn"\n' > "$D/project.godot"
+    printf '[gd_scene format=3]\n\n[node name="Empty" type="Node"]\n' > "$D/empty.tscn"
+
+Then, in one Terminal, the editor:
+
+    /Applications/Godot_mono.app/Contents/MacOS/Godot --editor --path "$HOME/arcanum-profiling-debugger" --debug-server tcp://127.0.0.1:6007
+
+and, in another, the game:
+
+    "$HOME/Git/arcanum-steamwoven/artifacts/packages/macos-profiling/Arcanum Steamwoven Profiling.app/Contents/MacOS/Arcanum Steamwoven Profiling" --remote-debug tcp://127.0.0.1:6007
+
+In the editor's bottom **Debugger** panel open **Monitors**, and **Visual Profiler** (press **Start**). Not the
+**Profiler** tab: it does not support C#.
+
+Checked 2026-11-26: the editor listened on 6007 and the game held a connection to it; a test listener in the editor's
+place received the monitor frames (about one a second) and, after asking for the visual profiler, its frames with the
+`Render Viewport` and `Render Canvas` areas. Reading the two tabs in the editor window was *not run* (locked Mac).
 
 ## Memory (works)
 

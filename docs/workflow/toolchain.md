@@ -603,7 +603,7 @@ left and `./arcanum queue` then starts with a `PLAYING` line; the switch takes e
   the game quits: start `artifacts/packages/macos/Arcanum Steamwoven.app` and a queued window run says
   `waiting-for=owner playing (game running for ...; no window run starts, headless/quick/dotnet go on; quit the game)`; quit the game and it
   starts within a few seconds (a minute at most). The game is any process whose program lies under the main checkout's
-  `artifacts/packages/macos` (also from a worktree: the main checkout is read from the `.git` file), found through libproc
+  `artifacts/packages/macos` or, ARC-DEV-3379, `artifacts/packages/macos-profiling` (also from a worktree: the main checkout is read from the `.git` file), found through libproc
   (`proc_listpids`, `proc_pidpath`, no process spawned: about 3 ms, cached 2 s per process). The rule is the same as the manual
   switch's: window runs only, the owner's front launches and runs already holding their window go on, `daily` and `main-smoke`
   print `SKIP owner is playing (game running ...)`. The state is the game's process itself, so nothing is written to the queue folder and

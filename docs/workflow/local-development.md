@@ -18,6 +18,7 @@ every identity, artifact-authority and ordinary-launch check stays there.
     ./arcanum queue [--history N]                         # the launch queue: runs holding a place and the waiters in order
     ./arcanum smoke pr|full|map NAME|crash-site|self-test [--dry-run]  # the viewer's smokes from this checkout, each queued with its own settings folder and start check (ARC-DEV-061, toolchain.md#smoke-runner-arc-dev-061)
     ./arcanum package mac|win [--ref COMMIT] [--no-smoke] # the packaged alpha for a player from a fresh origin/main into artifacts/packages/macos|windows (ARC-DEV-047/048, docs/workflow/packaging.md)
+    ./arcanum package mac --profiling                     # the local profiling package for Instruments and the Godot remote debugger (ARC-DEV-3379, never distributed)
 
 `area`, `world` and `map` select the build named by that task's `current.json` pointer
 (never timestamps or directory order) and launch it; `area` and `map` try the universal ARC-DEV-015 build, then
