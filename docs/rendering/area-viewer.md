@@ -160,8 +160,21 @@ of 32, byte-identical to composing them one by one) before upload. The visible s
 selected through a coarse 512 px grid over the non-upright commands
 (`AreaVisibilityIndex`), which only narrows the candidates: the exact intersection
 test and the plan order are unchanged, and a view spanning more grid cells (empty ones
-included) than half the occupied cells scans every command. These are admission policies, not measured
+included) than half the occupied cells scans every command. A second grid of the same
+kind over the upright bodies keeps their draw order and orders only the bodies it
+names for the view, with the moved commands and the actor placed among them as in the
+whole list (ARC-RENDER-3417). These are admission policies, not measured
 process/GPU memory or load-speed guarantees.
+
+The visible set is rebuilt once a frame (ARC-RENDER-3417). Publishing a new selection
+of the same plan, frame repository and texture cache, or changing the hover highlight
+or ring, only marks the view; the canvas rebuilds it in its own update, which follows
+the viewer's update and therefore the frame's camera. A publication that comes after
+the canvas's update is rebuilt later in the same frame. A read of the submission
+after a publication rebuilds first, unless another input of the view changed since;
+that input may belong to a plan not yet published, so the read then answers with the
+last submission. Another plan, repository or cache is built at once, as is a
+switch of the visual profile.
 
 The HUD separates core/context, terrain/statics/core mobiles, body submissions,
 N/A, visible/culled, CPU/GPU counts and byte estimates, measured load duration,
