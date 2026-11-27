@@ -503,19 +503,41 @@ Owner decision 2026-11-24 (option A, [#3098](https://github.com/Simarglok/arcanu
   not backed up (reproducible from the masters, whose backup convention is in the [toolchain section](../workflow/toolchain.md#steamwoven-kit-bake-arc-dev-2460)). The runtime reads them in place, or from `user://steamwoven-ui/baked` on a player's own device (ARC-UI-2461, [the kit runtime](#the-kit-runtime-arc-ui-2461)).
 
 - **SWI-PRV-5** Image archive (ARC-DEV-3277, owner rule 2026-11-25): every image of a task (raw Codex outputs, collages, masters, composites, screenshots, sheets) is
-  kept in `local/steamwoven-ui/archive/<TASK>/` of the main checkout (`<kind>/` folders; the accepted version also in `<TASK>/final/`; files with no determinable task in
+  kept in `local/steamwoven-ui/archive/<TASK>/` of the main checkout (`<kind>/` folders; the accepted version also in `<TASK>/final/`, a replaced copy in `<TASK>/superseded/`; files with no determinable task in
   `_unsorted/<bucket>/`) and described by one row per file in `archive/registry.jsonl` (task, file, location, kind, status final/rejected/intermediate/unknown, sources,
   sha256, size, date, basis of the task and kind). `tools/steamwoven_ui/image_archive.py` (`dir`, `add`, `mark`, `scan`, `index`, `verify`) is the only writer; `image_rescue.py`
   copies images found only in worktrees, session scratchpads, temp folders and the Codex output folder (it copies, never moves or deletes) and registers the pipeline's in-place
   files (outbox, codex-work, masters; `location: pipeline`). `fixtures.py build`, `label_parts.py build` and `sheet_parts.py build` write to the main checkout's `masters/`, and the tools with `--out`/`--work` print a warning
   for a folder inside a worktree or a temp folder. Not committed, not packaged (SWI-PRV-1); the HD pack resources are never touched.
-- **SWI-PRV-6** Archive statuses at merge (owner rule 2026-11-25, ARC-DEV-3277 continued by ARC-DEV-3302): when a task's PR merges, the task closes its archive in the same turn. The images the
-  owner accepted go to `final/` (`image_archive.py mark <TASK> <file> final`; a file whose sha256 equals a kit master or an installed-pack entry is `final` with the note
-  `matches kit master <id>` / `matches pack entry <id>`); the variants the owner rejected are `rejected`; every other file of the task (composites, screenshots, crops,
-  sheets, raw Codex outputs a master was built from, by the master's provenance record) is `intermediate`; raw Codex outputs nothing was built from are `rejected`. `mark --note TEXT`
-  records why. `image_archive.py index <TASK>` must then show no `unknown` row of the task. When the thread cannot decide a file (no owner answer yet), it files a GitHub issue naming the
-  task and the open rows instead of leaving them silently `unknown` (found need = issue). The first bulk pass over the existing archive is the marking of 2026-11-25
-  (hash match, rules, owner decisions; the rest as contact sheets for the owner in `local/steamwoven-ui/composites/ARC-UI-3277/`).
+  **What counts** (ARC-DEV-3437): every image file a task makes or uses as evidence, throwaway probes, working crops and comparison cells included,
+  wherever it was written (session scratchpad, `$TMPDIR`, `/tmp`, the Codex output folder, `composites/`, the input and working files of `inbox/`, `refs/`, `codex-work/`
+  and `work/`); an image that is never posted is saved before the thread is resolved. A hash comparison against the registry may leave unregistered only: (a) the
+  `baked/` sets (rebuilt from the masters, SWI-PRV-4); (b) temp files a tool writes and reads back itself (the `method-c-*` temp folders of `method_c.py`); (c) the
+  synthetic images of tests; (d) images that came with an installed tool or package; (e) files older than the SWI-PRV-6 merge (#3303, 2026-11-25 21:24 +04:00) in the pipeline's own folders (`census/`,
+  `pilot/`, `compare/`, `material-samples/`, `material-sheet/`, `inbox/`, `refs/`, `work/`), which stay in place in the main checkout.
+- **SWI-PRV-6** Archive statuses at merge (owner rule 2026-11-25, ARC-DEV-3277 continued by ARC-DEV-3302; what `final` means, owner decision 2026-11-27,
+  [#3436](https://github.com/Simarglok/arcanum-steamwoven/issues/3436)): when a task's PR merges, the task closes its archive in the same turn.
+  - `final` is what is accepted **and current**: the kit masters and installed-pack parts (a file whose sha256 equals one is `final` with the note
+    `matches kit master <id>` / `matches pack entry <id>`) and the composites and screenshots the owner accepted. A raw Codex output is not marked `final` for
+    having built a master; the ones marked `final` as accepted before 2026-11-27 stay.
+  - `rejected`: the variants the owner rejected, and raw Codex outputs nothing was built from.
+  - `intermediate`: every other file (other composites, screenshots, crops, sheets, raw Codex outputs a master was built from, by the master's provenance
+    record), and a `final` file that a later version replaces, with the note `superseded by <task or file>` (the replacing task marks it).
+  - `final/` holds the copies of what is `final` now. `mark ... final` (and `add --status final`) copies the file in; marking it away from `final` moves the copy to
+    `<TASK>/superseded/` (nothing is deleted) unless another file of the task with the same content stays `final`. A file in `final/` with no original row is
+    marked by its own `final/` path.
+  - A `final` pipeline row (`location: pipeline`, which `mark` does not take) needs a `final/` copy only while it is a current kit master
+    (`add <TASK> <masters file> --kind master --status final`); older pipeline rows need none.
+  - Every new row names its kind: `add` requires `--kind`, and `scan` does not register a file that neither the folder nor the name gives a kind (name it with
+    `--kind`). The rows of the first bulk pass of 2026-11-25 may keep kind `unknown`.
+
+  `image_rescue.py` (to be retired, [#3407](https://github.com/Simarglok/arcanum-steamwoven/issues/3407)) is not held to the rules above: it registers
+  pipeline rows with its own statuses.
+
+  `mark --note TEXT` records why. `image_archive.py index <TASK>` must then show no row of the task with status `unknown`. When the thread cannot decide a file
+  (no owner answer yet), it files a GitHub issue naming the task and the open rows instead of leaving them silently `unknown` (found need = issue). The first bulk
+  pass over the existing archive is the marking of 2026-11-25 (hash match, rules, owner decisions; the rest as contact sheets for the owner in
+  `local/steamwoven-ui/composites/ARC-UI-3277/`).
 
 ## Verification
 

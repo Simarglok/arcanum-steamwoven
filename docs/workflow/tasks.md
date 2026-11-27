@@ -518,17 +518,26 @@ committed files. Do not copy the game or the full vault into each worktree.
   screenshots, sheets) is saved to `local/steamwoven-ui/archive/<TASK>/` **of the
   main checkout** before it is posted, never only in a worktree, a session
   scratchpad or `/tmp` (they are lost when the worktree is removed or the OS
-  cleans up). `python3 -B tools/steamwoven_ui/image_archive.py dir <TASK>` creates
+  cleans up). Throwaway probes and working crops count too; one that is never
+  posted is saved before the thread is resolved (excluded classes:
+  [TRD SWI-PRV-5](../ui/steamwoven-interface-trd.md#provenance-and-storage)).
+  `python3 -B tools/steamwoven_ui/image_archive.py dir <TASK>` creates
   and prints the folder (use it as `--out`); `... add <TASK> FILE... --kind
   composite|collage|screenshot|master|raw-codex` copies and registers files; the
   version the owner accepted goes into `<TASK>/final/` (`... mark <TASK>
   composite/NAME.png final`); `... scan` registers files copied there by hand.
+  Every new file names its kind (`add` requires `--kind`; `scan --kind` for a
+  file it cannot tell).
   Every file has a row in `archive/registry.jsonl` (task, file, kind, status
   final/rejected/intermediate/unknown, source, hash, date). Tools that take
   `--out`/`--work` warn when the folder is inside a worktree or a temp folder.
-  **At merge** the task also closes its statuses ([TRD SWI-PRV-6](../ui/steamwoven-interface-trd.md#provenance-and-storage)): accepted images `final`, rejected variants
-  `rejected`, everything else it made `intermediate` (`mark <TASK> FILE STATUS [--note TEXT]`); no `unknown` row of the task may remain, or the thread files an issue
-  naming the open rows.
+  **At merge** the task also closes its statuses ([TRD SWI-PRV-6](../ui/steamwoven-interface-trd.md#provenance-and-storage)): `final` is what is accepted and current
+  (kit masters and pack parts, and the composites and screenshots the owner
+  accepted), rejected variants `rejected`, everything else it made
+  `intermediate`, including a `final` file it replaces (`mark <TASK> FILE STATUS
+  [--note TEXT]`; leaving `final` moves its copy from `final/` to `superseded/`,
+  nothing is deleted); no row of the task with status `unknown` may remain, or
+  the thread files an issue naming the open rows.
   The images stay local and uncommitted ([TRD SWI-PRV-5](../ui/steamwoven-interface-trd.md#provenance-and-storage)).
 - Report Implemented, Not implemented, Remaining work, the checks run with their
   results, and material uncertainties.
