@@ -306,7 +306,7 @@ def queue(args: argparse.Namespace) -> int:
             print(f"arcanum queue: {error}", file=sys.stderr)
             return 1
         print(("paused" if args.pause else "resumed") if changed else ("already paused" if args.pause else "was not paused"))
-    if args.playing or args.not_playing:  # ARC-DEV-2272: no window run starts while the owner plays
+    if args.playing or args.not_playing:  # ARC-DEV-2272: no window or solo run starts while the owner plays
         try:
             changed = run_queue.set_playing(args.playing, run_queue.DEFAULT_PLAYING_MINUTES if args.for_minutes is None
                                             else args.for_minutes)
@@ -315,13 +315,13 @@ def queue(args: argparse.Namespace) -> int:
             return 1
         state = run_queue.playing_state()
         if args.playing:
-            print("playing: no window run starts (" + (run_queue.playing_text(state) if state else "?")
+            print("playing: no window run starts, nor a solo run (" + (run_queue.playing_text(state) if state else "?")
                   + "); headless, quick and dotnet runs go on; the owner's own launches are not held; "
                   "./arcanum queue --not-playing ends it")
         else:
-            print("not playing: window runs start again" if changed else "was not playing")
+            print("not playing: window and solo runs start again" if changed else "was not playing")
             if run_queue.game_ticket() is not None:  # ARC-DEV-2291: the automatic mode follows the game, not this switch
-                print("the packaged game is running: window runs still wait until it quits (the automatic mode)")
+                print("the packaged game is running: window and solo runs still wait until it quits (the automatic mode)")
     if args.app:  # ARC-DEV-1344: start the menu-bar app now (builds it first when needed), (the build is foreground)
         target, why = menubar.build()
         if target is None:
@@ -450,7 +450,9 @@ def parser() -> argparse.ArgumentParser:
                          help="window: Godot with a window; headless: Godot --headless; export: an export "
                               "endpoint; dotnet: dotnet build/test (runs alongside others, waits only for an export); "
                               "quick: a Godot run with no window that ends in seconds (a project --import, the headless "
-                              "self-test), beside the Godot slot, up to " + str(run_queue.QUICK_SLOTS) + " at once (ARC-DEV-390)")
+                              "self-test), beside the Godot slot, up to " + str(run_queue.QUICK_SLOTS) + " at once (ARC-DEV-390); "
+                              "solo: a frame-time measurement, alone on the machine: no Godot and no dotnet run beside it "
+                              "(ARC-DEV-3443)")
     command.add_argument("--estimate", type=float, metavar="SEC",
                          help="the seconds the run is expected to take, for the queue order (ARC-DEV-390): a short run "
                               "is not queued behind a long one that arrived a little before it (default "
@@ -461,7 +463,7 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--label", help="a short note shown in ./arcanum queue")
     command.add_argument("--expect", metavar="REGEX",
                          help="the start line the command prints when it started the intended mode (ARC-DEV-059); "
-                              "replaces the defaults of window, headless and export runs (the viewer's start, the "
+                              "replaces the defaults of window, headless, solo and export runs (the viewer's start, the "
                               "self-test's first stage, the export steps) and gives a dotnet run a start check")
     command.add_argument("--start-within", type=float, metavar="SEC",
                          help=f"seconds from the command's start to its start line (default "
@@ -524,9 +526,9 @@ def parser() -> argparse.ArgumentParser:
     group.add_argument("--pause", action="store_true", help="stop new runs from starting (running runs finish) until --resume (ARC-DEV-1344)")
     group.add_argument("--resume", action="store_true", help="clear the pause: the waiting runs start in their order")
     group.add_argument("--playing", action="store_true", help="the owner is playing (ARC-DEV-2272): no window run (smoke, lab, `run --kind "
-                       "window`) starts until --not-playing or the limit (default " + f"{run_queue.DEFAULT_PLAYING_MINUTES / 60:g}"
+                       "window`) and no solo run starts until --not-playing or the limit (default " + f"{run_queue.DEFAULT_PLAYING_MINUTES / 60:g}"
                        + " h, --for MIN); headless, quick and dotnet runs go on; runs that already hold a window finish; the owner's own launches are not held")
-    group.add_argument("--not-playing", action="store_true", help="end the playing mode: the waiting window runs start in their order")
+    group.add_argument("--not-playing", action="store_true", help="end the playing mode: the held runs start in their order")
     command.add_argument("--for", dest="for_minutes", type=playing_limit, metavar="MIN",
                          help="with --playing: end the mode after MIN minutes (90, 30m, 4h; 0 or 'off' for no limit; default "
                               + f"{run_queue.DEFAULT_PLAYING_MINUTES / 60:g} h)")

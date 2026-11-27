@@ -466,7 +466,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refresh()
     }
 
-    @objc func togglePlaying() {  // ARC-DEV-2272: no window run starts while the owner plays; ends by itself after 4 h
+    @objc func togglePlaying() {  // ARC-DEV-2272: no window or solo run starts while the owner plays; ends by itself after 4 h
         if queue.playing() == nil && queue.gameStart() != nil { return }  // ARC-DEV-2291: the game holds the mode; quit it (a click would only add a 4 h switch)
         queue.setPlaying(queue.playing() == nil)
         refresh(force: true)
@@ -614,7 +614,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pause.target = self
         pause.state = paused ? .on : .off
         menu.addItem(pause)
-        let play = NSMenuItem(title: playing?.auto == true ? "Owner is playing: game running (no window run starts)" : "Owner is playing (no window run starts)", action: #selector(togglePlaying), keyEquivalent: "g")
+        let play = NSMenuItem(title: playing?.auto == true ? "Owner is playing: game running (no window or solo run starts)" : "Owner is playing (no window or solo run starts)", action: #selector(togglePlaying), keyEquivalent: "g")
         play.target = self
         play.state = playing != nil ? .on : .off
         menu.addItem(play)
@@ -638,7 +638,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if !waiting.isEmpty {
             menu.addItem(.separator())
-            menu.addItem(header(paused ? "Waiting (paused: none starts)" : (playing != nil ? "Waiting, in order (window runs wait for the owner)" : "Waiting, in order")))
+            menu.addItem(header(paused ? "Waiting (paused: none starts)" : (playing != nil ? "Waiting, in order (window and solo runs wait for the owner)" : "Waiting, in order")))
             for (index, job) in waiting.enumerated() { let entry = row(job, position: index, now: now); rows[job.seq] = (entry, job); menu.addItem(entry) }
         }
 
