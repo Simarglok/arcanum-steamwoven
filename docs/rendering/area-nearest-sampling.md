@@ -68,6 +68,13 @@ the command: when the draw list shifts, the state moves to the node that draws t
 next, so a command that stays in the view is not prepared from nothing again. A standalone item
 keeps and writes its own view state.
 
+The carried lattice's two textures are larger than the lattice (ARC-RENDER-3427): each
+side is a multiple of 16 nodes, grows when the lattice outgrows it and is given back when
+it is more than four times the need. The lattice lies in their top left and the shader
+reads only the nodes inside the bounds in the view state, so the drawn picture is the
+same. A walking light changes the lattice's columns and rows every few frames; while each
+change made new textures, every terrain item of the view sent them and was redrawn.
+
 Rows live in one canvas-owned cache. Rows used by the current submission are never
 evicted; rows of earlier views are reused or evicted least recently used first, down
 to three quarters of the limits, when the row payload would exceed 16 MiB or the

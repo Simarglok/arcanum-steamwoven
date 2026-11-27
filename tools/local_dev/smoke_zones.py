@@ -121,7 +121,7 @@ TRIGGERS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     (_V + "AreaDrawItem.cs", _ALL, "shared render"),     ("tools/terrain-viewer/Core/AreaFrameDriver.cs", _ALL, "shared render"), ("tools/terrain-viewer/Core/CameraPolicy.cs", _ALL, "shared render"),
     ("tools/terrain-viewer/Core/FramePacingPolicy.cs", _ALL, "shared render"),
     ("tools/terrain-viewer/Core/AreaVisibilityIndex.cs", _ALL, "shared render"),
-    ("tools/terrain-viewer/Core/AreaSlotAssignment.cs", _ALL, "shared render"),
+    ("tools/terrain-viewer/Core/AreaSlotAssignment.cs", _ALL, "shared render"), ("tools/terrain-viewer/Core/AreaCarriedTexels.cs", _ALL, "shared render"),
     ("tools/terrain-viewer/Core/AreaPanelArt.cs", _ALL, "shared UI"), ("tools/terrain-viewer/Core/AreaTextFonts.cs", _ALL, "shared UI"),
     (_V + "AreaTextFonts.cs", _ALL, "shared UI"), ("tools/terrain-viewer/Core/AreaInterfaceWindows.cs", _ALL, "shared UI"),
     ("tools/terrain-viewer/Core/ViewerStoragePaths.cs", _ALL, "viewer settings paths"),

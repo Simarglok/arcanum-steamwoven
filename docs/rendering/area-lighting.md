@@ -169,7 +169,8 @@ the largest of the worn items' light sizes, each shrinking with its effective po
   with the map's other light ART (`AreaLightingPlan.CarriedFrame`; `CarriedLightFailure` says why it is missing).
 - **Native smoke** (named stage `worn-light`, with `--hero`): `ARC-DEV-335 native-smoke worn-light PASS` wears the wielded item with a large
   light, sees one carried light in the canvas and the hero lit by it, reads a terrain pixel back against the merged lattices, moves
-  the hero and sees the light move, and sees it gone with the lighting off and with the item off. It moves the clock to a night hour when
+  the hero and sees the light move (its textures sized for the moved lattice and kept while they hold it, a second pixel read back there,
+  ARC-RENDER-3427), and sees it gone with the lighting off and with the item off. It moves the clock to a night hour when
   the ambient is too bright (it does not put it back).
 - **Critters' lights (ARC-DEV-353, V7d second part).** A critter's light is its saved primary light, which the original writes from the
   critter's worn items (EQ12, LT12) and moves with the critter (LT10); the sector load builds it at the critter's T0 place. The object light
