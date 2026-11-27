@@ -14,7 +14,7 @@ namespace Arcanum.TerrainViewer;
 // the Troika logo by path, 0x404810, then movie 8, 0x401000: before the first menu), the main menu's View Intro (movies 1 and 7), a new
 // game's start (movies 1 and 7, the request's flags 0x45) and (ARC-SCRIPT-1241) the script action 103 fade, whose movies 2 to 6 the dialog, use, tile, sector and dying scripts hand over after
 // jumping the game clock (SyncScriptFades). Movies play only in the game build (a packaged build, ARC-RENDER-1242, owner
-// 2026-11-12) and in the dedicated `movies` smoke stage; the viewer of a source run and every other automated run play none. Sound: the scene's and the menu's sounds stop for the movie and nothing starts under it
+// 2026-11-12) and in the dedicated `movies` smoke stage (the three start-up movies can be skipped there too, ARC-UI-3453); the viewer of a source run and every other automated run play none. Sound: the scene's and the menu's sounds stop for the movie and nothing starts under it
 // (the original locks its sound system around a movie, 0x41C610; the session's own lock state is not touched here, as no scheme
 // request can come while the world stands still).
 public partial class TerrainViewerApp
@@ -23,6 +23,8 @@ public partial class TerrainViewerApp
     private MoviePlayback? _moviePlayback;
     private readonly Queue<MovieItem> _movieQueue = new();
     private bool _startupMoviesDone;
+    // ARC-UI-3453: why the start-up movies are skipped (the command line or the launcher settings), null to play them.
+    private string? _startupMoviesSkip;
 
     /// <summary>One entry of a movie queue: a number of the movie table (0x40DE70) or a movie by its path (0x40DEE0, the two logos).</summary>
     private readonly record struct MovieItem(int Number, string? VirtualPath)
@@ -110,12 +112,20 @@ public partial class TerrainViewerApp
         return true;
     }
 
+    /// <summary>ARC-UI-3453: the start-up movies are not to play in this run (the first caller's source is the one named).</summary>
+    private void SkipStartupMovies(string source) => _startupMoviesSkip ??= source;
+
     /// <summary>The start-up movies, once a run, before the first menu is used: the logos and movie 8 (the game build only). The menu opened
-    /// under them is served at once when they end or cannot play.</summary>
+    /// under them is served at once when they end, cannot play or are skipped (ARC-UI-3453).</summary>
     private void PlayStartupMovies()
     {
         if (_startupMoviesDone) return;
         _startupMoviesDone = true;
+        if (_startupMoviesSkip is { } source)
+        {
+            GD.Print($"ARC-UI-3453 start-up movies skipped ({source})");
+            return;
+        }
         PlayMovieItems(StartupMovieItems(), 0, null, "start-up");
     }
 

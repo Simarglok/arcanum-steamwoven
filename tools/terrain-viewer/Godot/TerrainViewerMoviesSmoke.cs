@@ -77,7 +77,9 @@ public partial class TerrainViewerApp
             Require(continued == 1 && _moviesPlayed >= 1 && !_moviePanel.IsOpen && !WorldModal && !WorldFrozenFrame && !_moviePanel.AudioPlaying,
                 $"the screen closed, the world is free and the continuation ran once (continued {continued}, played {_moviesPlayed})");
             // ARC-RENDER-1242: the start-up sequence (the Sierra and the Troika logo by path, then movie 8) plays once, before the first menu is used.
-            _startupMoviesDone = false;
+            // ARC-UI-3453: the stage checks the queue also when its run was started with the skip.
+            var skipBefore = _startupMoviesSkip;
+            (_startupMoviesDone, _startupMoviesSkip) = (false, null);
             var playedBefore = _moviesPlayed;
             PlayStartupMovies();
             Require(MovieCovering && _movieQueue.Count == 3 && _movieQueue.Select(item => item.ToString()).SequenceEqual(["movies/SierraLogo.bik", "movies/TroikaLogo.bik", "8"]),
@@ -85,6 +87,13 @@ public partial class TerrainViewerApp
             Require(Pump(() => !MovieCovering, 30) && _moviesPlayed == playedBefore + 3, $"the start-up movies played in full (played {_moviesPlayed - playedBefore} of 3)");
             PlayStartupMovies();
             Require(!MovieCovering, "the start-up movies play once a run");
+            // ARC-UI-3453: with the skip option the start-up queue never starts, and other movies still play.
+            (_startupMoviesDone, playedBefore) = (false, _moviesPlayed);
+            SkipStartupMovies("smoke");
+            PlayStartupMovies();
+            Require(!MovieCovering && _startupMoviesDone && _moviesPlayed == playedBefore, "the skipped start-up movies never start");
+            Require(PlayMovies([7], 0, () => continued++, "smoke") && Pump(() => !MovieCovering, 20) && continued == 2, "another movie still plays with the start-up ones skipped");
+            (_startupMoviesSkip, continued) = (skipBefore, 1);
             // Outside the game build and this stage nothing plays: the dev viewer and every other smoke (ARC-RENDER-1242).
             _moviesForSelfTest = false;
             Require(MovieRefusal() == NotGameBuildRefusal && !PlayMovies([1], 0, () => continued++, "smoke") && !MovieCovering && continued == 1,

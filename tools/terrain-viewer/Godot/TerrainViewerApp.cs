@@ -101,6 +101,8 @@ public partial class TerrainViewerApp : Node
             var launcher = args.Remove("--launcher");
             // ARC-DEV-050: --debug-mode turns the debug mode on for either kind of start.
             if (ViewerDebugMode.Take(args)) EnableDebugMode("command line");
+            // ARC-UI-3453: --skip-startup-movies skips the start-up movies of either kind of start.
+            if (ViewerStartupMovies.TakeSkip(args)) SkipStartupMovies("command line");
             // ARC-RENDER-3420: the mark of the process restarted for the separate rendering thread.
             _renderThreadRestarted = RenderThreadRestart.Take(args);
             if (_renderThreadRestarted) GD.Print("ARC-RENDER-3420 started again with the separate rendering thread");

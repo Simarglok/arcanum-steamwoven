@@ -149,6 +149,7 @@ public partial class TerrainViewerApp
             _launcherPanel.DebugModeRequested += on => LauncherChange(launcher => launcher.SetDebugMode(on));
             _launcherPanel.HoldToQuitRequested += on => LauncherChange(launcher => launcher.SetHoldToQuit(on));
             _launcherPanel.RenderThreadRequested += on => LauncherChange(launcher => launcher.SetSeparateRenderThread(on));
+            _launcherPanel.SkipStartupMoviesRequested += on => LauncherChange(launcher => launcher.SetSkipStartupMovies(on));
             // ARC-UI-143: the HD lines, saved at once in the settings files.
             _launcherPanel.HdRequested += LauncherHd;
             _launcherPanel.HdWorldZoomRequested += LauncherHdWorldZoom;
@@ -278,7 +279,7 @@ public partial class TerrainViewerApp
         var saved = path is null ? null : (LauncherSettingsSaveStatus?)LauncherSettingsFile.Save(path, settings);
         // A refused or failed save does not stop the start: the chosen folder and rules apply to it.
         GD.Print($"ARC-UI-014 launcher play folder={settings.GameRoot} rules={RuleModeNames.Name(settings.Rules)} showAtStart={settings.ShowAtStart} "
-                 + $"debugMode={settings.DebugMode} save={saved?.ToString() ?? "skipped (automated run)"}");
+                 + $"debugMode={settings.DebugMode} skipStartupMovies={settings.SkipStartupMovies} save={saved?.ToString() ?? "skipped (automated run)"}");
         _launcherSettings = settings;
         // ARC-RENDER-3420: the restarted game reads the setting from the file, so a start that could not save it goes on in this process.
         _renderThreadWanted = settings.SeparateRenderThread && saved == LauncherSettingsSaveStatus.Saved;
@@ -385,6 +386,8 @@ public partial class TerrainViewerApp
     {
         // ARC-DEV-050: the stored debug mode joins a --debug-mode flag; neither turns the other off.
         if (_launcherSettings.DebugMode) EnableDebugMode("launcher settings");
+        // ARC-UI-3453: the stored choice joins a --skip-startup-movies flag, in the same way.
+        if (_launcherSettings.SkipStartupMovies) SkipStartupMovies("launcher settings");
         var arguments = TerrainViewerArguments.ForGameFolder(folder.Inputs!);
         if (_launcherStartForSelfTest is { } stand) { stand(arguments); return; }
         try { StartWithArguments(arguments); }
