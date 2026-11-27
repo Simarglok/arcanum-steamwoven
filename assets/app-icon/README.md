@@ -8,8 +8,9 @@ yet ([#3457](https://github.com/Simarglok/arcanum-steamwoven/issues/3457)).
 
 This picture is **derived from the original game's emblem** and is the one exception to the rule that nothing derived
 from original art goes into git ([owner decision 2026-11-28](../../docs/architecture/decisions.md)). It may ship in the
-packages. The exception covers this icon only. The project's MIT licence does not grant rights to the original game's
-emblem; the game and its marks belong to their owners.
+packages. The exception covers this icon, with the resized or converted copies of it that packaging needs, and
+nothing else. The project's MIT licence does not grant rights to the original game's emblem; the game and its marks
+belong to their owners.
 
 ## Provenance
 

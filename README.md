@@ -42,7 +42,7 @@ the Windows build on a Windows 11 PC. The requirement rows and the
 - Keyboard/mouse and first-class gamepad interaction.
 - Legacy graphics first. HD is an optional local pack: existing frames of characters and objects upscaled (4× soft-edge by default, 2× supported) with the same directions, frames, anchors and timing. Each player builds the pack from their own installation or imports it from another of their devices (the build and import tooling, ARC-DEV-003, is deferred by the owner); it stays outside the repository and is never distributed ([HD pack format](docs/formats/hd-pack.md), [HD presentation contract](docs/rendering/hd-presentation-contract.md)). Additional frames/directions and 3D are future options, not commitments.
 
-Players provide their own legally acquired copy. Original game assets, third-party binaries and extracted content are not distributed here. MIT applies to independently authored project code and documentation, not to Arcanum or archived third-party material. This unofficial fan project is not affiliated with the game's rights holders.
+Players provide their own legally acquired copy. Original game assets, third-party binaries and extracted content are not distributed here, with one exception: the [app icon](assets/app-icon/README.md), derived from the game's emblem (owner decision 2026-11-28). MIT applies to independently authored project code and documentation, not to Arcanum or archived third-party material. This unofficial fan project is not affiliated with the game's rights holders.
 
 ## The `./arcanum` launcher
 
