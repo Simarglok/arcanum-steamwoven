@@ -502,12 +502,12 @@ declared length ([order](#queue-order-arc-dev-390)): a short run is not stuck be
 before it. It replaces the earlier
 `lockf /tmp/arcanum-godot-window.lock` rule, which was not a queue and covered windows only.
 
-    ./arcanum run --kind window|headless|export|dotnet|quick [--estimate SEC] [--timeout MIN] [--label TEXT] [--expect REGEX] [--start-within SEC] [--verbose] -- COMMAND [ARGS...]
+    ./arcanum run --kind window|headless|export|dotnet|quick|solo [--estimate SEC] [--timeout MIN] [--label TEXT] [--expect REGEX] [--start-within SEC] [--verbose] -- COMMAND [ARGS...]
     ./arcanum queue                 # the runs holding a place, then the waiters in order
     ./arcanum queue --history N     # the last N finished runs: waited, ran, exit
     ./arcanum queue --pause         # no waiting run starts (running ones finish), for every checkout, until --resume (ARC-DEV-1344)
     ./arcanum queue --resume
-    ./arcanum queue --playing [--for MIN]   # the owner is playing: no window run starts until --not-playing or the limit (default 4 h; ARC-DEV-2272)
+    ./arcanum queue --playing [--for MIN]   # the owner is playing: no window or solo run starts until --not-playing or the limit (default 4 h; ARC-DEV-2272)
     ./arcanum queue --not-playing   # (the packaged game running turns the mode on by itself: ARC-DEV-2291)
     ./arcanum queue --app           # start the menu-bar view of the queue now (a queued run starts it by itself)
     ./arcanum queue --wait [RUN_ID | --all] [--timeout MIN]   # block until that run (or the whole queue) has ended (ARC-DEV-1983)
@@ -518,6 +518,7 @@ before it. It replaces the earlier
 | `headless` | `Godot --headless` that runs for a while (a lab, a long probe) | the same lanes | 30 min |
 | `quick` (ARC-DEV-390) | a Godot run with no window that ends in seconds: a project `--import`, the headless viewer self-test (`./arcanum smoke` uses it for both) | two quick places beside the Godot lanes (it neither waits for nor holds a lane), one at a time per checkout; waits for an export that is running or next | 30 min |
 | `export` | an export endpoint (`tools/arcanum-local ... export`, the validation commands that export) | alone: it waits for the running Godot runs of every lane; when it is next, new `dotnet` runs wait and running ones finish, then it runs alone | 180 min |
+| `solo` (ARC-DEV-3443) | a frame-time or other timing measurement ([solo runs](#solo-runs-arc-dev-3443)) | alone: no Godot, `quick` or `dotnet` run beside it; waits as an export does | 60 min |
 | `dotnet` | `dotnet restore/build/test`; give the root checks as one command (`sh -c '... && ... && ...'`) | two dotnet places (waits for a free one, [limits](#dotnet-memory-limits-arc-dev-300)); runs alongside Godot runs; waits for an export that is running or next | 45 min |
 
 - **Order and gaps.** Places are numbered as runs arrive and ordered as [described below](#queue-order-arc-dev-390); a
@@ -557,7 +558,7 @@ before it. It replaces the earlier
   the start time is read through macOS libproc (`proc_pidinfo`), so a waiter spawns no process while it polls (ARC-DEV-1401;
   `ps`, cached 30 s, answers only where libproc is missing); when the time cannot be read, the run counts as alive, and a zombie (already dead, its lock released) counts as gone. Never delete ticket files by hand; `history.jsonl` there records every run.
 - **Nesting.** A queued command that calls `./arcanum run` again (or `./arcanum area|world|map`) runs inside its
-  parent's place when that place covers it: an export covers every kind, a `window` or `headless` run covers Godot,
+  parent's place when that place covers it: an export or a solo run covers every kind, a `window` or `headless` run covers Godot,
   `quick` and `dotnet` runs, a `quick` run covers `quick` runs, a `dotnet` run covers `dotnet` runs. Any other nesting (an export inside a Godot run, a Godot
   run inside a `dotnet` run) would wait for its own parent and is refused: queue it on its own.
 - **The owner's viewer.** `./arcanum area`, `world` and `map` take a Godot lane (a short one, as a `window` run with the default
@@ -568,22 +569,52 @@ before it. It replaces the earlier
 Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (arrival and length order, lanes and their accounting, quick runs, gaps, export
 quiet, crashed and killed runs, limits, nesting, locales); they use their own `ARCANUM_LOCAL_HOME`.
 
+### Solo runs (ARC-DEV-3443)
+
+A frame-time measurement is spoiled by anything else that runs on the machine (#3417: a `dotnet` run of another checkout
+started beside a measurement queued with `ARCANUM_QUEUE_LANES=0`, at a one-minute load average of 13.6). Queue it as `solo`,
+not as an `export` and not with the lanes variable:
+
+    ./arcanum run --kind solo [--estimate SEC] [--timeout MIN] --label "ARC-... measure" -- COMMAND [ARGS...]
+
+- **Alone.** It waits for every running Godot run of every lane and for the running `quick` and `dotnet` runs (and for the
+  Godot runs ahead of it in the order); once it is next, new `quick` and `dotnet` runs wait; while it runs, nothing else
+  starts, the owner's own viewer launches included. A `./arcanum run` of any kind inside its command runs inside its place,
+  so one solo run holds the builds and every launch of a measurement series.
+- **Order and limit.** Default estimate 180 s, default limit **60 min**; the [queue order](#queue-order-arc-dev-390) is the
+  ordinary one (it has no priority). `./arcanum queue --history` and `--lanes` show it as `solo`.
+- **Start check.** The default start lines of the Godot kinds apply: a command that prints none of them (a measurement
+  script of its own, a `dotnet` benchmark) gives `--expect REGEX` or `--start-within 0`.
+- **Owner is playing.** Like a window run, it does not start while [the mode](#owner-is-playing-mode-arc-dev-2272) is on
+  (the game beside it would spoil the figures, and its window would take the focus); the runs behind it go on.
+- **Older checkouts.** The ticket is published as an `export` with the extra field `solo`, so every wrapper of a checkout
+  from before this change keeps its runs out too, with no merge needed; while the playing mode holds it, it is published as
+  a short `window` run. An older wrapper that sees the mode holds nothing behind it. One that cannot see it (the automatic
+  mode of a running game, before ARC-DEV-2291) counts it as one short place: its exports, its Godot runs of the single slot
+  (lanes `0`, or from before ARC-DEV-400), runs of the solo run's own checkout and, with one short lane, its short runs
+  still wait until the mode ends. Older checkouts list it as `export/export` or `window/short`, the menu-bar app as
+  `export/solo` or `window/short`.
+- **Not covered.** A process started outside the queue (the owner's game, a hand-started `dotnet` or Godot, another app,
+  the build-server shutdown a `dotnet` run does just after giving up its place) is not held. The one-minute load average
+  still shows the runs that just ended: a measurement that needs a settled machine waits inside its own command.
+
 ### Owner is playing mode (ARC-DEV-2272)
 
 Godot needs the keyboard focus, and a smoke window of an agent thread takes it from the packaged game the owner is playing
 (owner report 2026-11-15, character creation). Headless, off-screen and background windows were tried and failed, so the answer
-is that **no window run starts while the owner plays**; the pause stops everything, this mode stops only the runs that open a window.
+is that **no window run starts while the owner plays**, and no [solo](#solo-runs-arc-dev-3443) run; the pause stops
+everything, this mode stops only the runs that open a window or measure.
 
     ./arcanum queue --playing              # on; ends by itself after 4 h
     ./arcanum queue --playing --for 90     # on for 90 minutes (also 30m, 2h; 0 or off: no limit)
-    ./arcanum queue --not-playing          # off at once: the waiting window runs start in their order
+    ./arcanum queue --not-playing          # off at once: the held runs start in their order
 
 The menu-bar app has the same switch (`Owner is playing`, icon `gamecontroller` while on). The command prints the state and the time
 left and `./arcanum queue` then starts with a `PLAYING` line; the switch takes effect at the next poll (a quarter of a second) of every waiter.
 
-- **Held:** every ordinary `window` run: smoke stages (`./arcanum smoke`, `smoke pr`, `smoke complete`), labs, an ad-hoc
+- **Held:** every queued `solo` run, and every ordinary `window` run: smoke stages (`./arcanum smoke`, `smoke pr`, `smoke complete`), labs, an ad-hoc
   `./arcanum run --kind window`, and the rolling `main-smoke` steps. A waiter says
-  `waiting-for=owner playing (for ..., ends in ...; no window run starts, headless/quick/dotnet go on; ./arcanum queue --not-playing)`,
+  `waiting-for=owner playing (for ..., ends in ...; no window or solo run starts, headless/quick/dotnet go on; ./arcanum queue --not-playing)`,
   `./arcanum queue` shows `waiting ... (owner playing)`, and a smoke prints `SMOKE waiting: owner is playing (...)` before the step.
 - **Not held:** `headless`, `quick`, `dotnet` and `export` runs (so builds, tests, imports and the headless self-test of every thread go
   on), the owner's own launches (`./arcanum area|world|map`, `package`: the front of the queue) and a run that already holds its
@@ -595,17 +626,17 @@ left and `./arcanum queue` then starts with a `PLAYING` line; the switch takes e
 - **Limit.** The manual mode expires after 4 h (`--for` sets it, `0`/`off` removes it): the holder process ends by itself at the
   deadline, nothing has to enforce it, and a crash of the holder or a reboot ends the mode too. `--playing` again renews the limit.
 - **Old wrappers.** The mode is one valid ticket `t-playing.json` (seq 0, kind `window`, lane `single`, already started, flag
-  `playing`) held by a `/usr/bin/lockf` process like the pause. A wrapper of this version holds back only the window runs behind it.
+  `playing`) held by a `/usr/bin/lockf` process like the pause. A wrapper of this version holds back only the window and solo runs behind it.
   A wrapper of another checkout from **before this change** does not know the flag and reads it as a running exclusive Godot run, so
   it holds back every Godot kind (`window`, `headless`, `export`) of that checkout, but not `dotnet` or `quick` runs, and also the
   owner's own launches from that checkout, until that checkout has merged main. Nothing else is needed for the mode to hold there.
 - **Automatic mode (ARC-DEV-2291).** While a process of the packaged game runs, the queue treats the mode as on, and releases it when
   the game quits: start `artifacts/packages/macos/Arcanum Steamwoven.app` and a queued window run says
-  `waiting-for=owner playing (game running for ...; no window run starts, headless/quick/dotnet go on; quit the game)`; quit the game and it
+  `waiting-for=owner playing (game running for ...; no window or solo run starts, headless/quick/dotnet go on; quit the game)`; quit the game and it
   starts within a few seconds (a minute at most). The game is any process whose program lies under the main checkout's
   `artifacts/packages/macos` or, ARC-DEV-3379, `artifacts/packages/macos-profiling` (also from a worktree: the main checkout is read from the `.git` file), found through libproc
   (`proc_listpids`, `proc_pidpath`, no process spawned: about 3 ms, cached 2 s per process). The rule is the same as the manual
-  switch's: window runs only, the owner's front launches and runs already holding their window go on, `daily` and `main-smoke`
+  switch's: window and solo runs only, the owner's front launches and runs already holding their window go on, `daily` and `main-smoke`
   print `SKIP owner is playing (game running ...)`. The state is the game's process itself, so nothing is written to the queue folder and
   no limit applies; it counts once beside a manual switch (which keeps its limit and its `--not-playing`). `--not-playing` does not end it
   (the command says so); quit the game. `ARCANUM_QUEUE_AUTO_PLAYING=0` turns it off for a command or wrapper it is set on, and
@@ -734,7 +765,7 @@ for the single Godot slot behind a few runs of 5 to 11 minutes (`walk`, `contain
 queue is the worst order for such a mix, and a project import waited for a window run to start 2.5 s of work.
 
 - **Declared length.** Every run carries an estimate in seconds: `--estimate SEC` on `./arcanum run`, or the kind's default
-  (`window` 60, `headless` 60, `export` 300, `dotnet` 60, `quick` 15) when none is given. `./arcanum smoke` declares its
+  (`window` 60, `headless` 60, `export` 300, `dotnet` 60, `quick` 15, `solo` 180) when none is given. `./arcanum smoke` declares its
   own per step (`smoke.estimate`: a viewer run is about 20 s plus 3 s per stage, the whole map battery 60 s, the Crash
   Site smoke 110 s, `walk` 540 s, `container-click` 700 s, `census` 900 s as an assumption). The estimate only orders
   the queue; it is not a limit (`--timeout` is) and a wrong one costs its run a different place, nothing else.
