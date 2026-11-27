@@ -1454,7 +1454,8 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
 - **What binds.** AREA bodies, walls (art class 1) included since ARC-RENDER-016, the
   controlled actor and, since ARC-RENDER-016, the composed level-0 terrain chunks (tiles and
   facades); WORLD statics and the actor. Decimated chunks (zoom below 1 with an integer
-  origin), per-command terrain and WORLD terrain stay Legacy and are not candidates. The scene
+  origin), every chunk of a view that draws a chunk as light-channel layers (ARC-RENDER-3438),
+  per-command terrain and WORLD terrain stay Legacy and are not candidates. The scene
   plan, picking, routes, passability, the wall check, light and Session read Legacy data only;
   HD is substituted when a texture is bound to an already planned draw.
 - **Terrain chunks (ARC-RENDER-016).** A chunk item at level 0 asks for the chunk's question

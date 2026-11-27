@@ -191,10 +191,12 @@ public partial class TerrainCanvas
         for (var index = 0; index < draw.Count; index++)
         {
             var command = draw[index];
-            if (_areaChunkCommands.TryGetValue(command, out var chunk))
+            if (_areaChunkCommands.TryGetValue(command, out var part))
             {
-                // Decimated chunks (zoom 2^-k with an integer origin) draw Legacy and are not candidates.
-                if (AreaChunkLevel != 0) continue;
+                // Decimated chunks (zoom 2^-k with an integer origin) draw Legacy and are not candidates; neither
+                // (ARC-RENDER-3438) is any chunk of a view that has channel layers, whose terrain the pack's whole chunks do not match.
+                if (_areaChunkSplit || AreaChunkLevel != 0) continue;
+                var chunk = part.Chunk;
                 if (dormant is { } gated) { draws[index] = gated; continue; }
                 // Without a usable pack or without chunk entries no chunk is composed for a question.
                 var refused = source.Pack is not { } pack ? HdFallbackReason.NoPack : pack.Review == HdReviewStatus.Rejected ? HdFallbackReason.PackRejected

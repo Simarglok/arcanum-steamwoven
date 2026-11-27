@@ -155,8 +155,18 @@ pixels.
 Integer sampling metadata has a separate 16 MiB cap. Terrain chunk textures have
 their own 192 MiB / 1,024-texture cap, with chunks of the current view never evicted
 and older chunks evicted least recently used; terrain frames are uploaded only when
-terrain is drawn per command. Missing chunks of a view are composed in parallel (batches
-of 32, byte-identical to composing them one by one) before upload. The visible set is
+terrain is drawn per command. Under lighting a chunk whose terrain is on more than one
+channel (indoor and outdoor tiles) is drawn as one item and one texture per channel
+(ARC-RENDER-3438): a channel's texture holds the texels whose winning command is on that
+channel and is transparent elsewhere, so no two share a texel and each is tinted by its
+channel's ambient, with the pixels of the per-command draw in the Legacy programs. The
+relit look (HD) takes a ground normal from the neighbouring texels of the bound texture, so
+on a chunk or layer it differs faintly from the per-tile normal along tile, layer and chunk
+borders, as on single-channel chunks ([relit look](area-lighting.md)). These textures count against
+the same cap; another channel table drops them. The whole view falls back to per-command
+terrain only when the plan admits no chunks or the view's chunk textures exceed the cap.
+Missing textures of a view are composed in parallel (batches of 32, byte-identical to
+composing them one by one) before upload. The visible set is
 selected through a coarse 512 px grid over the non-upright commands
 (`AreaVisibilityIndex`), which only narrows the candidates: the exact intersection
 test and the plan order are unchanged, and a view spanning more grid cells (empty ones
