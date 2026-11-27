@@ -22,7 +22,8 @@ machine. Read **frame time p95** and **GPU time**, and compare runs doing the sa
 
 The tools below find the running game with `pgrep -nx "$GAME"` (the newest process of that name). A game started from
 Terminal uses the same user folder (saves, settings, logs): its start line names it. While a game from `artifacts/packages/macos`
-runs, the [launch queue](toolchain.md#launch-queue-arc-dev-033) holds the agents' window runs.
+runs, the [launch queue](toolchain.md#launch-queue-arc-dev-033) holds the agents' window and solo runs. An agent's
+measurement is queued with `./arcanum run --kind solo`, so nothing else runs beside it ([solo runs](toolchain.md#solo-runs-arc-dev-3443)).
 
 ## Which tool for what
 
@@ -162,9 +163,10 @@ APFS clone; it overwrites the profiling build's files of the same name):
     cp -cRp "$HOME/Library/Application Support/Arcanum Steamwoven Game/." "$HOME/Library/Application Support/Arcanum Steamwoven Profiling/"
 
 While it runs from `artifacts/packages/macos-profiling`, the [launch queue](toolchain.md#launch-queue-arc-dev-033) of a
-checkout that has this change holds its window runs, as for the player package. A checkout from before it (an older
+checkout that has this change holds its window and solo runs, as for the player package. A checkout from before it (an older
 worktree) does not see this folder, and a menu-bar app started before it must be restarted: for a measurement run
-`./arcanum queue --playing` first (and `--not-playing` after), which every checkout honours.
+`./arcanum queue --playing` first (and `--not-playing` after), which every checkout honours (it holds a queued
+[solo run](toolchain.md#solo-runs-arc-dev-3443) too, so this is for a measurement started by hand).
 
 ### Instruments
 

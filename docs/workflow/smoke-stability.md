@@ -53,7 +53,7 @@ automatic leak guard, and measure 7 were not chosen yet).
 | 2. Rolling smoke on `origin/main` with an automatic issue and a red-on-main flag | #2226 (done: `./arcanum main-smoke`, [rolling smoke](toolchain.md#rolling-smoke-on-main-arc-dev-2226); the owner loads its launchd agent) |
 | 4. Flake register (retry once, log FLAKY, tracked list); later, after measure 2 | not filed yet |
 
-**Owner is playing** (#2272): `./arcanum queue --playing` stops every window run from starting while the owner plays the packaged
+**Owner is playing** (#2272): `./arcanum queue --playing` stops every window run (and solo run, ARC-DEV-3443) from starting while the owner plays the packaged
 game, so a smoke window cannot take the focus ([mode](toolchain.md#owner-is-playing-mode-arc-dev-2272)); a held smoke prints
 `SMOKE waiting: owner is playing`, and `daily` and `main-smoke` skip with `SKIP owner is playing` and record no result, never a
 green. Headless, quick and dotnet runs go on.
