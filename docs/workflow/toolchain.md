@@ -589,8 +589,11 @@ not as an `export` and not with the lanes variable:
   (the game beside it would spoil the figures, and its window would take the focus); the runs behind it go on.
 - **Older checkouts.** The ticket is published as an `export` with the extra field `solo`, so every wrapper of a checkout
   from before this change keeps its runs out too, with no merge needed; while the playing mode holds it, it is published as
-  a short `window` run, so such a wrapper does not hold its runs behind it. Older checkouts list it as `export/export` or
-  `window/short`, the menu-bar app as `export/solo` or `window/short`.
+  a short `window` run. An older wrapper that sees the mode holds nothing behind it. One that cannot see it (the automatic
+  mode of a running game, before ARC-DEV-2291) counts it as one short place: its exports, its Godot runs of the single slot
+  (lanes `0`, or from before ARC-DEV-400), runs of the solo run's own checkout and, with one short lane, its short runs
+  still wait until the mode ends. Older checkouts list it as `export/export` or `window/short`, the menu-bar app as
+  `export/solo` or `window/short`.
 - **Not covered.** A process started outside the queue (the owner's game, a hand-started `dotnet` or Godot, another app,
   the build-server shutdown a `dotnet` run does just after giving up its place) is not held. The one-minute load average
   still shows the runs that just ended: a measurement that needs a settled machine waits inside its own command.
