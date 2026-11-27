@@ -170,8 +170,10 @@ The visible set is rebuilt once a frame (ARC-RENDER-3417). Publishing a new sele
 of the same plan, frame repository and texture cache, or changing the hover highlight
 or ring, only marks the view; the canvas rebuilds it in its own update, which follows
 the viewer's update and therefore the frame's camera. A publication that comes after
-the canvas's update is rebuilt later in the same frame, and a read of the submission
-in between rebuilds first. Another plan, repository or cache is built at once, as is a
+the canvas's update is rebuilt later in the same frame. A read of the submission
+after a publication rebuilds first, unless another input of the view changed since;
+that input may belong to a plan not yet published, so the read then answers with the
+last submission. Another plan, repository or cache is built at once, as is a
 switch of the visual profile.
 
 The HUD separates core/context, terrain/statics/core mobiles, body submissions,

@@ -16,7 +16,7 @@ public partial class TerrainCanvas : Node2D
     internal bool StaticVisibleForReadback => _showStatics;
     /// <summary>ARC-DEV-064: the actor's magenta frame and yellow anchor cross are a diagnostic overlay, drawn only in the
     /// run's debug mode (or by a self-test raster oracle that asks for them); off in play.</summary>
-    public bool ShowActorGuides { get => _showActorGuides; set { _showActorGuides = value; _areaView = null; QueueRedraw(); } }
+    public bool ShowActorGuides { get => _showActorGuides; set { _showActorGuides = value; InvalidateAreaView(); } }
     private bool _showActorGuides;
 
     public TerrainCanvas()

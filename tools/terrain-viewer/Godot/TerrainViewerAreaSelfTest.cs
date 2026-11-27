@@ -147,6 +147,14 @@ public static partial class TerrainViewerSelfTest
                 throw new InvalidOperationException("AREA read between publication and rebuild");
             await NextFrame();
             if (canvas.AreaRebuildCount != rebuilds + 1) throw new InvalidOperationException("AREA second rebuild of an unchanged view");
+            // A read after another input changed rebuilds nothing: that input may be of a plan not yet published.
+            await NextFrame(); rebuilds = canvas.AreaRebuildCount;
+            input = input with { InstanceOffsetX=16 }; actor = actor.Select(input); canvas.PublishArea(crowd,frames,actor,input,cache);
+            canvas.SetAreaHidden(new HashSet<AreaObjectKey> { bodies[0].Key });
+            if (canvas.AreaVisibleCount != 600 || canvas.AreaRebuildCount != rebuilds) throw new InvalidOperationException("AREA read rebuilt over a changed input");
+            await NextFrame();
+            if (canvas.AreaRebuildCount != rebuilds + 1 || canvas.AreaVisibleCount != 599) throw new InvalidOperationException("AREA changed input not in the frame's rebuild");
+            canvas.SetAreaHidden(null);
             // A publication after the canvas's own update (a timer runs after the nodes) is built in the same frame.
             await host.ToSignal(host.GetTree().CreateTimer(0.000001),SceneTreeTimer.SignalName.Timeout);
             rebuilds = canvas.AreaRebuildCount;

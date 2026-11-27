@@ -178,20 +178,20 @@ public partial class TerrainCanvas
     {
         if (Equals(_areaAmbient, ambient)) return;
         if (!ReferenceEquals(_areaAmbient?.Channels, ambient?.Channels)) _areaChunkChannels.Clear();
-        _areaAmbient = ambient; _areaView = null; QueueRedraw();
+        _areaAmbient = ambient; InvalidateAreaView();
     }
     /// <summary>ARC-RENDER-011: the wall check's fade of each wall from the next submission (null or absent = opaque).
     /// Only the per-item alpha changes; plan, order and index rows are reused.</summary>
     public void SetAreaWallFades(IReadOnlyDictionary<AreaObjectKey, AreaWallFade>? fades)
     {
         if (ReferenceEquals(_areaWallFades, fades)) return;
-        _areaWallFades = fades; _areaView = null; QueueRedraw();
+        _areaWallFades = fades; InvalidateAreaView();
     }
     /// <summary>ARC-UI-004: bodies no longer in the world (items the PC took) from the next submission; null = none.</summary>
     public void SetAreaHidden(IReadOnlySet<AreaObjectKey>? hidden)
     {
         if (ReferenceEquals(_areaHidden, hidden)) return;
-        _areaHidden = hidden; _areaView = null; QueueRedraw();
+        _areaHidden = hidden; InvalidateAreaView();
     }
     internal IReadOnlySet<AreaObjectKey>? AreaHidden => _areaHidden;
 
@@ -214,7 +214,7 @@ public partial class TerrainCanvas
         IReadOnlySet<AreaObjectKey>? coveredBodies)
     {
         if (ReferenceEquals(_areaRoofs, roofs) && ReferenceEquals(_areaCoveredTiles, coveredTiles) && ReferenceEquals(_areaCovered, coveredBodies)) return;
-        _areaRoofs = roofs; _areaCoveredTiles = coveredTiles; _areaCovered = coveredBodies; _areaView = null; QueueRedraw();
+        _areaRoofs = roofs; _areaCoveredTiles = coveredTiles; _areaCovered = coveredBodies; InvalidateAreaView();
     }
     /// <summary>ARC-RENDER-022: the frames of the roofs and covered-tile masks the last submission drew per item.</summary>
     public IReadOnlySet<AreaFrameKey> AreaVisibleRoofFrames => Current(ref _areaVisibleRoofFrames);
@@ -231,7 +231,7 @@ public partial class TerrainCanvas
         if (moving is null or { Count: 0 } && _areaMoving is null or { Count: 0 }) return;
         if (_areaMoving is { } old && moving is { } next && old.SequenceEqual(next)) return;
         _areaMoving = moving; _areaMovingKeys = (moving ?? []).Select(command => command.Identity).ToHashSet();
-        _areaMovingStamp++; _areaView = null; QueueRedraw();
+        _areaMovingStamp++; InvalidateAreaView();
     }
     // ARC-MAGIC-045: the body styles the object flags a spell wrote ask for (don't-draw, invisible, translucent, shrunk), by body; the actor's own is applied to its marker.
     private IReadOnlyDictionary<AreaObjectKey, AreaBodyStyle>? _areaBodyStyles;
@@ -245,7 +245,7 @@ public partial class TerrainCanvas
         var same = actor == _actorBodyStyle && (styles is null ? _areaBodyStyles is null : _areaBodyStyles is { } old && old.Count == styles.Count && styles.All(p => old.TryGetValue(p.Key, out var o) && o == p.Value));
         if (same) return;
         _areaBodyStyles = styles; _actorBodyStyle = actor;
-        _areaMovingStamp++; _areaView = null; QueueRedraw();
+        _areaMovingStamp++; InvalidateAreaView();
     }
 
     internal IReadOnlyDictionary<AreaObjectKey, AreaBodyStyle>? AreaBodyStyles => _areaBodyStyles;
@@ -259,14 +259,14 @@ public partial class TerrainCanvas
     {
         if (absent is null or { Count: 0 } && _areaAbsent is null or { Count: 0 }) return;
         if (_areaAbsent is { } old && absent is { } next && old.SetEquals(next)) return;
-        _areaAbsent = absent; _areaView = null; QueueRedraw();
+        _areaAbsent = absent; InvalidateAreaView();
     }
     /// <summary>ARC-RENDER-018 smoke seam: one body left out of the next submissions (null = none), so the native blend
     /// observation can read the pixels beneath it.</summary>
     internal AreaObjectKey? AreaSmokeOmitted
     {
         get => _areaSmokeOmitted;
-        set { if (_areaSmokeOmitted == value) return; _areaSmokeOmitted = value; _areaView = null; QueueRedraw(); }
+        set { if (_areaSmokeOmitted == value) return; _areaSmokeOmitted = value; InvalidateAreaView(); }
     }
     private AreaObjectKey? _areaSmokeOmitted;
     // ARC-RENDER-022: a body a roof covers is not drawn (the pick does not test the cover).
@@ -336,7 +336,7 @@ public partial class TerrainCanvas
     public void SetAreaCarried(Func<ActorDiagnosticPlacementInput, TerrainRect, AreaLocalLighting?>? carried)
     {
         if (ReferenceEquals(_areaCarried, carried)) return;
-        _areaCarried = carried; _areaCarriedNow = null; _areaCarriedBinding = null; _areaView = null; QueueRedraw();
+        _areaCarried = carried; _areaCarriedNow = null; _areaCarriedBinding = null; InvalidateAreaView();
     }
     private AreaCarriedBinding AreaCarried(StationaryLightLattice lattice)
     {
@@ -425,9 +425,12 @@ public partial class TerrainCanvas
     }
     // ARC-RENDER-3417: the view is rebuilt once a frame, by this node's _Process, which runs after the viewer's own update has published the
     // frame's selection and set the camera. A publication that comes after it (a deferred call, a later node's update) queues a rebuild for
-    // the same frame, so it is drawn no later than before. A read of the submission in between rebuilds first.
+    // the same frame, so it is drawn no later than before. A read of the submission after a publication rebuilds first, unless another
+    // input changed since: that one may belong to a plan not yet published (a map change binds the new map's light before its plan), so
+    // the read then answers with the last submission.
     private ulong _areaViewFrame = ulong.MaxValue;
     private bool _areaViewStale, _areaViewQueued;
+    private void InvalidateAreaView() { _areaView = null; _areaViewStale = false; QueueRedraw(); }
     /// <summary>ARC-RENDER-3417 self-test seam: the visible-view rebuilds made so far.</summary>
     internal long AreaRebuildCount { get; private set; }
     private void RequestAreaView()
@@ -440,7 +443,7 @@ public partial class TerrainCanvas
     private void RebuildQueuedAreaView()
     {
         _areaViewQueued = false;
-        if (IsInstanceValid(this)) EnsureAreaView();
+        if (IsInstanceValid(this)) RebuildAreaView();
     }
     private void EnsureAreaView() { if (_areaViewStale) RebuildAreaView(); }
     private void RebuildAreaView()
@@ -452,7 +455,7 @@ public partial class TerrainCanvas
     // ARC-DEV-380: set by a publication of a new plan; the first full view after it is timed (canvas.view.NAME).
     private bool _areaPerfView;
     /// <summary>ARC-RENDER-3063: the town-map render draws no critter body (NPCs and monsters, fallen ones included); scenery, doors and items stay.</summary>
-    internal bool HideCritters { get => _hideCritters; set { if (_hideCritters == value) return; _hideCritters = value; _areaView = null; QueueRedraw(); } }
+    internal bool HideCritters { get => _hideCritters; set { if (_hideCritters == value) return; _hideCritters = value; InvalidateAreaView(); } }
     private bool _hideCritters;
     // ARC-RENDER-3416: the view's shared inputs, and which node's state each slot of a new submission takes.
     private readonly AreaViewState _areaViewState = new();
@@ -647,7 +650,7 @@ public partial class TerrainCanvas
     internal void SetAreaRelitExtra(Func<IReadOnlyList<AreaRelight.Light>>? source)
     {
         if (ReferenceEquals(_areaRelitExtra, source)) return;
-        _areaRelitExtra = source; _areaView = null; QueueRedraw();
+        _areaRelitExtra = source; InvalidateAreaView();
     }
     /// <summary>ARC-RES-1978: the hero's current frame texture (null when none is shown).</summary>
     internal ImageTexture? HeroFrame() { EnsureAreaView(); return _areaItems.Take(_areaActive).FirstOrDefault(item => item.Visible && item.Actor is not null)?.FrameTexture; }
