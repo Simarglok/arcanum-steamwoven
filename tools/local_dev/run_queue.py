@@ -9,8 +9,9 @@ how long it expects to take, and a run counts as having arrived ORDER_WEIGHT of 
 12 s run is not queued behind a 10 minute run that arrived a minute before it, while no run is passed by runs that arrive
 after that delay; ARC-DEV-400: the Godot slot is three lanes (one heavy lane for a run declared longer than HEAVY_SECONDS,
 SHORT_LANES short lanes; an export runs alone, and ARCANUM_QUEUE_LANES=0 returns to one slot); and a `quick` run (a project import, a headless self-test: short Godot runs with no window) takes a
-place of its own beside the Godot slot, as a dotnet run does. There is no daemon. Each ticket is a file in the queue folder whose flock its wrapper (and,
-for Godot kinds, the command it started) holds for its whole life, so the kernel frees the place of a run that crashed
+place of its own beside the Godot slot, as a dotnet run does. ARC-DEV-3443: a `solo` run (a frame-time measurement)
+runs alone, with no Godot and no dotnet run beside it. There is no daemon. Each ticket is a file in the queue folder
+whose flock its wrapper (and, for Godot kinds, the command it started) holds for its whole life, so the kernel frees the place of a run that crashed
 or was killed; a waiter checks the queue every POLL_SECONDS, so the next run starts within that of the last one ending.
 """
 from __future__ import annotations
@@ -32,12 +33,12 @@ from typing import Any, Callable, Sequence
 from . import config, menubar, run_log, start_check
 
 SCHEMA = "arcanum-run-queue-v1"
-KINDS = ("window", "headless", "export", "dotnet", "quick")
-GODOT_KINDS = frozenset({"window", "headless", "export"})
+KINDS = ("window", "headless", "export", "dotnet", "quick", "solo")
+GODOT_KINDS = frozenset({"window", "headless", "export", "solo"})
 HOLD_KINDS = GODOT_KINDS | {"quick"}  # the kinds whose command is Godot and holds the ticket lock
 SIDE_KINDS = frozenset({"dotnet", "quick"})  # the runs beside the Godot slot: they wait only for an export and a place of their kind
 # Minutes a run may hold its place; --timeout replaces it, 0 means no limit (the owner's own viewer launches).
-DEFAULT_TIMEOUT_MINUTES = {"window": 30.0, "headless": 30.0, "export": 180.0, "dotnet": 45.0, "quick": 30.0}
+DEFAULT_TIMEOUT_MINUTES = {"window": 30.0, "headless": 30.0, "export": 180.0, "dotnet": 45.0, "quick": 30.0, "solo": 60.0}
 # ARC-DEV-390: `quick` runs (Godot without a window that ends by itself in seconds: the project import, the headless self-test)
 # that may run at once; they wait only for an export, never for the Godot slot. The pinned Godot of each checkout is its
 # own project folder, so two of them never write the same `.godot` folder.
@@ -47,7 +48,7 @@ QUICK_SLOTS = 2
 DOTNET_SLOTS = 2
 # ARC-DEV-390: the seconds a run is expected to take when its caller declares none (a smoke declares its own, see
 # smoke.estimate), and how many estimates later than its arrival a run counts in the queue order.
-DEFAULT_ESTIMATE_SECONDS = {"window": 60.0, "headless": 60.0, "export": 300.0, "dotnet": 60.0, "quick": 15.0}
+DEFAULT_ESTIMATE_SECONDS = {"window": 60.0, "headless": 60.0, "export": 300.0, "dotnet": 60.0, "quick": 15.0, "solo": 180.0}
 ORDER_WEIGHT = 3.0
 MAX_ESTIMATE_SECONDS = 86400.0  # a day: a longer declaration is capped, so no run puts itself last for ever
 # ARC-DEV-300: no build server may outlive its run: no reused MSBuild worker nodes, no MSBuild server, no shared
@@ -63,8 +64,8 @@ LANES_ENV = "ARCANUM_QUEUE_LANES"  # the number of short lanes; 0 (or off, or an
 DEFAULT_SHORT_LANES = 2
 MAX_SHORT_LANES = 8
 HEAVY_SECONDS = 90.0
-HEAVY, SHORT, EXPORT, SINGLE = "heavy", "short", "export", "single"
-EXCLUSIVE_LANES = frozenset({EXPORT, SINGLE})
+HEAVY, SHORT, EXPORT, SINGLE, SOLO = "heavy", "short", "export", "single", "solo"
+EXCLUSIVE_LANES = frozenset({EXPORT, SINGLE, SOLO})
 # ARC-DEV-400: a run that ended with one of these was stopped on purpose (SIGHUP, SIGINT, SIGTERM of its wrapper): not red.
 STOPPED_EXITS = frozenset({128 + signal.SIGHUP, 128 + signal.SIGINT, 128 + signal.SIGTERM})
 KILL_GRACE_SECONDS = 10.0
@@ -372,8 +373,10 @@ def is_playing(ticket: dict[str, Any], now: float | None = None) -> bool:
 
 
 def held_by_playing(ticket: dict[str, Any]) -> bool:
-    """True for a run the mode holds back: an ordinary window run (the owner's own launches, priority FRONT, are not held)."""
-    return ticket.get("kind") == "window" and ticket.get("priority", NORMAL) != FRONT and not ticket.get("playing")
+    """True for a run the mode holds back: an ordinary window or solo run (the owner's own launches, priority FRONT, are
+    not held). A measurement beside the game would be spoiled and its window would take the focus (ARC-DEV-3443)."""
+    return ((ticket.get("kind") == "window" or bool(ticket.get("solo"))) and ticket.get("priority", NORMAL) != FRONT
+            and not ticket.get("playing"))
 
 
 def _open_folder() -> Path:
@@ -569,6 +572,8 @@ def tickets(prune: bool = True) -> list[tuple[Path, dict[str, Any]]]:
             elif prune:
                 _unlink(path)
         elif _live(path, ticket) and not (prune and _expired(ticket, now)):
+            if ticket.get("solo"):  # ARC-DEV-3443: the exclusive run it is, whatever it is published as (_wait_turn)
+                ticket["kind"] = "export"
             result.append((path, ticket))
         elif prune and not (_locked(path) and _alive(ticket.get("pid"), ticket.get("pidStart"))):
             _unlink(path)
@@ -725,8 +730,8 @@ def lane_for(kind: str, estimate: float, lanes: int | None = None) -> str | None
     """The lane a new run takes: None for a run beside the Godot slot (`dotnet`, `quick`)."""
     if kind not in GODOT_KINDS:
         return None
-    if kind == "export":
-        return EXPORT
+    if kind in ("export", "solo"):
+        return kind
     if (short_lanes() if lanes is None else lanes) <= 0:
         return SINGLE
     return HEAVY if estimate > HEAVY_SECONDS else SHORT
@@ -737,6 +742,8 @@ def lane_of(ticket: dict[str, Any]) -> str | None:
     alone: it takes the whole Godot slot (an export always does)."""
     if ticket.get("kind") not in GODOT_KINDS:
         return None
+    if ticket.get("solo"):
+        return SOLO
     lane = ticket.get("lane")
     if ticket["kind"] == "export":
         return EXPORT
@@ -856,14 +863,20 @@ def task_code(ticket: dict[str, Any]) -> str | None:
     return found.group() if found else None
 
 
+def kind_of(ticket: dict[str, Any]) -> str:
+    """The kind a run was queued as: a `solo` ticket carries another one for older wrappers (_enqueue)."""
+    return SOLO if ticket.get("solo") else ticket["kind"]
+
+
 def _describe(ticket: dict[str, Any]) -> str:
     if ticket.get("paused"):
         return "queue PAUSED (./arcanum queue --resume)"
     if ticket.get("playing"):
-        return f"owner playing ({playing_text(ticket)}; no window run starts, headless/quick/dotnet go on; {playing_hint(ticket)})"
-    lane = lane_of(ticket)
+        return (f"owner playing ({playing_text(ticket)}; no window or solo run starts, headless/quick/dotnet go on; "
+                f"{playing_hint(ticket)})")
+    lane = None if ticket.get("solo") else lane_of(ticket)
     code = task_code(ticket)
-    return (f"#{ticket['seq']} {ticket['kind']}{'/' + lane if lane else ''} {Path(ticket.get('cwd', '?')).name}"
+    return (f"#{ticket['seq']} {kind_of(ticket)}{'/' + lane if lane else ''} {Path(ticket.get('cwd', '?')).name}"
             f"{' ' + code if code else ''} \"{ticket.get('label', '')}\"")
 
 
@@ -908,12 +921,17 @@ def _enqueue(kind: str, label: str, command: Sequence[str], priority: int, timeo
         hidden_counter = base / f".counter-{os.getpid()}"
         hidden_counter.write_text(f"{seq}\n")
         os.replace(hidden_counter, counter)
-        ticket = {"schema": SCHEMA, "seq": seq, "kind": kind, "label": label[:MAX_LABEL], "priority": priority,
+        # ARC-DEV-3443: a solo run is published as an export, which every older wrapper already runs alone and holds
+        # its Godot, quick and dotnet runs behind; "solo" tells this version apart
+        ticket = {"schema": SCHEMA, "seq": seq, "kind": "export" if kind == SOLO else kind,
+                  "label": label[:MAX_LABEL], "priority": priority,
                   "command": " ".join(command)[:MAX_COMMAND], "cwd": os.getcwd(), "checkout": _find_checkout(os.getcwd()),
                   "pid": os.getpid(),
                   "pidStart": _process_start(os.getpid()), "timeoutMinutes": timeout, "estimateSeconds": estimate,
                   "enqueuedAt": time.time(),
                   "startedAt": None, "childPid": None, "childStart": None}
+        if kind == SOLO:
+            ticket["solo"] = True
         lane = lane_for(kind, estimate)
         if lane is not None:
             ticket["lane"] = lane  # ARC-DEV-400: what the other wrappers read; a ticket with none is a single-slot run
@@ -950,9 +968,17 @@ def _peers_now(own_seq: int) -> int | None:
 
 def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) -> None:
     last = None
+    published = ticket["kind"]
     while True:
         with _QueueLock():
             live = [item for _, item in tickets()]
+            if ticket.get("solo"):
+                # ARC-DEV-3443: an older wrapper holds only window runs in the playing mode; as a waiting export a held
+                # solo run would keep its Godot and dotnet runs waiting until the owner stops playing
+                shape = "window" if any(is_playing(item) for item in live) else ticket["kind"]
+                if shape != published:  # both words are six characters: the file stays complete JSON (_write)
+                    _write(fd, {**ticket, "kind": shape})
+                    published = shape
             waiting_for = blocker(ticket, live)
             # the guard holds the runs with a window or headless (GODOT_KINDS) behind running ones of those kinds only: a
             # `quick` run (an import, a self-test) never waits for a long viewer window because of the load
@@ -972,17 +998,17 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
         state = (waiting_for["seq"] if waiting_for else ("load", limit), position)
         if state != last:
             if waiting_for is None:  # ARC-DEV-1353: its turn has come, but the machine is busier than the owner's guard
-                say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for=load below {limit:g} "
+                say(f"queued ticket={ticket['seq']} kind={kind_of(ticket)} ahead={position} waiting-for=load below {limit:g} "
                     f"(now {_load()}; ./arcanum queue --set-max-load off removes the guard)")
             else:
-                say(f"queued ticket={ticket['seq']} kind={ticket['kind']} ahead={position} waiting-for={_describe(waiting_for)}")
+                say(f"queued ticket={ticket['seq']} kind={kind_of(ticket)} ahead={position} waiting-for={_describe(waiting_for)}")
             last = state
         sleep(POLL_SECONDS)
 
 
-# Which nested kinds a running parent's place already covers: an export covers everything, a Godot run covers Godot
-# runs, quick runs and dotnet runs (no export can drain while it holds the slot), a quick run covers quick runs, a dotnet
-# run covers dotnet runs.
+# Which nested kinds a running parent's place already covers: an export (a solo run too, read as one) covers everything,
+# a Godot run covers Godot runs, quick runs and dotnet runs (no export can drain while it holds the slot), a quick run
+# covers quick runs, a dotnet run covers dotnet runs.
 COVERS = {"export": frozenset(KINDS), "window": frozenset({"window", "headless", "dotnet", "quick"}),
           "headless": frozenset({"window", "headless", "dotnet", "quick"}), "dotnet": frozenset({"dotnet"}),
           "quick": frozenset({"quick"})}
@@ -1336,8 +1362,8 @@ def status(history: int = 0) -> list[str]:
     live = [ticket for ticket in live if not ticket.get("paused") and not ticket.get("playing")]
     result = []
     if playing is not None:  # ARC-DEV-2272
-        result.append(f"PLAYING: the owner is playing, no window run starts ({playing_text(playing, now)}); headless, quick and dotnet "
-                      f"runs go on; {playing_hint(playing)}")
+        result.append(f"PLAYING: the owner is playing, no window or solo run starts ({playing_text(playing, now)}); "
+                      f"headless, quick and dotnet runs go on; {playing_hint(playing)}")
     if pause is not None:
         state = pause_state() or {}
         since = state.get("since")

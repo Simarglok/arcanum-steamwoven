@@ -59,7 +59,7 @@ from the exported developer builds, builds the player's alpha and puts every God
 ./arcanum map Arcanum1-024-fixed  # the main world map, streamed by window from the new-game start
 ./arcanum world                   # the WORLD diagnostic
 ./arcanum package mac|win         # the player's alpha (packaged builds, below)
-./arcanum run --kind window|headless|export|dotnet|quick -- COMMAND   # any Godot run, export or dotnet build/test through the queue
+./arcanum run --kind window|headless|export|dotnet|quick|solo -- COMMAND   # any Godot run, export or dotnet build/test through the queue
 ./arcanum queue                   # the launch queue: running and waiting runs (--history N: the last finished ones; --lanes: per Godot lane)
 ./arcanum smoke pr --stages S,... # the per-PR smoke: only the touched stages (--crash-site when related); `--auto`: the zones the diff selects (ARC-DEV-396); also `smoke full` (the map smoke chain), `smoke complete` (every stage), `smoke map NAME`, `smoke crash-site`, `smoke self-test`
 ./arcanum daily                   # the daily package build: when origin/main changed, its root checks, the full smoke chain and both packages

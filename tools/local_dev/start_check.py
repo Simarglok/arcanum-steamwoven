@@ -52,7 +52,7 @@ class StartCheck:
 
 
 def for_run(kind: str, expect: str | None, seconds: float | None, command: Sequence[str] = ()) -> StartCheck | None:
-    """The check of a `./arcanum run`: --expect replaces the default start lines; Godot kinds (window, headless, export, quick)
+    """The check of a `./arcanum run`: --expect replaces the default start lines; Godot kinds (window, headless, export, quick, solo)
     have defaults, dotnet has none (a build or test ends by itself and its quiet output may print nothing for minutes).
     seconds 0 turns the check off."""
     window = DEFAULT_WINDOW_SECONDS if seconds is None else seconds
@@ -65,7 +65,7 @@ def for_run(kind: str, expect: str | None, seconds: float | None, command: Seque
             start = re.compile(expect)
         except re.error as error:
             raise ValueError(f"--expect is not a valid regular expression: {error}") from error
-    elif kind in ("window", "headless", "export", "quick"):
+    elif kind in ("window", "headless", "export", "quick", "solo"):
         start = re.compile(GODOT_START + ("|" + IMPORT_START if "--import" in command else ""))
     else:
         return None

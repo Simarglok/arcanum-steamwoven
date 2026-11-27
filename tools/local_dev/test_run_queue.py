@@ -35,6 +35,11 @@ def ticket(seq: int, kind: str, started: bool = False, priority: int = run_queue
     return result
 
 
+def solo_ticket(seq: int, started: bool = False, **fields) -> dict:
+    """A solo ticket as tickets() reads it (ARC-DEV-3443)."""
+    return {**ticket(seq, "export", started=started, lane=run_queue.SOLO, **fields), "solo": True}
+
+
 class AdmissionRuleTests(unittest.TestCase):
     def setUp(self) -> None:  # ARC-DEV-1353: a settings file of the owner's real queue folder must not reach the test
         self.temp = tempfile.TemporaryDirectory()
@@ -278,11 +283,14 @@ class LaneTests(unittest.TestCase):
             for step in range(120):
                 if rng.random() < 0.55 and len([item for item in live if not item.get("startedAt")]) < 10:
                     seq += 1
-                    kind = rng.choice(["window", "window", "headless", "export", "quick", "dotnet"])
+                    kind = rng.choice(["window", "window", "headless", "export", "quick", "dotnet", "solo"])
                     estimate = rng.choice([5.0, 20.0, 60.0, 120.0, 600.0])
                     lane = None if rng.random() < 0.1 and kind != "quick" else run_queue.lane_for(kind, estimate, rng.choice([2, 2, 0]))
-                    live.append(ticket(seq, kind, estimate=estimate, cwd=f"/work/{rng.randint(1, 3)}", lane=lane,
-                                       at=float(step) + rng.random()))
+                    item = ticket(seq, kind, estimate=estimate, cwd=f"/work/{rng.randint(1, 3)}", lane=lane,
+                                  at=float(step) + rng.random())
+                    if kind == "solo":
+                        item.update({"kind": "export", "solo": True, "lane": run_queue.SOLO})
+                    live.append(item)
                 waiting = [item for item in live if not item.get("startedAt")]
                 startable = [item for item in waiting if run_queue.blocker(item, live) is None]
                 if waiting and not any(item.get("startedAt") for item in live):
@@ -293,6 +301,8 @@ class LaneTests(unittest.TestCase):
                 running = [item for item in live if item.get("startedAt")]
                 for item in rng.sample(running, rng.randint(0, len(running))):
                     live.remove(item)
+            if any(item.get("startedAt") and item.get("solo") for item in live):
+                self.assertEqual(sum(1 for item in live if item.get("startedAt")), 1, f"seed {seed}: a solo run is not alone")
             running = [item for item in live if item.get("startedAt") and item["kind"] in run_queue.GODOT_KINDS]
             for name, cap in (("heavy", 1), ("short", 2)):
                 self.assertLessEqual(sum(1 for item in running if run_queue.lane_of(item) == name and item.get("lane") != "single"), cap)
@@ -302,6 +312,88 @@ class LaneTests(unittest.TestCase):
                 if first.get("startedAt") and run_queue.lane_of(first) in run_queue.EXCLUSIVE_LANES and first["kind"] in run_queue.GODOT_KINDS:
                     others = [item for item in live if item.get("startedAt") and item is not first and item["kind"] in run_queue.GODOT_KINDS]
                     self.assertEqual(others, [], f"seed {seed}: {first} runs beside {others}")
+
+
+class SoloKindTests(unittest.TestCase):
+    """ARC-DEV-3443: a `solo` run (a frame-time measurement) runs alone: no Godot and no dotnet run beside it."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.env = patch.dict(os.environ, {"ARCANUM_LOCAL_HOME": str(Path(self.temp.name) / "home")})
+        self.env.start()
+        os.environ.pop(run_queue.LANES_ENV, None)
+
+    def tearDown(self) -> None:
+        self.env.stop()
+        self.temp.cleanup()
+
+    def test_it_has_its_own_lane_limit_and_estimate(self) -> None:
+        self.assertIn("solo", run_queue.KINDS)
+        self.assertEqual(run_queue.DEFAULT_TIMEOUT_MINUTES["solo"], 60.0)
+        self.assertEqual(run_queue.DEFAULT_ESTIMATE_SECONDS["solo"], 180.0)
+        for lanes in (0, 2):
+            self.assertEqual(run_queue.lane_for("solo", 5.0, lanes), run_queue.SOLO)
+        self.assertEqual(run_queue.lane_of(solo_ticket(1)), run_queue.SOLO)
+        self.assertEqual(run_queue.lane_of_entry({"kind": "solo", "lane": "solo"}), run_queue.SOLO)
+        self.assertEqual(run_queue.kind_of(solo_ticket(1)), "solo")
+        self.assertIn("#1 solo ", run_queue._describe(solo_ticket(1)))
+
+    def test_it_waits_for_every_running_run(self) -> None:
+        for kind in ("window", "headless", "export", "dotnet", "quick"):
+            running = ticket(1, kind, started=True, cwd="/work/a", lane=run_queue.lane_for(kind, 20.0, 2))
+            mine = solo_ticket(2, cwd="/work/b")
+            self.assertIs(run_queue.blocker(mine, [running, mine]), running, kind)
+
+    def test_nothing_starts_beside_it(self) -> None:
+        running = solo_ticket(1, started=True, cwd="/work/a")
+        for kind in run_queue.KINDS:
+            other = (solo_ticket(2, cwd="/work/b") if kind == "solo" else
+                     ticket(2, kind, cwd="/work/b", lane=run_queue.lane_for(kind, 20.0, 2)))
+            self.assertIs(run_queue.blocker(other, [running, other]), running, kind)
+
+    def test_once_it_is_next_new_dotnet_and_quick_runs_wait_for_it(self) -> None:
+        older = ticket(1, "dotnet", started=True)
+        mine = solo_ticket(2)
+        for kind in ("dotnet", "quick"):
+            newer = ticket(3, kind)
+            self.assertIs(run_queue.blocker(newer, [older, mine, newer]), mine, kind)
+
+    def test_the_playing_mode_holds_it_and_the_runs_behind_it_go_on(self) -> None:
+        playing = {**ticket(0, "window", started=True, priority=run_queue.FRONT, lane=run_queue.SINGLE), "playing": True,
+                   "since": time.time(), "until": None}
+        mine = solo_ticket(1)
+        self.assertIs(run_queue.blocker(mine, [playing, mine]), playing)
+        for kind in ("headless", "dotnet", "quick"):
+            behind = ticket(2, kind, at=100000.0, lane=run_queue.lane_for(kind, 20.0, 2))
+            self.assertIsNone(run_queue.blocker(behind, [playing, mine, behind]), kind)
+
+    def test_as_published_it_reads_as_an_exclusive_run_to_a_wrapper_without_the_kind(self) -> None:
+        # the contract with the wrappers of other checkouts, which ignore "solo": a waiting or running ticket is an export,
+        # and while the owner plays a window run of the single slot, the one kind they hold then
+        fd, path, mine = run_queue._enqueue("solo", "m", ["true"], run_queue.NORMAL, 60.0, 180.0)
+        try:
+            published = json.loads(path.read_text())
+            self.assertEqual((published["kind"], published["solo"]), ("export", True))
+            old = {key: value for key, value in published.items() if key != "solo"}
+            self.assertEqual(run_queue.lane_of(old), run_queue.EXPORT)
+            self.assertEqual(run_queue.lane_of({**old, "kind": "window"}), run_queue.SINGLE)
+            self.assertEqual(len("window"), len(old["kind"]))
+            self.assertEqual(mine["kind"], "export")
+        finally:
+            path.unlink()
+            os.close(fd)
+
+    def test_it_covers_every_nested_run(self) -> None:
+        fd, path, mine = run_queue._enqueue("solo", "m", ["true"], run_queue.NORMAL, 60.0, 180.0)
+        try:
+            mine["startedAt"] = time.time()
+            run_queue._write(fd, mine)
+            with patch.dict(os.environ, {run_queue.TICKET_ENV: str(mine["seq"])}):
+                for kind in run_queue.KINDS:
+                    self.assertTrue(run_queue.nested(kind), kind)
+        finally:
+            path.unlink()
+            os.close(fd)
 
 
 class LaneAccountingTests(unittest.TestCase):
@@ -1096,6 +1188,63 @@ class QueueRunTests(unittest.TestCase):
         found = self.events()
         self.assertGreaterEqual(found["start x"], found["end old"])
         self.assertGreaterEqual(found["start new"], found["end x"])
+
+    # ARC-DEV-3443: the solo kind with real wrappers
+    def published(self, label: str) -> dict:
+        """A ticket as it is on disk, which is what a wrapper of another checkout reads."""
+        for path in run_queue.folder().glob("t-*.json"):
+            try:
+                found = json.loads(path.read_text())
+            except (OSError, ValueError):
+                continue
+            if found.get("label") == label:
+                return found
+        return {}
+
+    def test_a_solo_run_waits_for_running_godot_and_dotnet_runs_and_nothing_runs_beside_it(self) -> None:
+        self.held("window", "w")
+        self.held("dotnet", "d")
+        self.started("w", "d")
+        solo = self.queued("solo", "s", 1.0)
+        time.sleep(1.0)
+        self.assertNotIn("start s ", self.log.read_text())
+        self.release()
+        self.until(lambda: "start s " in self.log.read_text(), 60.0)
+        ticket_ = self.published("s")
+        self.assertEqual((ticket_["kind"], ticket_["lane"], ticket_["timeoutMinutes"]), ("export", "solo", 60.0))
+        for kind in ("dotnet", "quick", "headless", "window"):
+            self.queued(kind, f"after-{kind}", 0.1)
+        self.finish()
+        found = self.events()
+        self.assertEqual(solo.returncode, 0)
+        self.assertGreaterEqual(found["start s"], max(found["end w"], found["end d"]))
+        for kind in ("dotnet", "quick", "headless", "window"):
+            self.assertGreaterEqual(found[f"turn after-{kind}"], found["end s"], kind)
+        entry = next(item for item in map(json.loads, (run_queue.folder() / "history.jsonl").read_text().splitlines())
+                     if item["label"] == "s")
+        self.assertEqual((entry["kind"], entry["lane"]), ("solo", "solo"))
+
+    def test_the_playing_mode_holds_a_solo_run_and_it_is_published_as_a_window_run_meanwhile(self) -> None:
+        self.held("window", "w")
+        self.started("w")
+        run_queue.set_playing(True, 60.0, "test")
+        try:
+            solo = self.queued("solo", "s", 0.1)
+            self.until(lambda: self.published("s").get("kind") == "window")
+            self.queued("dotnet", "d", 0.1)
+            self.until(lambda: "end d " in self.log.read_text(), 60.0)  # not held back by the held solo run
+            self.assertNotIn("start s ", self.log.read_text())
+            lines = run_queue.status()
+            self.assertTrue(any(line.startswith("waiting #") and " solo " in line and line.endswith("(owner playing)")
+                                for line in lines), lines)
+        finally:
+            run_queue.set_playing(False)
+        self.until(lambda: self.published("s").get("kind") == "export")  # the mode is over, "w" still runs
+        self.assertNotIn("start s ", self.log.read_text())
+        self.release()
+        self.finish()
+        self.assertEqual(solo.returncode, 0)
+        self.assertGreaterEqual(self.events()["start s"], self.events()["end w"])
 
     def test_a_killed_wrapper_frees_the_place_when_its_command_ends_even_if_a_descendant_kept_the_lock(self) -> None:
         # The command leaves a background process that inherits the ticket's descriptor and outlives everything.

@@ -72,8 +72,9 @@ and its link holds the detail.
   except `python3 -B tools/docs_check.py`; its PR says "docs-only, no checks run
   except docs_check", and the independent review still applies.
 - **Runs on the Mac.** Every Godot run, export and `dotnet` build/test goes
-  through the launch queue `./arcanum run --kind window|headless|export|dotnet|quick -- COMMAND`
-  (`./arcanum queue` shows it; it replaces `lockf`)
+  through the launch queue `./arcanum run --kind window|headless|export|dotnet|quick|solo -- COMMAND`
+  (`./arcanum queue` shows it; it replaces `lockf`;
+  a frame-time measurement is `--kind solo`, alone on the machine)
   ([launch queue](docs/workflow/toolchain.md#launch-queue-arc-dev-033)). It is
   quiet: the whole output goes to a log file, stdout keeps PASS/FAIL and the
   first error ([quiet run output](docs/workflow/tasks.md#quiet-run-output)).

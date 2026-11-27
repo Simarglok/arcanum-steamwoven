@@ -306,7 +306,7 @@ def queue(args: argparse.Namespace) -> int:
             print(f"arcanum queue: {error}", file=sys.stderr)
             return 1
         print(("paused" if args.pause else "resumed") if changed else ("already paused" if args.pause else "was not paused"))
-    if args.playing or args.not_playing:  # ARC-DEV-2272: no window run starts while the owner plays
+    if args.playing or args.not_playing:  # ARC-DEV-2272: no window or solo run starts while the owner plays
         try:
             changed = run_queue.set_playing(args.playing, run_queue.DEFAULT_PLAYING_MINUTES if args.for_minutes is None
                                             else args.for_minutes)
@@ -315,7 +315,7 @@ def queue(args: argparse.Namespace) -> int:
             return 1
         state = run_queue.playing_state()
         if args.playing:
-            print("playing: no window run starts (" + (run_queue.playing_text(state) if state else "?")
+            print("playing: no window run starts, nor a solo run (" + (run_queue.playing_text(state) if state else "?")
                   + "); headless, quick and dotnet runs go on; the owner's own launches are not held; "
                   "./arcanum queue --not-playing ends it")
         else:
@@ -450,7 +450,9 @@ def parser() -> argparse.ArgumentParser:
                          help="window: Godot with a window; headless: Godot --headless; export: an export "
                               "endpoint; dotnet: dotnet build/test (runs alongside others, waits only for an export); "
                               "quick: a Godot run with no window that ends in seconds (a project --import, the headless "
-                              "self-test), beside the Godot slot, up to " + str(run_queue.QUICK_SLOTS) + " at once (ARC-DEV-390)")
+                              "self-test), beside the Godot slot, up to " + str(run_queue.QUICK_SLOTS) + " at once (ARC-DEV-390); "
+                              "solo: a frame-time measurement, alone on the machine: no Godot and no dotnet run beside it "
+                              "(ARC-DEV-3443)")
     command.add_argument("--estimate", type=float, metavar="SEC",
                          help="the seconds the run is expected to take, for the queue order (ARC-DEV-390): a short run "
                               "is not queued behind a long one that arrived a little before it (default "
@@ -461,7 +463,7 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--label", help="a short note shown in ./arcanum queue")
     command.add_argument("--expect", metavar="REGEX",
                          help="the start line the command prints when it started the intended mode (ARC-DEV-059); "
-                              "replaces the defaults of window, headless and export runs (the viewer's start, the "
+                              "replaces the defaults of window, headless, solo and export runs (the viewer's start, the "
                               "self-test's first stage, the export steps) and gives a dotnet run a start check")
     command.add_argument("--start-within", type=float, metavar="SEC",
                          help=f"seconds from the command's start to its start line (default "
