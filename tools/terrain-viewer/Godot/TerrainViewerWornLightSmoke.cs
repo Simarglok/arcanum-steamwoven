@@ -18,7 +18,8 @@ public partial class TerrainViewerApp
     //  - without a worn light the canvas draws none; after the item is worn the canvas holds one carried light of the large size, the hero's
     //    colour and the terrain's lattice differ from the map's alone, and a terrain pixel of the lit area in the viewport reads back as the
     //    merged lattices predict (the map's and the carried one, which the shader adds before it composes the node);
-    //  - the light goes with the hero: after the hero stands elsewhere the carried lattice stands elsewhere too;
+    //  - the light goes with the hero: after the hero stands elsewhere the carried lattice stands elsewhere too, its textures have the size it asks
+    //    for and stay while they hold it (ARC-RENDER-3427), and a terrain pixel there reads back as the moved lattice predicts;
     //  - taking the item off, or turning the lighting off, takes the light away again.
     // The clock is moved to a night hour when the ambient is too bright for a light to show (it is not put back); the item and the hero's
     // place are restored for the later stages.
@@ -100,7 +101,8 @@ public partial class TerrainViewerApp
                     // The camera is held where the sample puts it (the open input gate would follow the hero back).
                     if (await WithAreaSmokeCameraHeld(() => ObserveTerrainLitAsync(area, command, ambient, Merged))) return tried;
                 }
-                throw new InvalidOperationException($"AREA_WORN_LIGHT_NO_LIT_PIXEL: no terrain pixel near the hero shows the carried light {when} ({tried} candidates tried)");
+                Require(false, $"a terrain pixel near the hero shows the carried light {when} ({tried} candidates tried)");
+                return 0; // not reached: Require throws
             }
             var tried = await LitPixelNearHero(lattice, "where it is worn");
             // The pixel observation moved the camera: put it back where the hero is.
@@ -121,6 +123,9 @@ public partial class TerrainViewerApp
             Require((moved.FirstColumn, moved.FirstRow) != (lattice.FirstColumn, lattice.FirstRow), "the carried lattice stands elsewhere after the hero stands elsewhere");
             // ARC-RENDER-3427: the moved lattice is written into the shown textures while their size holds it, and the terrain still reads it.
             var movedTexture = _canvas.AreaCarriedTextureForSelfTest ?? throw new InvalidOperationException("AREA_WORN_LIGHT_NO_TEXTURE_MOVED");
+            var (width, height) = AreaCarriedTexels.Size(texture.Size.X, texture.Size.Y, moved.Columns, moved.Rows);
+            Require(movedTexture.Size == new Vector2I(width, height) && width % AreaCarriedTexels.Step == 0 && height % AreaCarriedTexels.Step == 0,
+                $"the carried textures have the size the moved lattice asks for ({texture.Size} -> {movedTexture.Size}, lattice {moved.Columns}x{moved.Rows})");
             var kept = movedTexture.Size == texture.Size;
             Require(!kept || ReferenceEquals(movedTexture.Lighter, texture.Lighter), "the carried textures are kept while their size holds the moved lattice");
             await LitPixelNearHero(moved, "where the hero stands now");

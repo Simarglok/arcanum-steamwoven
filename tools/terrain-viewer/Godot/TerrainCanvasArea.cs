@@ -328,7 +328,7 @@ public partial class TerrainCanvas
         if (_areaCarriedLattice is { } known && ReferenceEquals(known.Lattice, lattice)) return known.Binding;
         var (lighter, darker, bounds) = LatticeRows(lattice);
         // ARC-RENDER-3427: a walking light changes the lattice's columns and rows every few frames. The textures are larger than the lattice
-        // and are made again only when it outgrows them, so the terrain items keep their binding; the bounds go to the view state.
+        // and are made again only when it outgrows them or they are far larger than needed, so the terrain items keep their binding; the bounds go to the view state.
         var (width, height) = AreaCarriedTexels.Size(_areaCarriedLattice?.Size.X ?? 0, _areaCarriedLattice?.Size.Y ?? 0, bounds.Z, bounds.W);
         var size = new Vector2I(width, height);
         lighter = AreaCarriedTexels.Lay(lighter, bounds.Z, bounds.W, width, height);
