@@ -59,6 +59,29 @@ public partial class TerrainViewerApp
         PrototypeCacheMount.Use(null);
         async Task Play() { _prepareTask = null; _launcherPanel!.PlayForSelfTest(); if (_prepareTask is { } task) await task; }
 
+        // ARC-UI-3432: the whole screen fits 1280x800; a lower viewport scrolls to the end of the help text.
+        async Task Layout(string state)
+        {
+            var window = (SubViewport)GetViewport();
+            var was = window.Size;
+            foreach (var size in new Vector2I[] { new(1280, 800), new(800, 600), new(640, 400) })
+            {
+                window.Size = size;
+                _launcherPanel!.ScrollForSelfTest(false);
+                for (var frame = 0; frame < 4; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                var (panel, content, view) = _launcherPanel.LayoutForSelfTest;
+                var at = $"{state} at {size.X}x{size.Y}: panel {panel}, lines {content}, shown {view}";
+                Require(new Rect2(Vector2.Zero, size).Encloses(panel), "the panel stays inside the viewport, " + at);
+                Require(size.Y < 800 || content.X <= view.X + 1 && content.Y <= view.Y + 1 && _launcherPanel.LastLineShownForSelfTest, "everything shows without scrolling, " + at);
+                Require(size.Y > 400 || content.Y > view.Y && !_launcherPanel.LastLineShownForSelfTest, "a low viewport has more lines than it shows, " + at);
+                _launcherPanel.ScrollForSelfTest(true);
+                for (var frame = 0; frame < 2; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(_launcherPanel.LastLineShownForSelfTest, "scrolling reaches the end of the help text, " + at);
+            }
+            window.Size = was;
+            _launcherPanel!.ScrollForSelfTest(false);
+        }
+
         // First run: no file, no candidate: the screen, without a folder, Play off.
         await Start(false);
         Require(_launcher is { Reason: LauncherShowReason.FirstRun } && _launcherPanel!.IsOpen && !_launcherPanel.PlayEnabledForSelfTest && started is null,
@@ -70,6 +93,7 @@ public partial class TerrainViewerApp
             "a non-game folder is named in words: " + Lines()[5]);
         await Play();
         Require(started is null, "Play does nothing without a ready folder");
+        await Layout("a refused folder");
         _launcherPanel.ChooseForSelfTest(game);
         _launcherPanel.RulesForSelfTest(RuleMode.Original);
         _launcherPanel.ShowAtStartForSelfTest(true);
@@ -267,6 +291,7 @@ public partial class TerrainViewerApp
             _launcherPanel.HdForSelfTest(true);
             _launcherPanel.HdPackForSelfTest(HdPackSourceMode.GameFolder);
             Require(HdLines().SequenceEqual(["HD: On", "HD pack: Game"]) && Lines()[11] == "World zoom: Auto", "the choices show and the world zoom row appears with HD On: " + string.Join(" | ", HdLines()) + " | " + Lines()[11]);
+            await Layout("HD On with the world zoom row");
             Require(new VisualProfileSettingsStore(false).Load() == VisualProfile.Hd
                     && new GameSettingsStore(false).Load() is { HdInterface: true, HdPackSource: HdPackSourceMode.GameFolder }, "each choice was saved at once in the one settings file");
             Require(System.IO.File.ReadAllText(gameSettingsPath).Contains("hd=1", StringComparison.Ordinal) && System.IO.File.ReadAllText(gameSettingsPath).Contains("visual profile=hd", StringComparison.Ordinal),
@@ -318,7 +343,7 @@ public partial class TerrainViewerApp
         return "first run without a folder, a non-game folder in words, Play storing folder/identity/Original/show at start, show at start "
                + "reopening it, a stored folder going straight on, --launcher, the Rules line writing the file, the GOG installer unpacked by a stand-in "
                + "tool (no tool, progress lock, chosen folder, used folder refused, cancel), the game data prepared on the first Play (progress, cancel, refusal, "
-               + "cached, a stored folder), Reset over a newer build's launcher object, the HD lines (saved at once in the settings file, shown again, Custom's folder, Reset leaves them)";
+               + "cached, a stored folder), the screen fitting 1280x800 and scrolling in a lower viewport, Reset over a newer build's launcher object, the HD lines (saved at once in the settings file, shown again, Custom's folder, Reset leaves them)";
     }
 
     /// <summary>ARC-UI-014 native smoke: the launcher a start without inputs opened (run with <c>--launcher</c>, or a first run), over the
