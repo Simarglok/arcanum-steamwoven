@@ -72,8 +72,8 @@ public partial class TerrainViewerApp
                 var (panel, content, view) = _launcherPanel.LayoutForSelfTest;
                 var at = $"{state} at {size.X}x{size.Y}: panel {panel}, lines {content}, shown {view}";
                 Require(new Rect2(Vector2.Zero, size).Encloses(panel), "the panel stays inside the viewport, " + at);
-                Require(size.Y < 800 || content <= view + 1 && _launcherPanel.LastLineShownForSelfTest, "everything shows without scrolling, " + at);
-                Require(size.Y > 400 || content > view && !_launcherPanel.LastLineShownForSelfTest, "a low viewport has more lines than it shows, " + at);
+                Require(size.Y < 800 || content.X <= view.X + 1 && content.Y <= view.Y + 1 && _launcherPanel.LastLineShownForSelfTest, "everything shows without scrolling, " + at);
+                Require(size.Y > 400 || content.Y > view.Y && !_launcherPanel.LastLineShownForSelfTest, "a low viewport has more lines than it shows, " + at);
                 _launcherPanel.ScrollForSelfTest(true);
                 for (var frame = 0; frame < 2; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 Require(_launcherPanel.LastLineShownForSelfTest, "scrolling reaches the end of the help text, " + at);

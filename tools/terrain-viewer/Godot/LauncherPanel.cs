@@ -108,8 +108,8 @@ public partial class LauncherPanel : CanvasLayer
     internal void PlayForSelfTest() => PlayRequested?.Invoke();
     internal void ResetForSelfTest() => ResetRequested?.Invoke();
 
-    /// <summary>ARC-UI-3432: the panel's rectangle, the height of its lines and the height shown at once.</summary>
-    internal (Rect2 Panel, float Content, float View) LayoutForSelfTest => (_panel.GetRect(), _contents.GetCombinedMinimumSize().Y, _scroll.Size.Y);
+    /// <summary>ARC-UI-3432: the panel's rectangle, the size its lines ask for and the size shown at once.</summary>
+    internal (Rect2 Panel, Vector2 Content, Vector2 View) LayoutForSelfTest => (_panel.GetRect(), _contents.GetCombinedMinimumSize(), _scroll.Size);
     internal void ScrollForSelfTest(bool toEnd) => _scroll.ScrollVertical = toEnd ? (int)_scroll.GetVScrollBar().MaxValue : 0;
     /// <summary>The end of the help text, the screen's last line, is inside the shown part.</summary>
     internal bool LastLineShownForSelfTest => _hint.GetGlobalRect().End.Y <= _scroll.GetGlobalRect().End.Y + 1;
@@ -291,9 +291,11 @@ public partial class LauncherPanel : CanvasLayer
                 var index = i;
                 var candidate = screen.Candidates[i];
                 if (candidate.Path == screen.Folder?.Path) continue;
-                _candidates.AddChild(MakeButton("Candidate" + i, $"Use {candidate.Path} ({LauncherScreen.Origin(candidate.Origin)})", 
+                var button = MakeButton("Candidate" + i, $"Use {candidate.Path} ({LauncherScreen.Origin(candidate.Origin)})",
                     // Deferred: the render it causes frees this button.
-                    () => Callable.From(() => CandidateRequested?.Invoke(index)).CallDeferred()));
+                    () => Callable.From(() => CandidateRequested?.Invoke(index)).CallDeferred());
+                button.AutowrapMode = TextServer.AutowrapMode.WordSmart; // ARC-UI-3432: a long path wraps, it never widens the screen
+                _candidates.AddChild(button);
             }
             foreach (var button in _rules.GetChildren().OfType<Button>()) button.ButtonPressed = button.Name == screen.Settings.Rules.ToString();
             _showAtStart.ButtonPressed = screen.Settings.ShowAtStart;
