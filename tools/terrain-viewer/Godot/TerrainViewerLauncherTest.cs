@@ -104,6 +104,11 @@ public partial class TerrainViewerApp
         Require(Lines()[12] == "Separate rendering thread: off", "the separate rendering thread is off by default: " + Lines()[12]);
         _launcherPanel.RenderThreadForSelfTest(true);
         Require(Lines()[12] == "Separate rendering thread: on", "the separate rendering thread is ticked: " + Lines()[12]);
+        // ARC-UI-3453: off until ticked; Play stores it and the run skips the start-up movies.
+        Require(Lines()[13] == "Skip start-up movies: off", "the start-up movies play by default: " + Lines()[13]);
+        _launcherPanel.SkipStartupMoviesForSelfTest(true);
+        Require(Lines()[13] == "Skip start-up movies: on", "the start-up movies option is ticked: " + Lines()[13]);
+        var skipBefore = _startupMoviesSkip;
         var debugBefore = DebugMode;
         Require(_launcherPanel.PlayEnabledForSelfTest && Lines()[3] == "Rules: Steamwoven [Original]" && Lines()[4] == "Show at every start: on"
                 && Lines()[6] == "Debug mode: on", "a game folder, Original, show at start and debug mode: " + string.Join(" | ", Lines()));
@@ -111,6 +116,8 @@ public partial class TerrainViewerApp
         Require(DebugMode && Stored().DebugMode, "Play stored the debug mode and turned it on");
         Require(Stored().SeparateRenderThread, "Play stored the separate rendering thread");
         DebugMode = debugBefore;
+        Require(Stored().SkipStartupMovies && _startupMoviesSkip == "launcher settings", "Play stored the skip of the start-up movies and applied it");
+        _startupMoviesSkip = skipBefore;
         Require(started?.GameRoot is { } root && System.IO.Path.GetFullPath(root) == System.IO.Path.GetFullPath(game) && !_launcherPanel.IsOpen,
             "Play started the chosen folder's map mode: " + started?.GameRoot);
         var stored = Stored();

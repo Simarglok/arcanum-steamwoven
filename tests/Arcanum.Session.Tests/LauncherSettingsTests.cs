@@ -73,6 +73,13 @@ public sealed class LauncherSettingsTests
         var bad = LauncherSettingsCodec.Deserialize("""{"schema":1,"separateRenderThread":1}""");
         Assert.IsTrue(!bad.Settings.SeparateRenderThread && bad.Defaulted.Contains("separateRenderThread"), "a bad value is off and named");
 
+        Assert.IsFalse((bool)JsonNode.Parse(LauncherSettingsCodec.Serialize(LauncherSettings.Defaults))!["skipStartupMovies"]!, "ARC-UI-3453: the start-up movies play by default");
+        var skipping = LauncherSettings.Defaults with { SkipStartupMovies = true };
+        Assert.AreEqual(skipping, Read(LauncherSettingsCodec.Serialize(skipping)), "the start-up movies choice round-trips");
+        Assert.IsFalse(Read("""{"schema":1}""").SkipStartupMovies, "an older file without the key plays the movies");
+        var badSkip = LauncherSettingsCodec.Deserialize("""{"schema":1,"skipStartupMovies":"yes"}""");
+        Assert.IsTrue(!badSkip.Settings.SkipStartupMovies && badSkip.Defaulted.Contains("skipStartupMovies"), "a bad value is off and named");
+
         // ARC-UI-2771: a first start (no file, or a file without a display line) is fullscreen; a stored choice is kept.
         Assert.AreEqual(LauncherWindowMode.Fullscreen, LauncherSettings.Defaults.Display.WindowMode);
         Assert.AreEqual(LauncherWindowMode.Fullscreen, LauncherSettingsCodec.Deserialize(null).Settings.Display.WindowMode, "no file");

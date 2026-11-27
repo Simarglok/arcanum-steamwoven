@@ -85,6 +85,14 @@ public partial class TerrainViewerApp
             Require(Pump(() => !MovieCovering, 30) && _moviesPlayed == playedBefore + 3, $"the start-up movies played in full (played {_moviesPlayed - playedBefore} of 3)");
             PlayStartupMovies();
             Require(!MovieCovering, "the start-up movies play once a run");
+            // ARC-UI-3453: with the skip option the start-up queue never starts, and other movies still play.
+            (_startupMoviesDone, playedBefore) = (false, _moviesPlayed);
+            var skipBefore = _startupMoviesSkip;
+            SkipStartupMovies("smoke");
+            PlayStartupMovies();
+            Require(!MovieCovering && _startupMoviesDone && _moviesPlayed == playedBefore, "the skipped start-up movies never start");
+            Require(PlayMovies([7], 0, () => continued++, "smoke") && Pump(() => !MovieCovering, 20) && continued == 2, "another movie still plays with the start-up ones skipped");
+            (_startupMoviesSkip, continued) = (skipBefore, 1);
             // Outside the game build and this stage nothing plays: the dev viewer and every other smoke (ARC-RENDER-1242).
             _moviesForSelfTest = false;
             Require(MovieRefusal() == NotGameBuildRefusal && !PlayMovies([1], 0, () => continued++, "smoke") && !MovieCovering && continued == 1,

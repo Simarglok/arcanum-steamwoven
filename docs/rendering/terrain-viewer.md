@@ -106,7 +106,7 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   warning that only that release is checked; otherwise what is missing, for example "no arcanum2.dat here"); a button
   for each other ready fixed candidate; "Choose folder…" (the system's folder dialog; `GameFolderLocator.Choose` also
   looks inside a chosen Wine wrapper `.app`, bottle or `drive_c`); the rules Steamwoven or Original (custom mixes
-  after alpha); three HD lines (ARC-UI-143, below); "Show this screen at every start"; "Separate rendering thread (experimental)" (ARC-RENDER-3420, off by default, below); "Debug mode" (ARC-DEV-050, off by default:
+  after alpha); three HD lines (ARC-UI-143, below); "Show this screen at every start"; "Skip the three start-up movies before the main menu" (ARC-UI-3453, off by default, below); "Separate rendering thread (experimental)" (ARC-RENDER-3420, off by default, below); "Debug mode" (ARC-DEV-050, off by default:
   [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
 - **HD lines (ARC-UI-143, ARC-RENDER-2076, ARC-UI-2174).** After the rules the screen has two HD rows (a third, the experimental generated interface, was removed by ARC-UI-3142: HD On is the Steamwoven interface, HD Off the Original look) (the Game page of the options window had them until ARC-UI-146), one row of choices each:
@@ -123,6 +123,14 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   file and finds the defaults. A choice that could not be written is named under the rows. Checked by the launcher self-test (defaults, an old file's migration, each choice saved in the one file, shown again
   by the next screen, read by the start, Custom's folder, Reset) and by the launcher native smoke's HD lines and screenshot (`--native-smoke-screenshot PATH` also writes `NAME-launcher.png` beside it,
   the screen before Play, where `PATH` is `NAME.png`).
+- **Skip the start-up movies (ARC-UI-3453, owner request 2026-11-27).** A checkbox, off by default (the original plays them),
+  stored by Play as `skipStartupMovies` of the `launcher` line (Reset settings turns it off). On, the two logos and movie 8
+  do not play before the first menu; View Intro, the new game's movies and the scripts' movies play as before. The user
+  argument `--skip-startup-movies` (after `--`, with or without other arguments) does the same for one run without storing
+  anything, for tool runs and measurements of the packaged build. Either way the log says
+  `ARC-UI-3453 start-up movies skipped`. Source and automated runs play no movies at all
+  ([where movies play](../workflow/toolchain.md#movie-decoder-arc-render-1170)). Checked by the launcher self-test and the
+  `movies` smoke stage.
 - **Separate rendering thread (ARC-RENDER-3420).** A checkbox, off by default, stored by Play as `separateRenderThread` of the
   `launcher` line (Reset settings turns it off). On, the game draws on the engine's own rendering thread (`--render-thread separate`),
   which the engine calls experimental. The engine reads its thread model only when it starts, so the first process always runs the

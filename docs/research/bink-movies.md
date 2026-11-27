@@ -185,7 +185,7 @@ LGPL build; **(c)** whether the start-up logos and movie 8 play in the viewer.
 
 ## 6a. Owner's decision and the implementation (ARC-RENDER-1170, 2026-11-12)
 
-The owner chose: **(a)** movies are in scope; **(b)** O1, ffmpeg as an external program the player installs; **(c)** the start-up movie 8 and the logos are not needed in the viewer (at most a separate smoke stage); on the same day the owner clarified that movies play only in the game build and in the dedicated smoke stage, so ARC-RENDER-1242 plays the logos and movie 8 in the game build too. The first
+The owner chose: **(a)** movies are in scope; **(b)** O1, ffmpeg as an external program the player installs; **(c)** the start-up movie 8 and the logos are not needed in the viewer (at most a separate smoke stage); on the same day the owner clarified that movies play only in the game build and in the dedicated smoke stage, so ARC-RENDER-1242 plays the logos and movie 8 in the game build too. On 2026-11-27 the owner asked for a switch that skips those three (ARC-UI-3453: a launcher checkbox, off by default, and the `--skip-startup-movies` argument; the original has no such switch). The first
 implementation plays movies 1 and 7 from View Intro and from a new game's start, with the player in `Arcanum.Presentation.Movies` (`FfmpegMovieSource`,
 `MoviePlayback`), the movie table in `Arcanum.World.AreaMovieTable` and the movie screen in the viewer; see [FR-MEDIA-001](../requirements/coverage/ui-media-lifecycle.md) and the
 [movie decoder](../workflow/toolchain.md#movie-decoder-arc-render-1170) section. The first thing the study asked for was done on the owner's Mac (ffmpeg 9.0.2): `ffprobe` and a full decode of all ten
