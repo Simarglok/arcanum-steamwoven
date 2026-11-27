@@ -509,6 +509,12 @@ Owner decision 2026-11-24 (option A, [#3098](https://github.com/Simarglok/arcanu
   copies images found only in worktrees, session scratchpads, temp folders and the Codex output folder (it copies, never moves or deletes) and registers the pipeline's in-place
   files (outbox, codex-work, masters; `location: pipeline`). `fixtures.py build`, `label_parts.py build` and `sheet_parts.py build` write to the main checkout's `masters/`, and the tools with `--out`/`--work` print a warning
   for a folder inside a worktree or a temp folder. Not committed, not packaged (SWI-PRV-1); the HD pack resources are never touched.
+  **What counts** (ARC-DEV-3437): every image file a task makes or uses as evidence, throwaway probes, working crops and comparison cells included,
+  wherever it was written (session scratchpad, `$TMPDIR`, `/tmp`, the Codex output folder, `composites/`, the input and working files of `inbox/`, `refs/`, `codex-work/`
+  and `work/`); an image that is never posted is saved before the thread is resolved. A hash comparison against the registry may leave unregistered only: (a) the
+  `baked/` sets (rebuilt from the masters, SWI-PRV-4); (b) temp files a tool writes and reads back itself (the `method-c-*` temp folders of `method_c.py`); (c) the
+  synthetic images of tests; (d) images that came with an installed tool or package; (e) files older than the SWI-PRV-6 merge (#3303, 2026-11-25 21:24 +04:00) in the pipeline's own folders (`census/`,
+  `pilot/`, `compare/`, `material-samples/`, `material-sheet/`, `inbox/`, `refs/`, `work/`), which stay in place in the main checkout.
 - **SWI-PRV-6** Archive statuses at merge (owner rule 2026-11-25, ARC-DEV-3277 continued by ARC-DEV-3302): when a task's PR merges, the task closes its archive in the same turn. The images the
   owner accepted go to `final/` (`image_archive.py mark <TASK> <file> final`; a file whose sha256 equals a kit master or an installed-pack entry is `final` with the note
   `matches kit master <id>` / `matches pack entry <id>`); the variants the owner rejected are `rejected`; every other file of the task (composites, screenshots, crops,
