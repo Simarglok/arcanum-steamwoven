@@ -523,7 +523,10 @@ Owner decision 2026-11-24 (option A, [#3098](https://github.com/Simarglok/arcanu
   - A `final` pipeline row (`location: pipeline`, which `mark` does not take) needs a `final/` copy only while it is a current kit master
     (`add <TASK> <masters file> --kind master --status final`); older pipeline rows need none.
   - Every new row names its kind: `add` requires `--kind`, and `scan` does not register a file that neither the folder nor the name gives a kind (name it with
-    `--kind`). The rows of the first bulk pass of 2026-11-25 may keep kind `unknown`. `image_rescue.py` (to be retired, [#3407](https://github.com/Simarglok/arcanum-steamwoven/issues/3407)) is not held to this.
+    `--kind`). The rows of the first bulk pass of 2026-11-25 may keep kind `unknown`.
+
+  `image_rescue.py` (to be retired, [#3407](https://github.com/Simarglok/arcanum-steamwoven/issues/3407)) is not held to the rules above: it registers
+  pipeline rows with its own statuses.
 
   `mark --note TEXT` records why. `image_archive.py index <TASK>` must then show no row of the task with status `unknown`. When the thread cannot decide a file
   (no owner answer yet), it files a GitHub issue naming the task and the open rows instead of leaving them silently `unknown` (found need = issue). The first bulk

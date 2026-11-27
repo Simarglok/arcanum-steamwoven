@@ -153,6 +153,40 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual([], self.finals("ARC-UI-9"))
         self.assertEqual([("archive", "ARC-UI-9", "superseded/built.png")], list(self.reg.rows))
 
+    def test_marking_final_again_never_overwrites_accepted_bytes(self) -> None:
+        src = self.image("m.png")
+        row = ia.add_file(self.reg, "ARC-UI-2", src, kind="master", status="final")
+        original = self.root / "ARC-UI-2" / row["file"]
+        original.write_bytes(fake_png(40, 30, 7))  # a tool rewrote the file in place
+        ia.mark(self.reg, "ARC-UI-2", row["file"], "final")
+        ia.add_file(self.reg, "ARC-UI-2", src, kind="master", status="final")
+        self.assertEqual(src.read_bytes(), (self.root / "ARC-UI-2" / "final" / "m.png").read_bytes())
+        (self.root / "ARC-UI-2" / "final" / "m.png").unlink()
+        row["status"] = "intermediate"
+        with self.assertRaises(ValueError):  # the registered bytes are gone: the new ones are not accepted in their place
+            ia.mark(self.reg, "ARC-UI-2", row["file"], "final")
+        self.assertEqual("intermediate", row["status"])
+
+    def test_no_superseded_row_is_left_unknown(self) -> None:
+        row = ia.add_file(self.reg, "ARC-UI-2", self.image("m.png"), kind="master", status="final")
+        ia.mark(self.reg, "ARC-UI-2", row["file"], "unknown")
+        self.assertEqual("intermediate", self.reg.rows[("archive", "ARC-UI-2", "superseded/m.png")]["status"])
+        (self.root / "ARC-UI-3" / "superseded").mkdir(parents=True)
+        (self.root / "ARC-UI-3" / "superseded" / "o.png").write_bytes(fake_png(8, 8, 3))
+        ia.scan(self.reg, "ARC-UI-3", kind="master")
+        orphan = self.reg.rows[("archive", "ARC-UI-3", "superseded/o.png")]
+        self.assertEqual("intermediate", orphan["status"])
+        ia.mark(self.reg, "ARC-UI-3", "superseded/o.png", "rejected")
+        self.assertEqual("rejected", orphan["status"])
+        self.assertTrue((self.root / "ARC-UI-3" / "superseded" / "o.png").is_file())
+
+    def test_a_new_rejected_file_retires_a_final_file_of_its_content(self) -> None:
+        (self.root / "ARC-UI-9" / "final").mkdir(parents=True)
+        (self.root / "ARC-UI-9" / "final" / "x.png").write_bytes(self.image("x.png").read_bytes())
+        ia.scan(self.reg, "ARC-UI-9", kind="composite")
+        ia.add_file(self.reg, "ARC-UI-9", self.image("x.png"), kind="composite", status="rejected")
+        self.assertEqual([], self.finals("ARC-UI-9"))
+
     def test_the_cli_takes_no_new_row_of_an_unknown_kind(self) -> None:
         for argv in (["add", "ARC-UI-1", "a.png"], ["add", "ARC-UI-1", "a.png", "--kind", "unknown"]):
             with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):

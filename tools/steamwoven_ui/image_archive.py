@@ -192,7 +192,7 @@ def add_file(registry: Registry, task: str, src: Path, *, kind: str, status: str
     clone_copy(src, target)
     st = src.stat()
     row = registry.put(_row(task, rel.as_posix(), kind, status, [str(src)], digest, st.st_size, image_size(src), st.st_mtime, note, basis or {}))
-    if status == "final":
+    if status != "unknown":  # `final` copies into final/; another status retires a `final/` copy of the same content
         mark(registry, task, row["file"], status)
     return row
 
@@ -219,6 +219,7 @@ def _final_copies(registry: Registry, task: str, digest: str) -> list[dict]:
 
 def _retire_copy(registry: Registry, copy: dict, status: str, note: str) -> dict:
     """Move one `final/` file to `<task>/superseded/` (never deleted) and re-key its row; a missing file only loses its row."""
+    status = "intermediate" if status == "unknown" else status  # no one can mark a superseded copy of a marked original
     tdir = registry.root / copy["task"]
     src = tdir / copy["file"]
     registry.drop(copy)
@@ -228,6 +229,25 @@ def _retire_copy(registry: Registry, copy: dict, status: str, note: str) -> dict
     target.parent.mkdir(parents=True, exist_ok=True)
     os.replace(src, target)
     return registry.put(dict(copy, file=target.relative_to(tdir).as_posix(), status=status, note=note))
+
+
+def _put_in_final(registry: Registry, row: dict) -> str:
+    """The `final/` path that holds the row's registered bytes, copying them there if none does. Never overwrites a file
+    with other bytes, and refuses an original that changed since it was registered."""
+    tdir, digest = registry.root / row["task"], row["sha256"]
+    for copy in _final_copies(registry, row["task"], digest):  # an earlier mark, or the same bytes under another name
+        held = tdir / copy["file"]
+        if held.is_file() and sha256_file(held) == digest:
+            return copy["file"]
+    src = tdir / row["file"]
+    if sha256_file(src) != digest:
+        raise ValueError(f"{row['file']} changed since it was registered; `add` the new file under its own name")
+    target = tdir / FINAL_DIR / Path(row["file"]).name
+    if target.exists() and sha256_file(target) != digest:  # another accepted file of the same name
+        target = _free_name(target.parent, target.name, digest)
+    if not target.exists():
+        clone_copy(src, target)
+    return target.relative_to(tdir).as_posix()
 
 
 def mark(registry: Registry, task: str, rel: str, status: str, note: str | None = None) -> dict:
@@ -241,26 +261,21 @@ def mark(registry: Registry, task: str, rel: str, status: str, note: str | None 
         raise ValueError(f"status {status!r} not in {STATUSES}")
     if is_copy(rel):
         originals = _originals(registry, task, row["sha256"])
-        if originals or status == "final" or not rel.startswith(FINAL_DIR + "/"):
-            hint = f" {originals[0]['file']}" if originals else ""
+        if originals or status == "final":
+            hint = f": {originals[0]['file']}" if originals else " (add the file again to accept it)"
             raise ValueError(f"{rel} is a copy in {rel.split('/', 1)[0]}/; mark the original row{hint}")
-        return _retire_copy(registry, row, status, row["note"] if note is None else note)
+        note = row["note"] if note is None else note
+        if rel.startswith(FINAL_DIR + "/"):
+            return _retire_copy(registry, row, status, note)
+        row["status"], row["note"] = status, note  # a superseded file with no original stays where it is
+        return row
+    final_rel = _put_in_final(registry, row) if status == "final" else None  # first: a refusal leaves the row as it was
     row["status"] = status
     if note is not None:
         row["note"] = note
-    if status == "final":
+    if final_rel is not None:
         src = registry.root / task / rel
-        copies = _final_copies(registry, task, row["sha256"])
-        if copies:  # this content is already in final/ (an earlier mark, or the same bytes under another name)
-            final_rel = copies[0]["file"]
-        else:
-            final_rel = f"{FINAL_DIR}/{Path(rel).name}"
-            taken = registry.root / task / final_rel
-            if taken.exists() and sha256_file(taken) != row["sha256"]:  # another accepted file of the same name
-                final_rel = f"{FINAL_DIR}/{Path(rel).stem}-{row['sha256'][:8]}{Path(rel).suffix}"
-        clone_copy(src, registry.root / task / final_rel)
-        copy = dict(row, file=final_rel, sources=[str(src)], registered=date.today().isoformat())
-        registry.put(copy)
+        registry.put(dict(row, file=final_rel, sources=[str(src)], registered=date.today().isoformat()))
     elif not any(r["status"] == "final" for r in _originals(registry, task, row["sha256"])):
         for copy in _final_copies(registry, task, row["sha256"]):
             _retire_copy(registry, copy, status, row["note"])
@@ -309,7 +324,7 @@ def scan(registry: Registry, task: str | None = None, *, kind: str | None = None
                     skipped.append(f"{rel_task}/{rel}")
                 continue
             st = path.stat()
-            registry.put(_row(rel_task, rel, found, "final" if first == FINAL_DIR else "unknown", [str(path)], sha256_file(path),
+            registry.put(_row(rel_task, rel, found, {FINAL_DIR: "final", SUPERSEDED_DIR: "intermediate"}.get(first, "unknown"), [str(path)], sha256_file(path),
                               st.st_size, image_size(path), st.st_mtime, "found in the folder by scan", {"kind_basis": basis}))
             new += 1
     return new
@@ -365,21 +380,25 @@ def cmd_dir(args) -> int:
 
 def cmd_add(args) -> int:
     reg = Registry()
-    for name in args.files:
-        src = Path(name)
-        if not src.is_file() or src.suffix.lower() not in IMAGE_EXTS:
-            print(f"skip {src}: not an image file", file=sys.stderr)
-            continue
-        row = add_file(reg, args.task, src, kind=args.kind, status=args.status, note=args.note)
-        print(f"{row['task']}/{row['file']}  {row['status']}  {row['sha256'][:12]}")
-    reg.save()
+    try:  # a later file may fail after an earlier one moved a copy: the registry still records it
+        for name in args.files:
+            src = Path(name)
+            if not src.is_file() or src.suffix.lower() not in IMAGE_EXTS:
+                print(f"skip {src}: not an image file", file=sys.stderr)
+                continue
+            row = add_file(reg, args.task, src, kind=args.kind, status=args.status, note=args.note)
+            print(f"{row['task']}/{row['file']}  {row['status']}  {row['sha256'][:12]}")
+    finally:
+        reg.save()
     return 0
 
 
 def cmd_mark(args) -> int:
     reg = Registry()
-    row = mark(reg, args.task, args.file, args.status, args.note)
-    reg.save()
+    try:
+        row = mark(reg, args.task, args.file, args.status, args.note)
+    finally:
+        reg.save()
     print(f"{row['task']}/{row['file']} -> {row['status']}")
     return 0
 
