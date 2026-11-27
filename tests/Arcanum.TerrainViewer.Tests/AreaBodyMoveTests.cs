@@ -278,6 +278,53 @@ public sealed class AreaBodyMoveTests
     private static AreaVisualRecord Visual(AreaEntryIdentity entry) =>
         AreaCombatTests.Visual(AreaCombatTests.Body(), entry, width: 6, height: 2, hotX: 2, hotY: 1);
 
+    // ARC-RENDER-3414: the loads of one owner share an open archive; a changed file is opened again, and the results are those of a
+    // load that opens the archive itself.
+    [TestMethod]
+    public void HeldArchivesAreOpenedOnceUntilTheFileChanges()
+    {
+        WithArchive([("art/critter/hmm/hmmuwxaa.art", Art(1, 10, 4, 1)), ("art/critter/hmm/hmmuwxab.art", Art(3, 10, 4, 1))], (path, identity) =>
+        {
+            var visual = Visual(identity(0));
+            using var archives = new AreaArtArchives();
+            var moves = AreaBodyMoveArt.Load(visual, path, archives);
+            var stand = AreaBodyMoveArt.LoadArmed(visual, path, AreaBodyMoveArt.Stand, 0, 0, archives);
+            Assert.AreEqual((AreaBodyMoveStatus.Ready, AreaBodyMoveStatus.Ready, 1), (moves.Status, stand.Status, archives.Opened), moves.Detail + stand.Detail);
+            Assert.AreEqual(AreaBodyMoveArt.Load(visual, path).Detail, moves.Detail);
+            Assert.AreEqual(3, moves.Walk!.FramesPerGroup);
+
+            // The walk is written anew with another frame count; the standing record is unchanged. Windows lets no one write a held file.
+            if (!OperatingSystem.IsWindows())
+            {
+                File.WriteAllBytes(path, AreaCombatTests.Dat([("art/critter/hmm/hmmuwxaa.art", Art(1, 10, 4, 1)), ("art/critter/hmm/hmmuwxab.art", Art(5, 10, 4, 1))]));
+                File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
+                var changed = AreaBodyMoveArt.Load(Visual(identity(0)), path, archives);
+                Assert.AreEqual((AreaBodyMoveStatus.Ready, 2, 5), (changed.Status, archives.Opened, changed.Walk!.FramesPerGroup), changed.Detail);
+            }
+
+            archives.Dispose();
+            Assert.ThrowsExactly<ObjectDisposedException>(() => AreaBodyMoveArt.Load(visual, path, archives));
+        });
+    }
+
+    // ARC-RENDER-3414: through held archives too, a name held twice (case apart) is never chosen and a record number outside the
+    // directory is not the standing entry.
+    [TestMethod]
+    public void AHeldArchiveChoosesNoDoubledNameAndNoRecordOutsideItsDirectory()
+    {
+        WithArchive([("art/critter/hmm/hmmuwxaa.art", Art(1, 10, 4, 1)), ("art/critter/hmm/hmmuwxab.art", Art(3, 10, 4, 1)),
+            ("art/critter/hmm/HMMUWXAB.art", Art(5, 10, 4, 1))], (path, identity) =>
+        {
+            var visual = Visual(identity(0));
+            using var archives = new AreaArtArchives();
+            Assert.AreEqual(AreaBodyMoveStatus.WalkMissing, AreaBodyMoveArt.Load(visual, path, archives).Status);
+            foreach (var ordinal in new[] { -1, 3 })
+                Assert.AreEqual(AreaBodyMoveStatus.EntryMismatch,
+                    AreaBodyMoveArt.Load(visual with { Entry = visual.Entry with { Ordinal = ordinal } }, path, archives).Status, $"{ordinal}");
+            Assert.AreEqual(1, archives.Opened);
+        });
+    }
+
     private static void WithArchive(IReadOnlyList<(string Name, byte[] Payload)> entries, Action<string, Func<int, AreaEntryIdentity>> test)
     {
         var path = Path.Combine(Path.GetTempPath(), $"arc-world-111-{Guid.NewGuid():N}.dat");

@@ -1377,6 +1377,8 @@ public partial class TerrainViewerApp : Node
         _canvas?.ReleaseHd(); _hdSource?.Dispose();
         _conversationHost = null; ReleaseConversationContent(); ReleaseShopContent();
         DisposeAudio();
+        // ARC-RENDER-3414: the body loaders' open art archives.
+        _bodyArchives.Dispose();
         // ARC-RENDER-033: the extra art's content stack.
         _extraArt?.Dispose(); _extraArt = null;
         // ARC-WORLD-081: the created items' prototypes.
