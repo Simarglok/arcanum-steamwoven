@@ -128,7 +128,7 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   do not play before the first menu; View Intro, the new game's movies and the scripts' movies play as before. The user
   argument `--skip-startup-movies` (after `--`, with or without other arguments) does the same for one run without storing
   anything, for tool runs and measurements of the packaged build. Either way the log says
-  `ARC-UI-3453 start-up movies skipped`. Source and automated runs never play the start-up movies; only the `movies` and `slides` smoke stages turn movies on for their own checks
+  `ARC-UI-3453 start-up movies skipped`. Source and automated runs never play the installed start-up movies; the smoke stages `movies`, `slides` and `kerghan-talk` turn movies on for their own checks (`movies` checks the start-up queue with generated stand-in files)
   ([where movies play](../workflow/toolchain.md#movie-decoder-arc-render-1170)). Checked by the launcher self-test and the
   `movies` smoke stage.
 - **Separate rendering thread (ARC-RENDER-3420).** A checkbox, off by default, stored by Play as `separateRenderThread` of the

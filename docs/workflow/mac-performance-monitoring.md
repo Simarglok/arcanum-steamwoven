@@ -27,7 +27,7 @@ measurement is queued with `./arcanum run --kind solo`, so nothing else runs bes
 
 A game from the package plays its three start-up movies before the main menu. For a measurement skip them with the user
 argument `--skip-startup-movies`, after `--` ([ARC-UI-3453](../rendering/terrain-viewer.md)): the commands below pass it.
-An automated run (`--native-smoke`, every smoke) never plays the start-up movies and needs no argument.
+An automated run (`--native-smoke`, every smoke) never plays the installed start-up movies and needs no argument.
 
 ## Which tool for what
 
