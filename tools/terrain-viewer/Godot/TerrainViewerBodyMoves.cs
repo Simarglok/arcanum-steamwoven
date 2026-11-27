@@ -28,6 +28,8 @@ public partial class TerrainViewerApp
     private readonly HashSet<AreaFrameKey> _bodyWalkFrames = [];
     // ARC-RENDER-038: the armed ARTs read so far, and (smoke observation) the NPC attack frames and armed stands drawn.
     private readonly Dictionary<(AreaEntryIdentity Entry, int Palette, int Animation, int Weapon, int Shield), AreaBodyArmedLoad> _armedArts = [];
+    // ARC-RENDER-3414: the art archives the move ARTs are read from, kept open across map windows.
+    private readonly AreaArtArchives _bodyArchives = new();
     private int _npcAttackDraws, _npcArmedStandDraws, _npcArmedWalkDraws;
     private readonly HashSet<AreaFrameKey> _npcAttackFrames = [];
     // ARC-COMBAT-2769: the attack frames drawn per entity (smoke observation), and the companions that stood turned to a target (one that never walked keeps that facing after the swing, not its map art's).
@@ -212,7 +214,7 @@ public partial class TerrainViewerApp
     {
         var key = (visual.Entry, visual.RequestedPalette, animation, weapon, shield);
         if (_armedArts.TryGetValue(key, out var load)) return load;
-        load = AreaBodyMoveArt.LoadArmed(visual, area.ArtSources.GetValueOrDefault(visual.Entry.Source), animation, weapon, shield);
+        load = AreaBodyMoveArt.LoadArmed(visual, area.ArtSources.GetValueOrDefault(visual.Entry.Source), animation, weapon, shield, _bodyArchives);
         _armedArts[key] = load;
         if (load.Art is not null) _armedArts.TryAdd((visual.Entry, visual.RequestedPalette, load.Animation, load.Weapon, load.Shield), load);
         GD.Print($"ARC-RENDER-038 npc-armed-art npc={entity} animation={animation} weapon={weapon} shield={shield} status={load.Status}"
@@ -250,7 +252,7 @@ public partial class TerrainViewerApp
         if (keepT0Until && !cycle.Moved) return command;
         if (!_bodyMoves.TryGetValue((visual.Entry, visual.RequestedPalette), out var moves))
         {
-            moves = AreaBodyMoveArt.Load(visual, area.ArtSources.GetValueOrDefault(visual.Entry.Source));
+            moves = AreaBodyMoveArt.Load(visual, area.ArtSources.GetValueOrDefault(visual.Entry.Source), _bodyArchives);
             _bodyMoves[(visual.Entry, visual.RequestedPalette)] = moves;
             GD.Print($"ARC-WORLD-111 body-moves object={key.SourceIndex} status={moves.Status} detail={moves.Detail}");
         }
