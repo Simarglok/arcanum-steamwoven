@@ -13,13 +13,20 @@ public readonly record struct LauncherHdLines(bool Hd, HdPackSourceMode Pack, st
 /// <summary>
 /// ARC-UI-014: the launcher screen before the original main menu (research ARC-RES-074 task 2): why it shows, the settings file's
 /// state, the game folder with its check in words, the ready candidates, "Choose folder…" (the system's folder dialog), the rule mode
-/// (Steamwoven, Original), "show this screen at every start", and Play, Reset settings and Quit. The app owns the
+/// (Steamwoven, Original), "show this screen at every start", and Play, Reset settings and Quit. ARC-UI-3432: the lines scroll when
+/// the viewport is lower or narrower than they are, so every control and the whole help text stay reachable. The app owns the
 /// <see cref="LauncherScreen"/> and renders it again after every change. The project's own look; it is not part of the original's menu.
 /// </summary>
 public partial class LauncherPanel : CanvasLayer
 {
     private ColorRect _backdrop = null!;
     private PanelContainer _panel = null!;
+    private ScrollContainer _scroll = null!;
+    private VBoxContainer _contents = null!;
+    private Label _hint = null!;
+    /// <summary>ARC-UI-3432: wide enough that the whole screen, the help text included, fits a 1280x800 viewport without scrolling.</summary>
+    private const float MaxPanelWidth = 960;
+    private const int PanelMarginY = 16, ScreenMargin = 24, HintFontSize = 14;
     private Label _reason = null!;
     private Label _file = null!;
     private Label _folder = null!;
@@ -101,6 +108,12 @@ public partial class LauncherPanel : CanvasLayer
     internal void PlayForSelfTest() => PlayRequested?.Invoke();
     internal void ResetForSelfTest() => ResetRequested?.Invoke();
 
+    /// <summary>ARC-UI-3432: the panel's rectangle, the height of its lines and the height shown at once.</summary>
+    internal (Rect2 Panel, float Content, float View) LayoutForSelfTest => (_panel.GetRect(), _contents.GetCombinedMinimumSize().Y, _scroll.Size.Y);
+    internal void ScrollForSelfTest(bool toEnd) => _scroll.ScrollVertical = toEnd ? (int)_scroll.GetVScrollBar().MaxValue : 0;
+    /// <summary>The end of the help text, the screen's last line, is inside the shown part.</summary>
+    internal bool LastLineShownForSelfTest => _hint.GetGlobalRect().End.Y <= _scroll.GetGlobalRect().End.Y + 1;
+
     public override void _Ready()
     {
         Layer = 5;
@@ -111,10 +124,13 @@ public partial class LauncherPanel : CanvasLayer
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(232 / 255f, 222 / 255f, 196 / 255f, .98f),
-            ContentMarginLeft = 24, ContentMarginRight = 24, ContentMarginTop = 16, ContentMarginBottom = 16,
+            ContentMarginLeft = 24, ContentMarginRight = 24, ContentMarginTop = PanelMarginY, ContentMarginBottom = PanelMarginY,
         });
         AddChild(_panel);
-        var contents = new VBoxContainer(); _panel.AddChild(contents);
+        // Both directions scroll (the default modes), so a row wider than a narrow viewport does not push the panel out of it.
+        _scroll = new ScrollContainer { Name = "Scroll" };
+        _panel.AddChild(_scroll);
+        var contents = _contents = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill }; _scroll.AddChild(contents);
         var dark = new Color(.15f, .1f, .05f);
         Label Line(Color color) => new() { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = color };
         contents.AddChild(new Label { Text = "Arcanum Steamwoven", HorizontalAlignment = HorizontalAlignment.Center, Modulate = dark });
@@ -167,13 +183,15 @@ public partial class LauncherPanel : CanvasLayer
         actions.AddChild(_reset);
         actions.AddChild(MakeButton("Quit", "Quit", () => QuitRequested?.Invoke()));
         _notice = Line(new Color(.45f, .1f, .05f));
-        var hint = Line(new Color(.3f, .3f, .3f));
+        _notice.Visible = false;
+        var hint = _hint = Line(new Color(.3f, .3f, .3f));
+        hint.AddThemeFontSizeOverride("font_size", HintFontSize);
         hint.Text = "Steamwoven is the original game with the recorded fixes; Original keeps the retail 1.0.7.4 rules, bugs included. HD On is the Steamwoven interface (the column, HD fonts, the world zoom); HD Off is the Original look. "
                     + "The rules can also be switched in play in Options. The HD lines (HD: the HD interface art and fonts and the relit night lighting together; HD pack: where the interface pack is read from; World zoom, only while HD is On) are saved at once and apply from this start on (the pack source from the next one); they are set here only, so hold Shift at the start to change them; Reset settings leaves them alone. Hold Shift while the game starts, or start it with --launcher, to open this screen again. "
                     + "The game folder is only read, never written. An installation that the original game never started has no prototype files; "
                     + "the first Play prepares them from your own Arcanum.exe (about half a minute) and keeps them in Steamwoven's settings folder. "
                     + "Without Windows, \"Install from GOG installer…\" unpacks the GOG offline installer (setup_arcanum_….exe) with the free innoextract tool into a new folder you pick, and chooses it.";
-        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hd1, _hdPack, _hdZoom, _hdNote, _showAtStart, _holdToQuit, _renderThread, _debugMode, actions, _notice, hint }) contents.AddChild(control);
+        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hd1, _hdPack, _hdZoom, _hdNote, _showAtStart, _holdToQuit, _renderThread, _debugMode, actions, _notice, new Control { Name = "HintGap", CustomMinimumSize = new Vector2(0, 8) }, hint }) contents.AddChild(control);
         _dialog = new FileDialog
         {
             Name = "ChooseGameFolder", FileMode = FileDialog.FileModeEnum.OpenDir, Access = FileDialog.AccessEnum.Filesystem, UseNativeDialog = true,
@@ -289,6 +307,7 @@ public partial class LauncherPanel : CanvasLayer
             _cancelInstall.Text = screen.CancelText;
             foreach (var button in _candidates.GetChildren().OfType<Button>()) button.Disabled = screen.Busy;
             _notice.Text = screen.Notice ?? "";
+            _notice.Visible = _notice.Text.Length > 0;
             RenderHd();
         }
         finally { _rendering = false; }
@@ -306,9 +325,11 @@ public partial class LauncherPanel : CanvasLayer
         if (_panel is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         _backdrop.Position = Vector2.Zero; _backdrop.Size = size;
-        var width = Math.Max(1, Math.Min(640, size.X - 48));
-        _panel.Size = new(width, 0);
-        _panel.Position = new((size.X - width) / 2, Math.Max(24, (size.Y - _panel.GetCombinedMinimumSize().Y) / 2));
+        var width = Math.Max(1, Math.Min(MaxPanelWidth, size.X - 2 * ScreenMargin));
+        // The scroll box asks for no height of its own: the panel takes the lines' height, at most the viewport's.
+        var height = Math.Max(1, Math.Min(_contents.GetCombinedMinimumSize().Y + 2 * PanelMarginY, size.Y - 2 * ScreenMargin));
+        _panel.Size = new(width, height);
+        _panel.Position = new((size.X - width) / 2, Math.Max(ScreenMargin, (size.Y - height) / 2));
     }
 
     public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
