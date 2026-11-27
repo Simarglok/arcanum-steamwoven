@@ -184,6 +184,10 @@ public partial class LauncherPanel : CanvasLayer
         _hdPack = MakeChoiceRow("HdPack", "HD pack:", dark, ["Auto", "Game", "Custom"], index => HdPackRequested?.Invoke((HdPackSourceMode)index));
         _hdZoom = MakeChoiceRow("HdWorldZoom", "World zoom:", dark, ["Auto", "1x", "2x", "3x", "4x"], index => HdWorldZoomRequested?.Invoke(index));
         _hdNote = Line(new Color(.3f, .3f, .3f));
+        // ARC-UI-3453: the two start options share one row, so the screen still fits 1280x800 with HD On (ARC-UI-3432).
+        var startRow = new HBoxContainer { Name = "StartRow" };
+        startRow.AddThemeConstantOverride("separation", 32);
+        startRow.AddChild(_showAtStart); startRow.AddChild(_skipStartupMovies);
         var actions = new HBoxContainer();
         _play = MakeButton("Play", "Play", () => PlayRequested?.Invoke());
         actions.AddChild(_play);
@@ -199,7 +203,7 @@ public partial class LauncherPanel : CanvasLayer
                     + "The game folder is only read, never written. An installation that the original game never started has no prototype files; "
                     + "the first Play prepares them from your own Arcanum.exe (about half a minute) and keeps them in Steamwoven's settings folder. "
                     + "Without Windows, \"Install from GOG installer…\" unpacks the GOG offline installer (setup_arcanum_….exe) with the free innoextract tool into a new folder you pick, and chooses it.";
-        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hd1, _hdPack, _hdZoom, _hdNote, _showAtStart, _skipStartupMovies, _holdToQuit, _renderThread, _debugMode, actions, _notice, new Control { Name = "HintGap", CustomMinimumSize = new Vector2(0, 8) }, hint }) contents.AddChild(control);
+        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hd1, _hdPack, _hdZoom, _hdNote, startRow, _holdToQuit, _renderThread, _debugMode, actions, _notice, new Control { Name = "HintGap", CustomMinimumSize = new Vector2(0, 8) }, hint }) contents.AddChild(control);
         _dialog = new FileDialog
         {
             Name = "ChooseGameFolder", FileMode = FileDialog.FileModeEnum.OpenDir, Access = FileDialog.AccessEnum.Filesystem, UseNativeDialog = true,
