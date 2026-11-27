@@ -369,15 +369,18 @@ class SoloKindTests(unittest.TestCase):
 
     def test_as_published_it_reads_as_an_exclusive_run_to_a_wrapper_without_the_kind(self) -> None:
         # the contract with the wrappers of other checkouts, which ignore "solo": a waiting or running ticket is an export,
-        # and while the owner plays a window run of the single slot, the one kind they hold then
+        # and while the owner plays a short window run, the one kind they hold then
         fd, path, mine = run_queue._enqueue("solo", "m", ["true"], run_queue.NORMAL, 60.0, 180.0)
         try:
             published = json.loads(path.read_text())
             self.assertEqual((published["kind"], published["solo"]), ("export", True))
             old = {key: value for key, value in published.items() if key != "solo"}
             self.assertEqual(run_queue.lane_of(old), run_queue.EXPORT)
-            self.assertEqual(run_queue.lane_of({**old, "kind": "window"}), run_queue.SINGLE)
-            self.assertEqual(len("window"), len(old["kind"]))
+            # held, and read by a wrapper that cannot see the mode: it takes one short place, not the whole slot
+            held = {**old, "kind": "window", "lane": run_queue.SHORT, "cwd": "/work/a", "checkout": "/work/a"}
+            behind = ticket(held["seq"] + 1, "headless", at=held["enqueuedAt"] + 100000.0, cwd="/work/b",
+                            lane=run_queue.SHORT)
+            self.assertIsNone(run_queue.blocker(behind, [held, behind]))
             self.assertEqual(mine["kind"], "export")
         finally:
             path.unlink()
@@ -996,7 +999,7 @@ class GameDetectionTests(unittest.TestCase):
                               cwd=REPO, timeout=60)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("was not playing", done.stdout)
-        self.assertIn("the packaged game is running: window runs still wait until it quits", done.stdout)
+        self.assertIn("the packaged game is running: window and solo runs still wait until it quits", done.stdout)
         self.assertIn("PLAYING", done.stdout)  # the queue listing follows
         self.assertIn("quit the game", done.stdout)
 
@@ -1231,6 +1234,7 @@ class QueueRunTests(unittest.TestCase):
         try:
             solo = self.queued("solo", "s", 0.1)
             self.until(lambda: self.published("s").get("kind") == "window")
+            self.assertEqual(self.published("s")["lane"], "short")
             self.queued("dotnet", "d", 0.1)
             self.until(lambda: "end d " in self.log.read_text(), 60.0)  # not held back by the held solo run
             self.assertNotIn("start s ", self.log.read_text())
@@ -1240,6 +1244,7 @@ class QueueRunTests(unittest.TestCase):
         finally:
             run_queue.set_playing(False)
         self.until(lambda: self.published("s").get("kind") == "export")  # the mode is over, "w" still runs
+        self.assertEqual(self.published("s")["lane"], "solo")
         self.assertNotIn("start s ", self.log.read_text())
         self.release()
         self.finish()
@@ -1588,7 +1593,7 @@ class QueueRunTests(unittest.TestCase):
         finally:
             off = run("--not-playing")
         self.assertEqual(off.returncode, 0, off.stderr)
-        self.assertIn("window runs start again", off.stdout)
+        self.assertIn("window and solo runs start again", off.stdout)
         self.assertIsNone(run_queue.playing_state())
         self.assertIn("was not playing", run("--not-playing").stdout)
         self.assertEqual(run("--for", "1h").returncode, 2)  # --for goes with --playing

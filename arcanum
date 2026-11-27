@@ -319,9 +319,9 @@ def queue(args: argparse.Namespace) -> int:
                   + "); headless, quick and dotnet runs go on; the owner's own launches are not held; "
                   "./arcanum queue --not-playing ends it")
         else:
-            print("not playing: window runs start again" if changed else "was not playing")
+            print("not playing: window and solo runs start again" if changed else "was not playing")
             if run_queue.game_ticket() is not None:  # ARC-DEV-2291: the automatic mode follows the game, not this switch
-                print("the packaged game is running: window runs still wait until it quits (the automatic mode)")
+                print("the packaged game is running: window and solo runs still wait until it quits (the automatic mode)")
     if args.app:  # ARC-DEV-1344: start the menu-bar app now (builds it first when needed), (the build is foreground)
         target, why = menubar.build()
         if target is None:
@@ -526,9 +526,9 @@ def parser() -> argparse.ArgumentParser:
     group.add_argument("--pause", action="store_true", help="stop new runs from starting (running runs finish) until --resume (ARC-DEV-1344)")
     group.add_argument("--resume", action="store_true", help="clear the pause: the waiting runs start in their order")
     group.add_argument("--playing", action="store_true", help="the owner is playing (ARC-DEV-2272): no window run (smoke, lab, `run --kind "
-                       "window`) starts until --not-playing or the limit (default " + f"{run_queue.DEFAULT_PLAYING_MINUTES / 60:g}"
+                       "window`) and no solo run starts until --not-playing or the limit (default " + f"{run_queue.DEFAULT_PLAYING_MINUTES / 60:g}"
                        + " h, --for MIN); headless, quick and dotnet runs go on; runs that already hold a window finish; the owner's own launches are not held")
-    group.add_argument("--not-playing", action="store_true", help="end the playing mode: the waiting window runs start in their order")
+    group.add_argument("--not-playing", action="store_true", help="end the playing mode: the held runs start in their order")
     command.add_argument("--for", dest="for_minutes", type=playing_limit, metavar="MIN",
                          help="with --playing: end the mode after MIN minutes (90, 30m, 4h; 0 or 'off' for no limit; default "
                               + f"{run_queue.DEFAULT_PLAYING_MINUTES / 60:g} h)")

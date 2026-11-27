@@ -150,10 +150,10 @@ def set_paused(on: bool, by: str = "cli") -> bool:
 
 
 # ARC-DEV-2272: the "owner is playing" mode. While it is on, no ordinary `window` run starts (smoke stages, lab runs, an ad-hoc
-# `./arcanum run --kind window`: Godot needs the focus, and a smoke window takes it from the packaged game); headless, quick and
-# dotnet runs go on. The owner's own launches (priority FRONT: area|world|map, package) are not held; runs already holding a
+# `./arcanum run --kind window`: Godot needs the focus, and a smoke window takes it from the packaged game) and no solo run
+# (ARC-DEV-3443) starts; headless, quick and dotnet runs go on. The owner's own launches (priority FRONT: area|world|map, package) are not held; runs already holding a
 # window finish. It is one valid ticket (`t-playing.json`, seq 0, kind window, lane single, already started) held by the same kind
-# of `lockf` process as the pause. A wrapper of this version holds back only the window runs behind it (blocker()); a wrapper of
+# of `lockf` process as the pause. A wrapper of this version holds back only the window and solo runs behind it (blocker()); a wrapper of
 # before ARC-DEV-2272 reads it as a running exclusive Godot run, so it holds back every Godot run (window, headless, export) but not dotnet or quick
 # runs, the same way, until that checkout merges main. The holder ends by itself at the deadline (an expiry nobody has to enforce),
 # so a forgotten switch cannot hold the queue for ever; the lock goes with the holder, a crash or a reboot also ends the mode.
@@ -753,14 +753,14 @@ def lane_of(ticket: dict[str, Any]) -> str | None:
 def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
     """The ticket this one waits for, or None when it may start now (the admission rule)."""
     now = time.time()
-    playing = next((ticket for ticket in live if is_playing(ticket, now)), None)  # ARC-DEV-2272: it holds back window runs only
+    playing = next((ticket for ticket in live if is_playing(ticket, now)), None)  # ARC-DEV-2272: window and solo runs only
     live = [ticket for ticket in live if not ticket.get("playing")]
     if playing is not None and held_by_playing(mine) and not mine.get("startedAt"):
         return playing
     others = [ticket for ticket in live if ticket["seq"] != mine["seq"]]
     running = [ticket for ticket in others if ticket.get("startedAt")]
     order = order_of(live)
-    # a window run the mode holds back fills no place: the headless, quick and dotnet runs behind it go on
+    # a run the mode holds back fills no place: the headless, quick and dotnet runs behind it go on
     ahead = [ticket for ticket in others if not ticket.get("startedAt") and order(ticket) < order(mine)
              and not (playing is not None and held_by_playing(ticket))]
     mine_checkout = checkout_of(mine)
@@ -968,16 +968,18 @@ def _peers_now(own_seq: int) -> int | None:
 
 def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) -> None:
     last = None
-    published = ticket["kind"]
+    published = (ticket["kind"], ticket.get("lane"))
     while True:
         with _QueueLock():
             live = [item for _, item in tickets()]
             if ticket.get("solo"):
                 # ARC-DEV-3443: an older wrapper holds only window runs in the playing mode; as a waiting export a held
-                # solo run would keep its Godot and dotnet runs waiting until the owner stops playing
-                shape = "window" if any(is_playing(item) for item in live) else ticket["kind"]
-                if shape != published:  # both words are six characters: the file stays complete JSON (_write)
-                    _write(fd, {**ticket, "kind": shape})
+                # solo run would keep its Godot and dotnet runs waiting until the owner stops playing. The short lane:
+                # a wrapper that cannot see the mode (before ARC-DEV-2291) counts one short place, not the whole slot.
+                held = any(is_playing(item) for item in live)
+                shape = ("window", SHORT) if held else (ticket["kind"], ticket["lane"])
+                if shape != published:  # the file may shrink by a byte: readers of the queue hold its lock
+                    _write(fd, {**ticket, "kind": shape[0], "lane": shape[1]})
                     published = shape
             waiting_for = blocker(ticket, live)
             # the guard holds the runs with a window or headless (GODOT_KINDS) behind running ones of those kinds only: a

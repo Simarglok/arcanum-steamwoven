@@ -589,8 +589,8 @@ not as an `export` and not with the lanes variable:
   (the game beside it would spoil the figures, and its window would take the focus); the runs behind it go on.
 - **Older checkouts.** The ticket is published as an `export` with the extra field `solo`, so every wrapper of a checkout
   from before this change keeps its runs out too, with no merge needed; while the playing mode holds it, it is published as
-  a `window` run, so such a wrapper does not hold its `dotnet` runs behind it. They and the menu-bar app list it as
-  `export` or `window` (lane `solo`).
+  a short `window` run, so such a wrapper does not hold its runs behind it. Older checkouts list it as `export/export` or
+  `window/short`, the menu-bar app as `export/solo` or `window/short`.
 - **Not covered.** A process started outside the queue (the owner's game, a hand-started `dotnet` or Godot, another app,
   the build-server shutdown a `dotnet` run does just after giving up its place) is not held. The one-minute load average
   still shows the runs that just ended: a measurement that needs a settled machine waits inside its own command.
@@ -609,7 +609,7 @@ everything, this mode stops only the runs that open a window or measure.
 The menu-bar app has the same switch (`Owner is playing`, icon `gamecontroller` while on). The command prints the state and the time
 left and `./arcanum queue` then starts with a `PLAYING` line; the switch takes effect at the next poll (a quarter of a second) of every waiter.
 
-- **Held:** every `solo` run, and every ordinary `window` run: smoke stages (`./arcanum smoke`, `smoke pr`, `smoke complete`), labs, an ad-hoc
+- **Held:** every queued `solo` run, and every ordinary `window` run: smoke stages (`./arcanum smoke`, `smoke pr`, `smoke complete`), labs, an ad-hoc
   `./arcanum run --kind window`, and the rolling `main-smoke` steps. A waiter says
   `waiting-for=owner playing (for ..., ends in ...; no window or solo run starts, headless/quick/dotnet go on; ./arcanum queue --not-playing)`,
   `./arcanum queue` shows `waiting ... (owner playing)`, and a smoke prints `SMOKE waiting: owner is playing (...)` before the step.
@@ -633,7 +633,7 @@ left and `./arcanum queue` then starts with a `PLAYING` line; the switch takes e
   starts within a few seconds (a minute at most). The game is any process whose program lies under the main checkout's
   `artifacts/packages/macos` or, ARC-DEV-3379, `artifacts/packages/macos-profiling` (also from a worktree: the main checkout is read from the `.git` file), found through libproc
   (`proc_listpids`, `proc_pidpath`, no process spawned: about 3 ms, cached 2 s per process). The rule is the same as the manual
-  switch's: window runs only, the owner's front launches and runs already holding their window go on, `daily` and `main-smoke`
+  switch's: window and solo runs only, the owner's front launches and runs already holding their window go on, `daily` and `main-smoke`
   print `SKIP owner is playing (game running ...)`. The state is the game's process itself, so nothing is written to the queue folder and
   no limit applies; it counts once beside a manual switch (which keeps its limit and its `--not-playing`). `--not-playing` does not end it
   (the command says so); quit the game. `ARCANUM_QUEUE_AUTO_PLAYING=0` turns it off for a command or wrapper it is set on, and
