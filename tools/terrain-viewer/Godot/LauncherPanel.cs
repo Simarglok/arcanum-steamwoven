@@ -36,6 +36,7 @@ public partial class LauncherPanel : CanvasLayer
     private CheckBox _debugMode = null!;
     private CheckBox _holdToQuit = null!;
     private CheckBox _renderThread = null!;
+    private CheckBox _skipStartupMovies = null!;
     private HBoxContainer _hd1 = null!;
     private HBoxContainer _hdZoom = null!;
     private HBoxContainer _hdPack = null!;
@@ -60,6 +61,7 @@ public partial class LauncherPanel : CanvasLayer
     public event Action<bool>? DebugModeRequested;
     public event Action<bool>? HoldToQuitRequested;
     public event Action<bool>? RenderThreadRequested;
+    public event Action<bool>? SkipStartupMoviesRequested;
     /// <summary>ARC-UI-143, ARC-UI-2174: the HD line asked for Off or On (true), the HD pack line for a source. ARC-UI-3142: HD On is the Steamwoven interface; there is no generated-interface line.</summary>
     public event Action<bool>? HdRequested;
     public event Action<HdPackSourceMode>? HdPackRequested;
@@ -87,6 +89,8 @@ public partial class LauncherPanel : CanvasLayer
         "World zoom: " + (_hdZoom.Visible ? Chosen(_hdZoom) : "hidden"),
         // ARC-RENDER-3420: appended, so the numbers above stay.
         "Separate rendering thread: " + (_renderThread.ButtonPressed ? "on" : "off"),
+        // ARC-UI-3453: appended, so the numbers above stay.
+        "Skip start-up movies: " + (_skipStartupMovies.ButtonPressed ? "on" : "off"),
     ];
     private static string Chosen(HBoxContainer row) => row.GetChildren().OfType<Button>().FirstOrDefault(button => button.ButtonPressed)?.Text ?? "none";
     internal bool HdEnabledForSelfTest => !_hd1.GetChildren().OfType<Button>().First().Disabled;
@@ -102,6 +106,7 @@ public partial class LauncherPanel : CanvasLayer
     internal void ShowAtStartForSelfTest(bool show) => ShowAtStartRequested?.Invoke(show);
     internal void DebugModeForSelfTest(bool on) => DebugModeRequested?.Invoke(on);
     internal void RenderThreadForSelfTest(bool on) => RenderThreadRequested?.Invoke(on);
+    internal void SkipStartupMoviesForSelfTest(bool on) => SkipStartupMoviesRequested?.Invoke(on);
     internal void InstallRequestForSelfTest() => InstallRequested?.Invoke();
     internal void InstallForSelfTest(string installer, string target) => InstallChosen?.Invoke(installer, target);
     internal void CancelInstallForSelfTest() => CancelInstallRequested?.Invoke();
@@ -154,6 +159,9 @@ public partial class LauncherPanel : CanvasLayer
         }
         _showAtStart = new CheckBox { Name = "ShowAtStart", Text = "Show this screen at every start", FocusMode = Control.FocusModeEnum.None, Modulate = dark };
         _showAtStart.Toggled += on => { if (!_rendering) ShowAtStartRequested?.Invoke(on); };
+        // ARC-UI-3453 (owner request 2026-11-27): the original always plays them, so off by default.
+        _skipStartupMovies = new CheckBox { Name = "SkipStartupMovies", Text = "Skip the three start-up movies before the main menu", FocusMode = Control.FocusModeEnum.None, Modulate = dark };
+        _skipStartupMovies.Toggled += on => { if (!_rendering) SkipStartupMoviesRequested?.Invoke(on); };
         // ARC-DEV-2270: a close request (Cmd+Q, Alt+F4, the window's close button) asks the original's quit question; holding the key quits at once.
         _holdToQuit = new CheckBox { Name = "HoldToQuit", Text = "Hold Cmd+Q (Alt+F4) to quit without the question", FocusMode = Control.FocusModeEnum.None, Modulate = dark };
         _holdToQuit.Toggled += on => { if (!_rendering) HoldToQuitRequested?.Invoke(on); };
@@ -176,6 +184,10 @@ public partial class LauncherPanel : CanvasLayer
         _hdPack = MakeChoiceRow("HdPack", "HD pack:", dark, ["Auto", "Game", "Custom"], index => HdPackRequested?.Invoke((HdPackSourceMode)index));
         _hdZoom = MakeChoiceRow("HdWorldZoom", "World zoom:", dark, ["Auto", "1x", "2x", "3x", "4x"], index => HdWorldZoomRequested?.Invoke(index));
         _hdNote = Line(new Color(.3f, .3f, .3f));
+        // ARC-UI-3453: the two start options share one row, so the screen still fits 1280x800 with HD On (ARC-UI-3432).
+        var startRow = new HBoxContainer { Name = "StartRow" };
+        startRow.AddThemeConstantOverride("separation", 32);
+        startRow.AddChild(_showAtStart); startRow.AddChild(_skipStartupMovies);
         var actions = new HBoxContainer();
         _play = MakeButton("Play", "Play", () => PlayRequested?.Invoke());
         actions.AddChild(_play);
@@ -191,7 +203,7 @@ public partial class LauncherPanel : CanvasLayer
                     + "The game folder is only read, never written. An installation that the original game never started has no prototype files; "
                     + "the first Play prepares them from your own Arcanum.exe (about half a minute) and keeps them in Steamwoven's settings folder. "
                     + "Without Windows, \"Install from GOG installer…\" unpacks the GOG offline installer (setup_arcanum_….exe) with the free innoextract tool into a new folder you pick, and chooses it.";
-        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hd1, _hdPack, _hdZoom, _hdNote, _showAtStart, _holdToQuit, _renderThread, _debugMode, actions, _notice, new Control { Name = "HintGap", CustomMinimumSize = new Vector2(0, 8) }, hint }) contents.AddChild(control);
+        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hd1, _hdPack, _hdZoom, _hdNote, startRow, _holdToQuit, _renderThread, _debugMode, actions, _notice, new Control { Name = "HintGap", CustomMinimumSize = new Vector2(0, 8) }, hint }) contents.AddChild(control);
         _dialog = new FileDialog
         {
             Name = "ChooseGameFolder", FileMode = FileDialog.FileModeEnum.OpenDir, Access = FileDialog.AccessEnum.Filesystem, UseNativeDialog = true,
@@ -301,6 +313,7 @@ public partial class LauncherPanel : CanvasLayer
             _showAtStart.ButtonPressed = screen.Settings.ShowAtStart;
             _holdToQuit.ButtonPressed = screen.Settings.HoldToQuit;
             _renderThread.ButtonPressed = screen.Settings.SeparateRenderThread;
+            _skipStartupMovies.ButtonPressed = screen.Settings.SkipStartupMovies;
             _debugMode.ButtonPressed = screen.Settings.DebugMode;
             _busy = screen.Busy;
             _play.Disabled = !screen.CanPlay;

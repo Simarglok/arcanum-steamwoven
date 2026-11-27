@@ -25,6 +25,10 @@ Terminal uses the same user folder (saves, settings, logs): its start line names
 runs, the [launch queue](toolchain.md#launch-queue-arc-dev-033) holds the agents' window and solo runs. An agent's
 measurement is queued with `./arcanum run --kind solo`, so nothing else runs beside it ([solo runs](toolchain.md#solo-runs-arc-dev-3443)).
 
+A game from the package plays its three start-up movies before the main menu. For a measurement skip them with the user
+argument `--skip-startup-movies`, after `--` ([ARC-UI-3453](../rendering/terrain-viewer.md)): the commands below pass it.
+An automated run (`--native-smoke`, every smoke) never plays the installed start-up movies and needs no argument.
+
 ## Which tool for what
 
 | Question | Tool |
@@ -43,7 +47,7 @@ In the game itself **Ctrl+F** switches it on and off: it is the third step of th
 [performance overlay](../rendering/terrain-viewer.md#performance-overlay-arc-dev-3389), after the game's own panel. To have
 it from the first frame, start from Terminal:
 
-    MTL_HUD_ENABLED=1 "$EXE"
+    MTL_HUD_ENABLED=1 "$EXE" -- --skip-startup-movies
 
 Where `metalperftrace` exists (macOS 27) the game then puts the HUD where its own panel stands (the right edge, below the top
 bar), whichever way it was started.
@@ -51,11 +55,11 @@ bar), whichever way it was started.
 **You see** an overlay at the top right: chip, resolution, Metal and app memory, FPS, GPU ms, frame interval and its
 graph. More lines (thermal state, present delay, encoder CPU time):
 
-    MTL_HUD_ENABLED=1 MTL_HUD_ELEMENTS=device,layersize,fps,frameinterval,frameintervalgraph,gputime,memory,thermal,presentdelay,metalcpu "$EXE"
+    MTL_HUD_ENABLED=1 MTL_HUD_ELEMENTS=device,layersize,fps,frameinterval,frameintervalgraph,gputime,memory,thermal,presentdelay,metalcpu "$EXE" -- --skip-startup-movies
 
 `open` passes the variable too (`open --env` exists on macOS 27):
 
-    open -n --env MTL_HUD_ENABLED=1 "$APP"
+    open -n --env MTL_HUD_ENABLED=1 "$APP" --args -- --skip-startup-movies
 
 For a game that is already running (tried on one started without the variable):
 
@@ -64,7 +68,7 @@ For a game that is already running (tried on one started without the variable):
 
 ### HUD log: per-frame times
 
-    MTL_HUD_ENABLED=1 MTL_HUD_LOG_ENABLED=1 "$EXE" 2> hud.log
+    MTL_HUD_ENABLED=1 MTL_HUD_LOG_ENABLED=1 "$EXE" -- --skip-startup-movies 2> hud.log
 
 About once a second the game writes a `metal-HUD:` line to stderr: a frame number, two memory figures in MB, then one
 pair per frame (interval ms, GPU ms). The same lines in the system log (`log show`) are cut to `<private>`, so keep
@@ -104,7 +108,7 @@ test run's log elsewhere, so it does not rotate the game's own logs (works).
 | `--max-fps N` | **Does not work**: `--max-fps 30` still gave about 60, the viewer sets the cap itself every frame. |
 | `--gpu-profile` | **Does not work** on Metal: only empty `GPU PROFILE (total 0.0ms):` blocks. |
 
-    NSUnbufferedIO=YES "$EXE" --print-fps 2>&1 | tee fps.txt
+    NSUnbufferedIO=YES "$EXE" --print-fps -- --skip-startup-movies 2>&1 | tee fps.txt
 
 **You see** `Project FPS: 59 (16.94 mspf)` each second. `MTL_HUD_ENABLED=1` can be added in front.
 
@@ -194,7 +198,7 @@ Then, in one Terminal, the editor:
 
 and, in another, the game:
 
-    "$HOME/Git/arcanum-steamwoven/artifacts/packages/macos-profiling/Arcanum Steamwoven Profiling.app/Contents/MacOS/Arcanum Steamwoven Profiling" --remote-debug tcp://127.0.0.1:6007
+    "$HOME/Git/arcanum-steamwoven/artifacts/packages/macos-profiling/Arcanum Steamwoven Profiling.app/Contents/MacOS/Arcanum Steamwoven Profiling" --remote-debug tcp://127.0.0.1:6007 -- --skip-startup-movies
 
 In the editor's bottom **Debugger** panel open **Monitors**, and **Visual Profiler** (press **Start**). Not the
 **Profiler** tab: it does not support C#.
