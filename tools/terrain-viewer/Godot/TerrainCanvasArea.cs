@@ -308,10 +308,13 @@ public partial class TerrainCanvas
     private AreaCarriedBinding? _areaCarriedBinding;
     /// <summary>ARC-DEV-335 smoke seams: the lighting with the hero's carried light of the last submission (null: none) and the hero's placement.</summary>
     internal AreaLocalLighting? AreaCarriedForSelfTest => _areaCarriedNow;
+    /// <summary>ARC-RENDER-3427 smoke seam: the carried lattice's lighter texture of the last submission and its size (null: none).</summary>
+    internal (ImageTexture Lighter, Vector2I Size)? AreaCarriedTextureForSelfTest
+        => _areaCarriedBinding is { } shown && _areaCarriedLattice is { } held ? (shown.Lighter, held.Size) : null;
     internal ActorDiagnosticPlacementInput? AreaActorPlacementForSelfTest => _areaActorPlacement;
     /// <summary>ARC-WORLD-1149: where the hero is drawn now, for the light a check reads at a cell (null: no area is shown).</summary>
     internal ActorDiagnosticPlacementInput? AreaActorPlacementNow => _areaActorPlacement;
-    private (StationaryLightLattice Lattice, byte[] Lighter, byte[] Darker, AreaCarriedBinding Binding)? _areaCarriedLattice;
+    private (StationaryLightLattice Lattice, byte[] Lighter, byte[] Darker, Vector2I Size, AreaCarriedBinding Binding)? _areaCarriedLattice;
     /// <summary>ARC-DEV-335 (V7d, ledger LT12): the lighting with the critters' carried lights, made from the hero's placement at each
     /// submission (the hero's light moves with it); null draws no carried light. The terrain, the bodies and the actor take it from the next
     /// submission.</summary>
@@ -324,16 +327,22 @@ public partial class TerrainCanvas
     {
         if (_areaCarriedLattice is { } known && ReferenceEquals(known.Lattice, lattice)) return known.Binding;
         var (lighter, darker, bounds) = LatticeRows(lattice);
+        // ARC-RENDER-3427: a walking light changes the lattice's columns and rows every few frames. The textures are larger than the lattice
+        // and are made again only when it outgrows them or they are far larger than needed, so the terrain items keep their binding; the bounds go to the view state.
+        var (width, height) = AreaCarriedTexels.Size(_areaCarriedLattice?.Size.X ?? 0, _areaCarriedLattice?.Size.Y ?? 0, bounds.Z, bounds.W);
+        var size = new Vector2I(width, height);
+        lighter = AreaCarriedTexels.Lay(lighter, bounds.Z, bounds.W, width, height);
+        darker = AreaCarriedTexels.Lay(darker, bounds.Z, bounds.W, width, height);
         // The carried lattice is made again at every submission, mostly with the rows already shown.
-        if (_areaCarriedLattice is { } shown && SameSize(shown.Binding.Lattice, bounds))
+        if (_areaCarriedLattice is { } shown && shown.Size == size)
         {
-            Rewrite(shown.Binding.Lighter, bounds, shown.Lighter, lighter); Rewrite(shown.Binding.Darker, bounds, shown.Darker, darker);
+            Rewrite(shown.Binding.Lighter, size, shown.Lighter, lighter); Rewrite(shown.Binding.Darker, size, shown.Darker, darker);
             var kept = shown.Binding.Lattice == bounds ? shown.Binding : shown.Binding with { Lattice = bounds };
-            _areaCarriedLattice = (lattice, lighter, darker, kept); return kept;
+            _areaCarriedLattice = (lattice, lighter, darker, size, kept); return kept;
         }
         DisposeAreaCarried();
-        var binding = new AreaCarriedBinding(LatticeTexture(bounds, lighter), LatticeTexture(bounds, darker), bounds);
-        _areaCarriedLattice = (lattice, lighter, darker, binding); return binding;
+        var binding = new AreaCarriedBinding(LatticeTexture(size, lighter), LatticeTexture(size, darker), bounds);
+        _areaCarriedLattice = (lattice, lighter, darker, size, binding); return binding;
     }
     private void DisposeAreaCarried()
     {
@@ -347,12 +356,12 @@ public partial class TerrainCanvas
         var (lighter, darker, bounds) = LatticeRows(lattice);
         if (_areaLattice is { } shown && SameSize(shown.Binding.Lattice, bounds))
         {
-            Rewrite(shown.Binding.Lighter, bounds, shown.Lighter, lighter); Rewrite(shown.Binding.Darker, bounds, shown.Darker, darker);
+            Rewrite(shown.Binding.Lighter, Nodes(bounds), shown.Lighter, lighter); Rewrite(shown.Binding.Darker, Nodes(bounds), shown.Darker, darker);
             var kept = shown.Binding.Lattice == bounds ? shown.Binding : shown.Binding with { Lattice = bounds };
             _areaLattice = (lattice, lighter, darker, kept); return kept;
         }
         DisposeAreaLattice();
-        var binding = new AreaLatticeBinding(LatticeTexture(bounds, lighter), LatticeTexture(bounds, darker), bounds);
+        var binding = new AreaLatticeBinding(LatticeTexture(Nodes(bounds), lighter), LatticeTexture(Nodes(bounds), darker), bounds);
         _areaLattice = (lattice, lighter, darker, binding); return binding;
     }
     // Materials still holding the textures keep their own references; this drops the canvas's.
@@ -361,21 +370,22 @@ public partial class TerrainCanvas
         if (_areaLattice is { } old) { old.Binding.Lighter.Dispose(); old.Binding.Darker.Dispose(); }
         _areaLattice = null;
     }
-    // ARC-RENDER-3362: a lattice of the size already shown is written into the shown textures (nothing where its rows are the same), so the binding stays and the terrain
+    // ARC-RENDER-3362: a lattice the shown textures hold (the map's: of exactly their size; the carried lights': ARC-RENDER-3427) is written into them (nothing where the rows are the same), so the binding stays and the terrain
     // items send nothing for it: a new pair of textures made every one of them (hundreds) send its light again, at every submission under a carried light.
     private static (byte[] Lighter, byte[] Darker, Vector4I Bounds) LatticeRows(StationaryLightLattice lattice) =>
         (lattice.Lighter.ToArray(), lattice.Darker.ToArray(), new(lattice.FirstColumn, lattice.FirstRow, lattice.Columns, lattice.Rows));
     private static bool SameSize(Vector4I shown, Vector4I next) => shown.Z == next.Z && shown.W == next.W;
-    private static Image LatticeImage(Vector4I bounds, byte[] rows) => Image.CreateFromData(bounds.Z, bounds.W, false, Image.Format.Rgba8, rows);
-    private static ImageTexture LatticeTexture(Vector4I bounds, byte[] rows)
+    private static Vector2I Nodes(Vector4I bounds) => new(bounds.Z, bounds.W);
+    private static Image LatticeImage(Vector2I size, byte[] rows) => Image.CreateFromData(size.X, size.Y, false, Image.Format.Rgba8, rows);
+    private static ImageTexture LatticeTexture(Vector2I size, byte[] rows)
     {
-        using var image = LatticeImage(bounds, rows);
+        using var image = LatticeImage(size, rows);
         return ImageTexture.CreateFromImage(image);
     }
-    private static void Rewrite(ImageTexture texture, Vector4I bounds, byte[] shown, byte[] next)
+    private static void Rewrite(ImageTexture texture, Vector2I size, byte[] shown, byte[] next)
     {
         if (shown.AsSpan().SequenceEqual(next)) return;
-        using var image = LatticeImage(bounds, next);
+        using var image = LatticeImage(size, next);
         texture.Update(image);
     }
     private Color AreaRoofLight()
