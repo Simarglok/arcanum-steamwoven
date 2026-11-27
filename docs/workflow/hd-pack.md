@@ -17,7 +17,9 @@ reopens it, and the build/import tooling ARC-DEV-003 stays deferred ([decision](
 
 1. **No original or derived art in git**: no ART pixels, redraws, frames, sheets, screenshots, real manifests, plans
    with real file lists or receipts that name original files. Git holds this page, the tool, the importer and
-   synthetic tests. A task that needs to show a result links a local path or describes it in words.
+   synthetic tests. A task that needs to show a result links a local path or describes it in words. The only
+   exception is the [app icon](../../assets/app-icon/README.md) (owner decision 2026-11-28), which is not part of any
+   pack.
 2. **Never replace the installed pack folder as a whole**, and never delete, move or re-create it. The installed
    pack holds work that no rebuild reproduces (the Codex repairs in the slices `character-hd114` and `interface-refinement02-soft`,
    `recipe-refinement02.json`, an old unlisted `main-menu-16x9.png`, which the game no longer reads, ARC-UI-3003). Change it only with `hd_pack.py apply`, `relayout`, `refresh` or `rollback`.
