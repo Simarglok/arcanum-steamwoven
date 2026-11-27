@@ -293,7 +293,7 @@ public partial class TerrainViewerApp
             await Start(true);
             Require(HdLines().SequenceEqual(["HD: Off", "HD pack: Auto"]) && _launcherPanel.HdEnabledForSelfTest && Lines()[11] == "World zoom: hidden",
                 "the HD lines default to Off, Auto and the world zoom row is hidden while HD is Off (an old visual profile line alone does not turn HD on): " + string.Join(" | ", HdLines()) + " | " + Lines()[11]);
-            Require(Lines().Length == 13 && !Lines().Any(line => line.StartsWith("Generated interface", StringComparison.Ordinal)) && !Lines().Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
+            Require(Lines().Length == 14 && !Lines().Any(line => line.StartsWith("Generated interface", StringComparison.Ordinal)) && !Lines().Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
                 "the launcher has one HD row, no HD graphics, HD interface or HD lighting line: " + Lines().Length);
             _launcherPanel.HdForSelfTest(true);
             _launcherPanel.HdPackForSelfTest(HdPackSourceMode.GameFolder);

@@ -149,7 +149,8 @@ public partial class TerrainViewerApp
             _launcherPanel.DebugModeRequested += on => LauncherChange(launcher => launcher.SetDebugMode(on));
             _launcherPanel.HoldToQuitRequested += on => LauncherChange(launcher => launcher.SetHoldToQuit(on));
             _launcherPanel.RenderThreadRequested += on => LauncherChange(launcher => launcher.SetSeparateRenderThread(on));
-            _launcherPanel.SkipStartupMoviesRequested += on => LauncherChange(launcher => launcher.SetSkipStartupMovies(on));\n            // ARC-UI-143: the HD lines, saved at once in the settings files.
+            _launcherPanel.SkipStartupMoviesRequested += on => LauncherChange(launcher => launcher.SetSkipStartupMovies(on));
+            // ARC-UI-143: the HD lines, saved at once in the settings files.
             _launcherPanel.HdRequested += LauncherHd;
             _launcherPanel.HdWorldZoomRequested += LauncherHdWorldZoom;
             _launcherPanel.HdPackRequested += LauncherHdPack;
