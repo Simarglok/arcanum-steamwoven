@@ -7,18 +7,22 @@ public static class AreaCarriedTexels
 {
     /// <summary>Each side of the textures is a multiple of this many nodes.</summary>
     public const int Step = 16;
+    /// <summary>How many times larger than needed a side may stay.</summary>
+    public const int Slack = 4;
     private const int BytesPerNode = 4;
 
     /// <summary>The texture size for a lattice of <paramref name="columns"/> by <paramref name="rows"/> nodes when the shown textures are
-    /// <paramref name="shownWidth"/> by <paramref name="shownHeight"/> (zero: none yet): a side that holds the lattice stays, a side too small
-    /// grows to the next multiple of <see cref="Step"/>. A side never shrinks.</summary>
+    /// <paramref name="shownWidth"/> by <paramref name="shownHeight"/> (zero: none yet). A side stays while it holds the lattice and is at most
+    /// <see cref="Slack"/> times the next multiple of <see cref="Step"/> that would; otherwise it becomes that multiple. So a lattice that changes
+    /// by a few nodes keeps the textures, and textures grown for a wide view are given back.</summary>
     public static (int Width, int Height) Size(int shownWidth, int shownHeight, int columns, int rows) =>
         (Side(shownWidth, columns), Side(shownHeight, rows));
 
     private static int Side(int shown, int nodes)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(nodes);
-        return shown >= nodes && shown > 0 ? shown : checked((Math.Max(nodes, 1) + Step - 1) / Step * Step);
+        var needed = checked((Math.Max(nodes, 1) + Step - 1) / Step * Step);
+        return shown >= needed && shown <= (long)Slack * needed ? shown : needed;
     }
 
     /// <summary>The RGBA8 rows of a lattice laid into the top left of a texture of <paramref name="width"/> by <paramref name="height"/> nodes;

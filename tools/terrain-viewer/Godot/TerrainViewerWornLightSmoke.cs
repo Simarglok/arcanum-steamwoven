@@ -85,20 +85,24 @@ public partial class TerrainViewerApp
 
             // A terrain pixel of the lit area reads back as the merged lattices predict.
             var chart = all.Chart;
-            var hero = TerrainGeometry.Project(checked((int)placement.MapX!.Value), checked((int)placement.MapY!.Value));
-            var centre = (X: hero.X + (placement.InstanceOffsetX ?? 0) + 40d, Y: hero.Y + (placement.InstanceOffsetY ?? 0) + 20d);
-            var observed = 0; var tried = 0;
-            foreach (var command in plan.Commands.Where(c => c.Identity is null && lighting.Channels[c.Visual] != AreaAmbientChannel.Unlit)
-                .OrderBy(c => Math.Abs(c.Destination.X + c.Destination.Width / 2d - centre.X) + Math.Abs(c.Destination.Y + c.Destination.Height / 2d - centre.Y)).Take(24))
+            async Task<int> LitPixelNearHero(StationaryLightLattice shownLattice, string when)
             {
-                tried++;
-                var ambient = AreaLocalLighting.Ambient(lighting.Channels[command.Visual], pair);
-                (double R, double G, double B) Merged(Vector2 world) => StationaryLightField.TerrainPixel(mapLattice, lattice, ambient, world.X, world.Y);
-                // The camera is held where the sample puts it (the open input gate would follow the hero back).
-                if (!await WithAreaSmokeCameraHeld(() => ObserveTerrainLitAsync(area, command, ambient, Merged))) continue;
-                observed++; break;
+                var at = _canvas.AreaActorPlacementForSelfTest ?? throw new InvalidOperationException("AREA_WORN_LIGHT_NO_PLACEMENT");
+                var hero = TerrainGeometry.Project(checked((int)at.MapX!.Value), checked((int)at.MapY!.Value));
+                var centre = (X: hero.X + (at.InstanceOffsetX ?? 0) + 40d, Y: hero.Y + (at.InstanceOffsetY ?? 0) + 20d);
+                var tried = 0;
+                foreach (var command in plan.Commands.Where(c => c.Identity is null && lighting.Channels[c.Visual] != AreaAmbientChannel.Unlit)
+                    .OrderBy(c => Math.Abs(c.Destination.X + c.Destination.Width / 2d - centre.X) + Math.Abs(c.Destination.Y + c.Destination.Height / 2d - centre.Y)).Take(24))
+                {
+                    tried++;
+                    var ambient = AreaLocalLighting.Ambient(lighting.Channels[command.Visual], pair);
+                    (double R, double G, double B) Merged(Vector2 world) => StationaryLightField.TerrainPixel(mapLattice, shownLattice, ambient, world.X, world.Y);
+                    // The camera is held where the sample puts it (the open input gate would follow the hero back).
+                    if (await WithAreaSmokeCameraHeld(() => ObserveTerrainLitAsync(area, command, ambient, Merged))) return tried;
+                }
+                throw new InvalidOperationException($"AREA_WORN_LIGHT_NO_LIT_PIXEL: no terrain pixel near the hero shows the carried light {when} ({tried} candidates tried)");
             }
-            Require(observed == 1, $"a terrain pixel near the hero shows the carried light ({tried} candidates tried)");
+            var tried = await LitPixelNearHero(lattice, "where it is worn");
             // The pixel observation moved the camera: put it back where the hero is.
             await Frames();
 
@@ -110,10 +114,17 @@ public partial class TerrainViewerApp
                 catch (InvalidOperationException) { }
             }
             Require(far is not null, "a cell the hero can stand on about 14 cells from its start");
+            var texture = _canvas.AreaCarriedTextureForSelfTest ?? throw new InvalidOperationException("AREA_WORN_LIGHT_NO_TEXTURE");
             AreaSmokePlace(map, far!.Value);
             await Frames();
             var moved = _canvas.AreaCarriedForSelfTest?.CarriedLattice(pair) ?? throw new InvalidOperationException("AREA_WORN_LIGHT_NO_LATTICE_MOVED");
             Require((moved.FirstColumn, moved.FirstRow) != (lattice.FirstColumn, lattice.FirstRow), "the carried lattice stands elsewhere after the hero stands elsewhere");
+            // ARC-RENDER-3427: the moved lattice is written into the shown textures while their size holds it, and the terrain still reads it.
+            var movedTexture = _canvas.AreaCarriedTextureForSelfTest ?? throw new InvalidOperationException("AREA_WORN_LIGHT_NO_TEXTURE_MOVED");
+            var kept = movedTexture.Size == texture.Size;
+            Require(!kept || ReferenceEquals(movedTexture.Lighter, texture.Lighter), "the carried textures are kept while their size holds the moved lattice");
+            await LitPixelNearHero(moved, "where the hero stands now");
+            await Frames();
             AreaSmokePlace(map, start);
             await Frames();
 
@@ -127,7 +138,7 @@ public partial class TerrainViewerApp
             Require(session.QueryHeroLight() == LightEmission.None, "the hero's light is gone");
             await Frames();
             Require((_canvas.AreaCarriedForSelfTest?.CarriedLightCount ?? 0) == baseline, "no carried light of the hero is drawn once the item is off");
-            report = new { Map = _readyMapName, Observed = observed, Tried = tried, Lattice = new { lattice.FirstColumn, lattice.FirstRow, lattice.Columns, lattice.Rows }, Hour = driver.Clock.Hour };
+            report = new { Map = _readyMapName, Tried = tried, TexturesKept = kept, Lattice = new { lattice.FirstColumn, lattice.FirstRow, lattice.Columns, lattice.Rows }, Hour = driver.Clock.Hour };
             GD.Print("ARC-DEV-335 native-smoke worn-light PASS " + System.Text.Json.JsonSerializer.Serialize(report));
         }
         finally

@@ -308,6 +308,9 @@ public partial class TerrainCanvas
     private AreaCarriedBinding? _areaCarriedBinding;
     /// <summary>ARC-DEV-335 smoke seams: the lighting with the hero's carried light of the last submission (null: none) and the hero's placement.</summary>
     internal AreaLocalLighting? AreaCarriedForSelfTest => _areaCarriedNow;
+    /// <summary>ARC-RENDER-3427 smoke seam: the carried lattice's lighter texture of the last submission and its size (null: none).</summary>
+    internal (ImageTexture Lighter, Vector2I Size)? AreaCarriedTextureForSelfTest
+        => _areaCarriedBinding is { } shown && _areaCarriedLattice is { } held ? (shown.Lighter, held.Size) : null;
     internal ActorDiagnosticPlacementInput? AreaActorPlacementForSelfTest => _areaActorPlacement;
     /// <summary>ARC-WORLD-1149: where the hero is drawn now, for the light a check reads at a cell (null: no area is shown).</summary>
     internal ActorDiagnosticPlacementInput? AreaActorPlacementNow => _areaActorPlacement;
@@ -367,7 +370,7 @@ public partial class TerrainCanvas
         if (_areaLattice is { } old) { old.Binding.Lighter.Dispose(); old.Binding.Darker.Dispose(); }
         _areaLattice = null;
     }
-    // ARC-RENDER-3362: a lattice that fits the textures already shown is written into them (nothing where their rows are the same), so the binding stays and the terrain
+    // ARC-RENDER-3362: a lattice the shown textures hold (the map's: of exactly their size; the carried lights': ARC-RENDER-3427) is written into them (nothing where the rows are the same), so the binding stays and the terrain
     // items send nothing for it: a new pair of textures made every one of them (hundreds) send its light again, at every submission under a carried light.
     private static (byte[] Lighter, byte[] Darker, Vector4I Bounds) LatticeRows(StationaryLightLattice lattice) =>
         (lattice.Lighter.ToArray(), lattice.Darker.ToArray(), new(lattice.FirstColumn, lattice.FirstRow, lattice.Columns, lattice.Rows));

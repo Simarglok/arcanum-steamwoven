@@ -19,10 +19,14 @@ public sealed class AreaCarriedTexelsTests
     }
 
     [TestMethod]
-    public void ASideGrowsWhenTheLatticeOutgrowsItAndNeverShrinks()
+    public void ASideGrowsWhenTheLatticeOutgrowsIt()
+        => Assert.AreEqual((32, 48), AreaCarriedTexels.Size(32, 16, 5, 33));
+
+    [TestMethod]
+    public void ASideIsGivenBackOnlyWhenItIsFarLargerThanNeeded()
     {
-        Assert.AreEqual((32, 48), AreaCarriedTexels.Size(32, 16, 5, 33));
-        Assert.AreEqual((32, 48), AreaCarriedTexels.Size(32, 48, 1, 1));
+        Assert.AreEqual((64, 64), AreaCarriedTexels.Size(64, 64, 1, 16), "four times the need stays");
+        Assert.AreEqual((16, 32), AreaCarriedTexels.Size(80, 144, 4, 17), "more than four times shrinks");
     }
 
     [TestMethod]
