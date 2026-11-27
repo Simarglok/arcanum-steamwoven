@@ -120,7 +120,9 @@ class Registry:
     def by_hash(self, task: str, digest: str) -> dict | None:
         for row in self.rows.values():
             if row["task"] == task and row["sha256"] == digest and row.get("location", "archive") == "archive" and not is_copy(row["file"]):
-                return row
+                stored = self.root / task / row["file"]
+                if not stored.is_file() or sha256_file(stored) == digest:  # a file rewritten in place no longer holds this content
+                    return row
         return None
 
     def put(self, row: dict) -> dict:
@@ -185,10 +187,8 @@ def add_file(registry: Registry, task: str, src: Path, *, kind: str, status: str
         return existing
     folder = Path(kind) / subdir if subdir else Path(kind)
     rel = folder / (name or src.name)
-    target = registry.root / task / rel
-    if target.exists():
-        rel = folder / f"{rel.stem}-{digest[:8]}{rel.suffix}"
-        target = registry.root / task / rel
+    target = _free_name(registry.root / task / folder, rel.name, digest)
+    rel = folder / target.name
     clone_copy(src, target)
     st = src.stat()
     row = registry.put(_row(task, rel.as_posix(), kind, status, [str(src)], digest, st.st_size, image_size(src), st.st_mtime, note, basis or {}))
@@ -222,12 +222,13 @@ def _retire_copy(registry: Registry, copy: dict, status: str, note: str) -> dict
     status = "intermediate" if status == "unknown" else status  # no one can mark a superseded copy of a marked original
     tdir = registry.root / copy["task"]
     src = tdir / copy["file"]
-    registry.drop(copy)
     if not src.is_file():
+        registry.drop(copy)
         return dict(copy, status=status, note=note)
     target = _free_name(tdir / SUPERSEDED_DIR, src.name, copy["sha256"])
     target.parent.mkdir(parents=True, exist_ok=True)
     os.replace(src, target)
+    registry.drop(copy)  # only after the move: a failed move keeps the row
     return registry.put(dict(copy, file=target.relative_to(tdir).as_posix(), status=status, note=note))
 
 

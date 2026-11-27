@@ -187,6 +187,23 @@ class ArchiveTests(unittest.TestCase):
         ia.add_file(self.reg, "ARC-UI-9", self.image("x.png"), kind="composite", status="rejected")
         self.assertEqual([], self.finals("ARC-UI-9"))
 
+    def test_a_failed_move_keeps_the_copy_row(self) -> None:
+        row = ia.add_file(self.reg, "ARC-UI-2", self.image("m.png"), kind="master", status="final")
+        (self.root / "ARC-UI-2" / "superseded").write_bytes(b"in the way")
+        with self.assertRaises(OSError):
+            ia.mark(self.reg, "ARC-UI-2", row["file"], "rejected")
+        self.assertIn(("archive", "ARC-UI-2", "final/m.png"), self.reg.rows)
+        self.assertEqual(["m.png"], self.finals("ARC-UI-2"))
+
+    def test_adding_bytes_whose_file_was_rewritten_makes_a_new_row(self) -> None:
+        src = self.image("m.png")
+        old = ia.add_file(self.reg, "ARC-UI-2", src, kind="master")
+        (self.root / "ARC-UI-2" / old["file"]).write_bytes(fake_png(40, 30, 7))
+        new = ia.add_file(self.reg, "ARC-UI-2", src, kind="master", status="final")
+        self.assertNotEqual(old["file"], new["file"])
+        self.assertEqual(src.read_bytes(), (self.root / "ARC-UI-2" / "final" / Path(new["file"]).name).read_bytes())
+        self.assertEqual(new["file"], ia.add_file(self.reg, "ARC-UI-2", src, kind="master")["file"])
+
     def test_the_cli_takes_no_new_row_of_an_unknown_kind(self) -> None:
         for argv in (["add", "ARC-UI-1", "a.png"], ["add", "ARC-UI-1", "a.png", "--kind", "unknown"]):
             with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
