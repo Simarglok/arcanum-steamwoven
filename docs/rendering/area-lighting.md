@@ -398,7 +398,9 @@ Off, by the H key too, puts the look out of force and the draw is Legacy byte fo
 (`AreaRelight.LookStrength`, the experiment's pick; `ARC_RELIGHT_LOOK_STRENGTH` changes it for tuning by eye): terrain, scenery, bodies and the hero take a normal derived per pixel from the sprite's
 luminance and the dynamic point-light term, weighted by how dark the item's own ambient is, so daylight stays Legacy and a dark scene takes the full term. The ambient the weight reads leaves out the carried lights (ARC-RENDER-2298: the shader
 uniform `relight_weight`, from the body's colour before `AddCarried` and the hero's colour without the carried view), because the relit term takes those lights from its own list: a light's carrier
-then counts as dark like the ground round it, not as already lit by its own torch (the weight, and so the term, was zero on the carrier before). A companion body drawn from another map's plan (the moving-body path) keeps the weight it had: that path does not split out its carried light. The hero's carried light and the map's
+then counts as dark like the ground round it, not as already lit by its own torch (the weight, and so the term, was zero on the carrier before). A terrain texel's neighbourhood is that of the bound texture: the composed 512 px chunk, or its light-channel
+layer (ARC-RENDER-3438), where terrain is drawn as chunks, and the tile frame where it is drawn per command; the normals differ faintly along those
+borders (open: #3451). A companion body drawn from another map's plan (the moving-body path) keeps the weight it had: that path does not split out its carried light. The hero's carried light and the map's
 lights are one list with the view-culling rule above (32 nearest the view's centre). The environment's `ARC_RELIGHT` modes stay as a developer override (when set they win over the look and use
 `ARC_RELIGHT_STRENGTH`). No gameplay luminance, clock or RNG is read or changed (FR-LIGHT-009 and FR-LIGHT-011 untouched).
 

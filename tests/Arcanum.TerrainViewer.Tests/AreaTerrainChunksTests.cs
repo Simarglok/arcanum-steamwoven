@@ -37,6 +37,67 @@ public sealed class AreaTerrainChunksTests
         }
     }
 
+    // ARC-RENDER-3438: a chunk with terrain on two light channels is drawn as one texture per channel. Each texel of the
+    // whole chunk is in exactly the layer of its winning command's channel, so lighting a layer lights what the
+    // per-command draws would light.
+    [TestMethod]
+    public void ChannelLayersPartitionTheChunkByItsWinningCommand()
+    {
+        var (commands, frames) = Terrain(new Random(11), 220);
+        commands = commands.Select((c, i) => c with { Visual = new AreaVisualKey(AreaSourceKind.Static, default, i, "v") }).ToArray();
+        var channels = commands.Select((c, i) => (c.Visual, Channel: i % 2 == 0 ? AreaAmbientChannel.Outdoor : AreaAmbientChannel.Indoor))
+            .ToDictionary(pair => pair.Visual, pair => pair.Channel);
+        var chunks = AreaTerrainChunks.TryCreate(commands, frames)!;
+        var split = 0;
+        for (var level = 0; level <= AreaTerrainChunks.MaxLevel; level++)
+        foreach (var chunk in chunks.Chunks)
+        {
+            var present = chunks.ChannelsIn(chunk, channels);
+            CollectionAssert.AreEqual(chunks.CommandsIn(chunk).Select(c => channels[c.Visual]).Distinct().Order().ToArray(), present);
+            if (present.Length > 1) split++;
+            var whole = chunks.Compose(chunk, level);
+            var union = new byte[whole.Length];
+            foreach (var channel in present)
+            {
+                var layer = chunks.Compose(chunk, level, c => channels[c.Visual] == channel);
+                // The expected layer, from each texel's winning command found separately.
+                var owner = Owners(chunks, chunk, level, frames, channels);
+                for (var at = 0; at < whole.Length; at += 4)
+                {
+                    var expected = owner[at / 4] == channel ? whole.AsSpan(at, 4) : new byte[4];
+                    Assert.IsTrue(layer.AsSpan(at, 4).SequenceEqual(expected), $"chunk {chunk} level {level} {channel} texel {at / 4}");
+                    if (layer[at + 3] == 0) continue;
+                    Assert.AreEqual(0, union[at + 3], "a texel is in one layer only");
+                    layer.AsSpan(at, 4).CopyTo(union.AsSpan(at, 4));
+                }
+            }
+            CollectionAssert.AreEqual(whole, union, $"chunk {chunk} level {level}");
+        }
+        Assert.IsTrue(split > 8, "the fixture must mix channels inside chunks");
+        Assert.ThrowsExactly<InvalidOperationException>(() => chunks.ChannelsIn(chunks.Chunks.First(), new Dictionary<AreaVisualKey, AreaAmbientChannel>()));
+    }
+
+    // The channel of each kept texel's last opaque command, found texel by texel (independent of Compose's clipping).
+    private static AreaAmbientChannel?[] Owners(AreaTerrainChunks chunks, (int X, int Y) chunk, int level,
+        Dictionary<AreaFrameKey, DecodedAreaFrame> frames, Dictionary<AreaVisualKey, AreaAmbientChannel> channels)
+    {
+        var side = AreaTerrainChunks.Side(level); var step = 1 << level; var phase = level == 0 ? 0 : step >> 1;
+        var owners = new AreaAmbientChannel?[side * side];
+        foreach (var command in chunks.CommandsIn(chunk))
+        {
+            var d = command.Destination; var s = command.Source; var frame = frames[command.Frame];
+            for (var y = d.Y; y < d.Y + d.Height; y++)
+            for (var x = d.X; x < d.X + d.Width; x++)
+            {
+                var lx = x - chunk.X * AreaTerrainChunks.ChunkSize - phase; var ly = y - chunk.Y * AreaTerrainChunks.ChunkSize - phase;
+                if (lx < 0 || ly < 0 || lx % step != 0 || ly % step != 0 || lx / step >= side || ly / step >= side) continue;
+                var sx = command.FlipX ? s.X + s.Width - 1 - (x - d.X) : s.X + (x - d.X);
+                if (frame.Rgba[((s.Y + y - d.Y) * frame.Width + sx) * 4 + 3] == 255) owners[ly / step * side + lx / step] = channels[command.Visual];
+            }
+        }
+        return owners;
+    }
+
     [TestMethod]
     public void UnsupportedTerrainDisablesChunksInsteadOfApproximating()
     {

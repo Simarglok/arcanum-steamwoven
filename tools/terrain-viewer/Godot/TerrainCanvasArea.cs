@@ -67,7 +67,8 @@ public partial class TerrainCanvas
     // per-command terrain items.
     private AreaTerrainChunks? _areaChunks;
     private readonly AreaChunkTextureCache _areaChunkTextures = new();
-    private readonly Dictionary<AreaDrawCommand, (int X, int Y)> _areaChunkCommands = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<AreaDrawCommand, AreaChunkPart> _areaChunkCommands = new(ReferenceEqualityComparer.Instance);
+    private readonly List<AreaChunkPart> _areaChunkParts = new();
     internal bool AreaTerrainChunksEnabled { get; set; } = true;
     /// <summary>Terrain chunk items in the current submission, 0 when terrain is drawn per command.</summary>
     public int AreaChunkCount => Current(ref _areaChunkCount);
@@ -276,18 +277,23 @@ public partial class TerrainCanvas
     internal bool AreaRoofCovers(AreaObjectKey key) => _areaCovered?.Contains(key) == true;
     internal AreaWallFade AreaWallFadeOf(AreaDrawCommand command)
         => command.Identity is { } key && _areaWallFades is { } fades && fades.TryGetValue(key, out var fade) ? fade : AreaWallFade.None;
-    // One ambient multiplier per chunk item: a chunk is drawn as a chunk under lighting only
-    // when all its terrain shares one channel (null = mixed, drawn per command instead).
-    private readonly Dictionary<(int X, int Y), AreaAmbientChannel?> _areaChunkChannels = new();
-    private AreaAmbientChannel? AreaChunkChannel((int X, int Y) chunk)
+    // One ambient multiplier per chunk item: a chunk whose terrain is on one channel is one item; a mixed one
+    // (ARC-RENDER-3438) is one item per channel, each texture holding the texels whose winning command is on that
+    // channel, so every texel keeps the light of its per-command draw.
+    private readonly Dictionary<(int X, int Y), AreaAmbientChannel[]> _areaChunkChannels = new();
+    private static readonly AreaAmbientChannel[] UnlitChunk = [AreaAmbientChannel.Unlit];
+    private AreaAmbientChannel[] AreaChunkChannels((int X, int Y) chunk)
     {
-        if (_areaAmbient is not { } ambient) return AreaAmbientChannel.Unlit;
-        if (_areaChunkChannels.TryGetValue(chunk, out var known)) return known;
-        var channels = _areaChunks!.CommandsIn(chunk).Select(command => ambient.Channels.TryGetValue(command.Visual, out var found)
-            ? found : throw new InvalidOperationException("AREA_AMBIENT_VISUAL_REQUIRED")).Distinct().ToArray();
-        var channel = channels.Length == 1 ? channels[0] : (AreaAmbientChannel?)null;
-        _areaChunkChannels[chunk] = channel; return channel;
+        if (_areaAmbient is not { } ambient) return UnlitChunk;
+        if (!_areaChunkChannels.TryGetValue(chunk, out var known))
+            _areaChunkChannels[chunk] = known = _areaChunks!.ChannelsIn(chunk, ambient.Channels);
+        return known;
     }
+    /// <summary>ARC-RENDER-3438: whether the last submission drew a chunk as channel layers.</summary>
+    internal bool AreaChunkSplit => Current(ref _areaChunkSplit);
+    private bool _areaChunkSplit;
+    /// <summary>ARC-RENDER-3438 self-test seam: the chunk textures drawn by the last submission (more than the chunks when one is split).</summary>
+    internal int AreaChunkItemCount { get { EnsureAreaView(); return _areaChunkParts.Count; } }
     // ARC-RENDER-012: terrain under a light lattice samples it per pixel; bodies take the source's object
     // colour (walls a two-end gradient), the actor its colour at the current placement.
     // ARC-RENDER-2298: Weight is the colour without the carried lights (null: the item's own colour), what the relit night weight reads; the carried lights are the relit look's own light list.
@@ -423,7 +429,7 @@ public partial class TerrainCanvas
     {
         if (_areaAmbient is not { } ambient) return Colors.White;
         var channel = isActor ? AreaAmbientChannel.Outdoor
-            : _areaChunkCommands.TryGetValue(command, out var chunk) ? AreaChunkChannel(chunk) ?? throw new InvalidOperationException("AREA_AMBIENT_MIXED_CHUNK")
+            : _areaChunkCommands.TryGetValue(command, out var part) ? part.Channel
             : ambient.Channels.TryGetValue(command.Visual, out var found) ? found : throw new InvalidOperationException("AREA_AMBIENT_VISUAL_REQUIRED");
         var color = channel switch
         {
@@ -478,7 +484,8 @@ public partial class TerrainCanvas
     private readonly AreaSlotAssignment<AreaSlotKey> _areaSlots = new();
     private readonly List<AreaSlotKey> _areaSlotKeys = new();
     private AreaItemState[] _areaStates = [];
-    private readonly record struct AreaSlotKey(int Layer, AreaObjectKey? Identity, TerrainRect Place);
+    // Part tells the channel layers of one split chunk apart (they share their place).
+    private readonly record struct AreaSlotKey(int Layer, AreaObjectKey? Identity, TerrainRect Place, AreaAmbientChannel? Part);
     private void MoveAreaStates()
     {
         var source = _areaSlots.Assign(_areaSlotKeys, _areaItems.Count);
@@ -529,22 +536,35 @@ public partial class TerrainCanvas
         _areaMappings.BeginSubmission();
         // Terrain chunks replace the visible terrain commands in the draw list only;
         // AreaVisibleCommands below keeps the per-command visibility.
-        var draw = visible; _areaChunkCommands.Clear(); _areaChunkCount = 0; _areaChunkLevel = 0; var chunked = false;
+        var draw = visible; _areaChunkCommands.Clear(); _areaChunkParts.Clear(); _areaChunkSplit = false; _areaChunkCount = 0; _areaChunkLevel = 0; var chunked = false;
         lap?.Step("chunks");
         if (AreaTerrainChunksEnabled && _areaChunks is not null)
         {
             var level = ChunkLevel(AreaDrawItem.RasterTransform(GetViewport()));
             var chunks = _areaChunks.Intersecting(world.Position.X, world.Position.Y, world.Size.X, world.Size.Y).ToArray();
-            if (AreaChunkTextureCache.Fits(chunks.Length, level) && chunks.All(chunk => AreaChunkChannel(chunk) is not null))
+            // The textures of the view, one a chunk or one a channel of a mixed chunk, must fit the budget together.
+            var fits = AreaChunkTextureCache.Fits(chunks.Length, level);
+            if (fits)
+            {
+                foreach (var chunk in chunks)
+                {
+                    var channels = AreaChunkChannels(chunk);
+                    foreach (var channel in channels) _areaChunkParts.Add(new(chunk, channel, channels.Length > 1));
+                }
+                fits = AreaChunkTextureCache.Fits(_areaChunkParts.Count, level);
+            }
+            if (fits)
             {
                 _areaChunkTextures.BeginSubmission();
-                // Missing chunks of this view are composed in parallel before the items acquire them.
-                _areaChunkTextures.Prepare(_areaChunks, chunks, level);
-                var chunkDraws = chunks.Select(chunk => AreaTerrainChunks.Command(chunk, level)).ToArray();
-                for (var index = 0; index < chunks.Length; index++) _areaChunkCommands.Add(chunkDraws[index], chunks[index]);
+                // Missing textures of this view are composed in parallel before the items acquire them.
+                _areaChunkTextures.Prepare(_areaChunks, _areaChunkParts, level, _areaAmbient?.Channels);
+                var chunkDraws = _areaChunkParts.Select(part => AreaTerrainChunks.Command(part.Chunk, level)).ToArray();
+                for (var index = 0; index < chunkDraws.Length; index++) _areaChunkCommands.Add(chunkDraws[index], _areaChunkParts[index]);
                 draw = chunkDraws.Concat(visible.Where(command => command.Identity is not null)).ToArray();
+                _areaChunkSplit = _areaChunkParts.Any(part => part.Split);
                 _areaChunkCount = chunks.Length; _areaChunkLevel = level; chunked = true;
             }
+            else _areaChunkParts.Clear();
         }
         // Per-command terrain holds no chunk textures alongside its frame textures.
         if (!chunked) _areaChunkTextures.Clear();
@@ -593,7 +613,8 @@ public partial class TerrainCanvas
         {
             var command = visible[index];
             var layer = index >= maskStart && index < maskEnd ? 1 : index >= roofStart ? 2 : index == highlightIndex ? 3 : index == ringUnderIndex ? 4 : index == ringOverIndex ? 5 : 0;
-            _areaSlotKeys.Add(new(layer, command.Identity, command.Identity is null ? command.Destination : default));
+            _areaSlotKeys.Add(new(layer, command.Identity, command.Identity is null ? command.Destination : default,
+                _areaChunkCommands.TryGetValue(command, out var drawnPart) && drawnPart.Split ? drawnPart.Channel : null));
         }
         MoveAreaStates();
         // Hide only items that were shown by the previous submission.
@@ -618,7 +639,7 @@ public partial class TerrainCanvas
             ImageTexture texture;
             var isActor = command.Identity == ActorSentinel;
             var mask = index >= maskStart && index < maskEnd; var roof = index >= roofStart;
-            if (!mask && _areaChunkCommands.TryGetValue(command, out var chunk)) texture = _areaChunkTextures.Acquire(_areaChunks!, chunk, AreaChunkLevel);
+            if (!mask && _areaChunkCommands.TryGetValue(command, out var chunkPart)) texture = _areaChunkTextures.Acquire(_areaChunks!, chunkPart, AreaChunkLevel);
             else if (!(isActor ? _textures.TryGet(_actorPlan.Current.TextureKey, out texture!) : _textures.TryGet(command.Frame, out texture!)))
                 throw new InvalidOperationException("AREA_VISIBLE_TEXTURE_MISSING");
             if (hd[index].Texture is { } hdTexture) { texture = hdTexture; item.HdScale = hdScale; } else item.HdScale = 1;
@@ -714,7 +735,7 @@ public partial class TerrainCanvas
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); _areaSlots.Reset(); _areaVisibleCount = 0; _areaVisibleCommands = Array.Empty<AreaDrawCommand>(); _areaVisibleCovers = AreaVisibleCovers.None;
         _areaMappings.Clear(); // after the items stopped sampling the rows
-        _areaChunkTextures.Clear(); _areaChunks = null; _areaChunkCommands.Clear(); _areaChunkCount = 0; _areaChunkChannels.Clear();
+        _areaChunkTextures.Clear(); _areaChunks = null; _areaChunkCommands.Clear(); _areaChunkParts.Clear(); _areaChunkSplit = false; _areaChunkCount = 0; _areaChunkChannels.Clear();
         ReleaseAreaHd(); // after the items stopped sampling HD textures
     }
     public override void _ExitTree()

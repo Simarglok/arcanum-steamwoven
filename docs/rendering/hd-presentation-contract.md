@@ -402,8 +402,10 @@ and the [viewer](terrain-viewer.md#hd-render-path-arc-render-014) have the detai
    `N·512 × N·512`, bound with the scaled crop `(0, 0, N·512, N·512)` to the unchanged
    world square, so consequence 4 holds: a nearest `N×` chunk draws the Legacy chunk raster
    pixel for pixel. Decimated chunks (levels 1..3, zoom below 1 with an integer origin),
-   per-command terrain (a plan that does not admit chunks) and WORLD terrain stay Legacy and
-   are not candidates.
+   every chunk of a view that draws a chunk as light-channel layers (ARC-RENDER-3438: indoor
+   and outdoor tiles in one chunk; a pack's chunk is the whole chunk), per-command terrain (a
+   plan that does not admit chunks, or chunk textures over the cap) and WORLD terrain stay
+   Legacy and are not candidates.
 3. **Binding a chunk.** Entries are matched by coordinates and then by composed Legacy
    frame and tile digest, so two maps may have entries at the same coordinates (separate
    slices). No entry at those coordinates is `FrameMissing`; entries there that all differ

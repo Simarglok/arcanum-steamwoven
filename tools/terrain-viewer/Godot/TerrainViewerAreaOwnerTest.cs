@@ -124,13 +124,13 @@ public static partial class TerrainViewerSelfTest
                 views++;
             }
             // ARC-RENDER-010: under ambient lighting a single-channel chunk is tinted like its
-            // per-command terrain (identical readback), and a mixed-channel chunk is not drawn
-            // as a chunk. Fixture terrain words have type bit 0 (indoor).
+            // per-command terrain (identical readback), and so (ARC-RENDER-3438) is a mixed chunk,
+            // drawn as one layer per channel. Fixture terrain words have type bit 0 (indoor).
             var channels=AreaAmbientPolicy.Channels(snapshot,plan);
             if(plan.Commands.Where(c=>c.Identity is null).Any(c=>channels[c.Visual]!=AreaAmbientChannel.Indoor))
                 throw new InvalidOperationException("AREA_OWNER_LIGHT_CHANNELS");
             var pair=new Arcanum.Data.Lighting.AmbientPair(new(200,180,120),new(90,140,230));
-            foreach(var (zoom,level) in new[]{(1f,0),(.5f,1)})
+            foreach(var (zoom,level) in new[]{(1f,0),(.5f,1),(1.5f,0)})
             {
                 var origin=new Vector2(60,100)-new Vector2(0,MathF.Round(2520*zoom));
                 viewport.CanvasTransform=new Transform2D(0,new(zoom,zoom),0,origin);
@@ -148,10 +148,16 @@ public static partial class TerrainViewerSelfTest
                             throw new InvalidOperationException($"AREA_OWNER_LIT_TILE {lit}");
                         samples++;
                     }
-                var mixed=new Dictionary<AreaVisualKey,AreaAmbientChannel>(channels);
-                foreach(var command in plan.Commands.Where(c=>c.Identity is null).Where((_,i)=>i%2==1)) mixed[command.Visual]=AreaAmbientChannel.Outdoor;
-                canvas.SetAreaAmbient(new(pair,mixed)); await Settle();
-                if(canvas.AreaChunkCount!=0) throw new InvalidOperationException($"AREA_OWNER_MIXED_CHUNK_DRAWN zoom {zoom}");
+                // Two channel tables in turn: the second swaps every tile's channel, so a layer kept from the first would show.
+                foreach(var parity in new[]{1,0})
+                {
+                    var mixed=new Dictionary<AreaVisualKey,AreaAmbientChannel>(channels);
+                    foreach(var command in plan.Commands.Where(c=>c.Identity is null).Where((_,i)=>i%2==parity)) mixed[command.Visual]=AreaAmbientChannel.Outdoor;
+                    canvas.SetAreaAmbient(new(pair,mixed)); await Settle();
+                    if(!canvas.AreaChunkSplit || canvas.AreaChunkItemCount<=canvas.AreaChunkCount)
+                        throw new InvalidOperationException($"AREA_OWNER_MIXED_CHUNK_LAYERS zoom {zoom} chunks={canvas.AreaChunkCount} items={canvas.AreaChunkItemCount}");
+                    await SameAsPerCommand($"mixed {parity} zoom {zoom}",level);
+                }
                 canvas.SetAreaAmbient(null); canvas.SetStaticVisibilityForReadback(true); await Settle();
                 views++;
             }
