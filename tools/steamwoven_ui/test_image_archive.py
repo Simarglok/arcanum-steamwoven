@@ -5,6 +5,7 @@ import io
 import struct
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 from tools.steamwoven_ui import fixtures, image_archive as ia, image_rescue as rescue
@@ -91,6 +92,72 @@ class ArchiveTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ia.mark(self.reg, "ARC-UI-2", "final/A.png", "final")
 
+    def finals(self, task: str) -> list[str]:
+        folder = self.root / task / "final"
+        return sorted(p.name for p in folder.iterdir()) if folder.is_dir() else []
+
+    def test_leaving_final_moves_the_copy_to_superseded_and_it_stays_gone_after_save(self) -> None:
+        src = self.image("m.png")
+        row = ia.add_file(self.reg, "ARC-UI-2", src, kind="master", status="final")
+        self.assertEqual(["m.png"], self.finals("ARC-UI-2"))  # `add --status final` copies like `mark` does
+        self.reg.save()  # the copy row is on disk: the next save must not read it back
+        ia.mark(self.reg, "ARC-UI-2", row["file"], "intermediate", "superseded by ARC-UI-3")
+        self.reg.save()
+        self.assertEqual([], self.finals("ARC-UI-2"))
+        self.assertEqual(src.read_bytes(), (self.root / "ARC-UI-2" / "superseded" / "m.png").read_bytes())
+        again = ia.Registry(self.root)
+        self.assertNotIn(("archive", "ARC-UI-2", "final/m.png"), again.rows)
+        moved = again.rows[("archive", "ARC-UI-2", "superseded/m.png")]
+        self.assertEqual(("intermediate", "superseded by ARC-UI-3"), (moved["status"], moved["note"]))
+        with self.assertRaises(ValueError):
+            ia.mark(again, "ARC-UI-2", "superseded/m.png", "final")
+
+    def test_accept_replace_accept_again_never_overwrites_a_superseded_file(self) -> None:
+        row = ia.add_file(self.reg, "ARC-UI-2", self.image("m.png"), kind="master")
+        for status in ("final", "rejected", "final", "intermediate"):
+            ia.mark(self.reg, "ARC-UI-2", row["file"], status)
+        self.assertEqual([], self.finals("ARC-UI-2"))
+        self.assertEqual(2, len(list((self.root / "ARC-UI-2" / "superseded").iterdir())))
+        self.assertEqual(3, len(self.reg.rows))
+        for r in self.reg.rows.values():
+            self.assertTrue((self.root / r["task"] / r["file"]).is_file(), r["file"])
+
+    def test_add_with_a_non_final_status_retires_the_copy_of_a_final_row(self) -> None:
+        src = self.image("m.png")
+        ia.add_file(self.reg, "ARC-UI-2", src, kind="master", status="final")
+        ia.add_file(self.reg, "ARC-UI-2", src, kind="master", status="rejected")
+        self.assertEqual([], self.finals("ARC-UI-2"))
+        self.assertEqual(["rejected", "rejected"], [r["status"] for r in self.reg.rows.values()])
+
+    def test_the_copy_stays_while_another_file_of_the_same_content_is_final(self) -> None:
+        row = ia.add_file(self.reg, "ARC-UI-2", self.image("m.png"), kind="master", status="final")
+        twin = self.root / "ARC-UI-2" / "composite" / "twin.png"
+        twin.parent.mkdir()
+        twin.write_bytes((self.root / "ARC-UI-2" / row["file"]).read_bytes())
+        ia.scan(self.reg, "ARC-UI-2", kind="composite")
+        ia.mark(self.reg, "ARC-UI-2", "composite/twin.png", "final")
+        self.assertEqual(["m.png"], self.finals("ARC-UI-2"))  # one content, one copy
+        ia.mark(self.reg, "ARC-UI-2", row["file"], "intermediate")
+        self.assertEqual(["m.png"], self.finals("ARC-UI-2"))
+        ia.mark(self.reg, "ARC-UI-2", "composite/twin.png", "intermediate")
+        self.assertEqual([], self.finals("ARC-UI-2"))
+
+    def test_a_final_file_without_an_original_row_is_marked_by_its_own_path(self) -> None:
+        (self.root / "ARC-UI-9" / "final").mkdir(parents=True)
+        (self.root / "ARC-UI-9" / "final" / "built.png").write_bytes(fake_png(8, 8))
+        ia.scan(self.reg, kind="composite")
+        with self.assertRaises(ValueError):
+            ia.mark(self.reg, "ARC-UI-9", "final/built.png", "final")
+        moved = ia.mark(self.reg, "ARC-UI-9", "final/built.png", "rejected", "superseded")
+        self.assertEqual("superseded/built.png", moved["file"])
+        self.assertEqual([], self.finals("ARC-UI-9"))
+        self.assertEqual([("archive", "ARC-UI-9", "superseded/built.png")], list(self.reg.rows))
+
+    def test_the_cli_takes_no_new_row_of_an_unknown_kind(self) -> None:
+        for argv in (["add", "ARC-UI-1", "a.png"], ["add", "ARC-UI-1", "a.png", "--kind", "unknown"]):
+            with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+                ia.build_parser().parse_args(argv)
+
     def test_add_validates_the_task_and_restores_a_missing_copy(self) -> None:
         with self.assertRaises(ValueError):
             ia.add_file(self.reg, "../../x", self.image("a.png"), kind="composite")
@@ -113,7 +180,10 @@ class ArchiveTests(unittest.TestCase):
         (self.root / "ARC-UI-9" / "final").mkdir(parents=True)
         (self.root / "ARC-UI-9" / "final" / "x.png").write_bytes(fake_png(8, 8))
         (self.root / "ARC-UI-9" / "before-after.png").write_bytes(fake_png(8, 8, 1))
-        self.assertEqual(2, ia.scan(self.reg))
+        skipped: list[str] = []
+        self.assertEqual(1, ia.scan(self.reg, skipped=skipped))  # the folder and the name give x.png no kind
+        self.assertEqual(["ARC-UI-9/final/x.png"], skipped)
+        self.assertEqual(1, ia.scan(self.reg, kind="master"))
         self.assertEqual(0, ia.scan(self.reg))
         self.assertEqual("final", self.reg.rows[("archive", "ARC-UI-9", "final/x.png")]["status"])
         self.assertEqual("composite", self.reg.rows[("archive", "ARC-UI-9", "before-after.png")]["kind"])

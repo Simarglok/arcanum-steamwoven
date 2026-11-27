@@ -10,7 +10,8 @@ player's own data (SWI-PRV-1). Standard library only.
     image_archive.py dir ARC-UI-3040                 # create and print the task folder (use it as --out of any tool)
     image_archive.py add ARC-UI-3040 A.png B.png --kind composite [--status unknown] [--note TEXT]
     image_archive.py mark ARC-UI-3040 composite/A.png final    # status change; `final` also copies into final/
-    image_archive.py scan [TASK]                     # register files copied into archive/<TASK>/ by hand
+    image_archive.py mark ARC-UI-3040 composite/A.png intermediate    # leaving `final` moves the copy to superseded/
+    image_archive.py scan [TASK] [--kind K]          # register files copied into archive/<TASK>/ by hand
     image_archive.py index [TASK]                    # counts per task, kind and status
     image_archive.py verify                          # every row's file exists and still has its hash
 """
@@ -36,9 +37,11 @@ except ImportError:  # run as a script
 
 KINDS = ("raw-codex", "collage", "master", "composite", "screenshot", "reference", "unknown")
 STATUSES = ("final", "rejected", "intermediate", "unknown")
+NEW_KINDS = tuple(k for k in KINDS if k != "unknown")  # the CLI takes no new row of an unknown kind
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
 TASK_RE = re.compile(r"(ARC-[A-Z]+-\d+(?:-[A-Za-z0-9]+)?|_unsorted/(?!\.+$)[A-Za-z0-9._-]+)")
 FINAL_DIR = "final"
+SUPERSEDED_DIR = "superseded"
 REGISTRY_NAME = "registry.jsonl"
 
 
@@ -58,6 +61,11 @@ def task_dir(task: str, *, create: bool = True, root: Path | None = None) -> Pat
     if create:
         path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def is_copy(rel: str) -> bool:
+    """A row under `final/` or `superseded/` is a copy of an accepted file, not the original."""
+    return rel.split("/", 1)[0] in (FINAL_DIR, SUPERSEDED_DIR)
 
 
 def sha256_file(path: Path) -> str:
@@ -98,6 +106,7 @@ class Registry:
         self.root = root or archive_root()
         self.path = self.root / REGISTRY_NAME
         self.rows: dict[tuple[str, str, str], dict] = {}
+        self.removed: set[tuple[str, str, str]] = set()  # rows this session took away: `save` must not read them back
         if self.path.is_file():
             for line in self.path.read_text(encoding="utf-8").splitlines():
                 if line.strip():
@@ -110,13 +119,18 @@ class Registry:
 
     def by_hash(self, task: str, digest: str) -> dict | None:
         for row in self.rows.values():
-            if row["task"] == task and row["sha256"] == digest and row.get("location", "archive") == "archive" and not row["file"].startswith(FINAL_DIR + "/"):
+            if row["task"] == task and row["sha256"] == digest and row.get("location", "archive") == "archive" and not is_copy(row["file"]):
                 return row
         return None
 
     def put(self, row: dict) -> dict:
         self.rows[self.key(row)] = row
+        self.removed.discard(self.key(row))
         return row
+
+    def drop(self, row: dict) -> None:
+        self.rows.pop(self.key(row), None)
+        self.removed.add(self.key(row))
 
     def save(self) -> None:
         """Write the registry under a lock; rows another session wrote since this one loaded are kept (this one wins on a shared key)."""
@@ -131,7 +145,8 @@ class Registry:
                 for line in self.path.read_text(encoding="utf-8").splitlines():
                     if line.strip():
                         row = json.loads(line)
-                        self.rows.setdefault(self.key(row), row)
+                        if self.key(row) not in self.removed:
+                            self.rows.setdefault(self.key(row), row)
             body = "".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n" for _, r in sorted(self.rows.items()))
             tmp = self.path.with_name(f"{REGISTRY_NAME}.{os.getpid()}.tmp")
             tmp.write_text(body, encoding="utf-8")
@@ -163,10 +178,10 @@ def add_file(registry: Registry, task: str, src: Path, *, kind: str, status: str
         stored = registry.root / task / existing["file"]
         if not stored.is_file():
             clone_copy(src, stored)
-        if status != "unknown" and existing["status"] != status:
-            existing["status"] = status
         if kind != "unknown" and existing["kind"] == "unknown":
             existing["kind"] = kind
+        if status != "unknown":
+            mark(registry, task, existing["file"], status)
         return existing
     folder = Path(kind) / subdir if subdir else Path(kind)
     rel = folder / (name or src.name)
@@ -176,31 +191,79 @@ def add_file(registry: Registry, task: str, src: Path, *, kind: str, status: str
         target = registry.root / task / rel
     clone_copy(src, target)
     st = src.stat()
-    row = _row(task, rel.as_posix(), kind, status, [str(src)], digest, st.st_size, image_size(src), st.st_mtime, note, basis or {})
-    return registry.put(row)
+    row = registry.put(_row(task, rel.as_posix(), kind, status, [str(src)], digest, st.st_size, image_size(src), st.st_mtime, note, basis or {}))
+    if status == "final":
+        mark(registry, task, row["file"], status)
+    return row
+
+
+def _free_name(folder: Path, name: str, digest: str) -> Path:
+    """A path in `folder` that no file has yet: `name`, then with the hash, then with the hash and a number."""
+    stem, suffix = Path(name).stem, Path(name).suffix
+    candidate, n = folder / name, 1
+    while candidate.exists():
+        extra = digest[:8] if n == 1 else f"{digest[:8]}-{n}"
+        candidate, n = folder / f"{stem}-{extra}{suffix}", n + 1
+    return candidate
+
+
+def _originals(registry: Registry, task: str, digest: str) -> list[dict]:
+    return [r for (location, t, rel), r in registry.rows.items()
+            if location == "archive" and t == task and r["sha256"] == digest and not is_copy(rel)]
+
+
+def _final_copies(registry: Registry, task: str, digest: str) -> list[dict]:
+    return [r for (location, t, rel), r in sorted(registry.rows.items())
+            if location == "archive" and t == task and r["sha256"] == digest and rel.startswith(FINAL_DIR + "/")]
+
+
+def _retire_copy(registry: Registry, copy: dict, status: str, note: str) -> dict:
+    """Move one `final/` file to `<task>/superseded/` (never deleted) and re-key its row; a missing file only loses its row."""
+    tdir = registry.root / copy["task"]
+    src = tdir / copy["file"]
+    registry.drop(copy)
+    if not src.is_file():
+        return dict(copy, status=status, note=note)
+    target = _free_name(tdir / SUPERSEDED_DIR, src.name, copy["sha256"])
+    target.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(src, target)
+    return registry.put(dict(copy, file=target.relative_to(tdir).as_posix(), status=status, note=note))
 
 
 def mark(registry: Registry, task: str, rel: str, status: str, note: str | None = None) -> dict:
-    """Change a row's status (and its note when given); `final` also puts a copy in `<task>/final/` and registers it."""
+    """Change a row's status (and its note when given). `final` also puts a copy in `<task>/final/` and registers it;
+    any other status moves that copy to `<task>/superseded/`, unless another file of the same content stays `final`,
+    so `final/` holds what is accepted now. A `final/` file with no original row is marked by its own path."""
     row = registry.rows.get(("archive", task, rel))
     if row is None:
         raise KeyError(f"{task}/{rel} is not in the registry")
-    if rel.startswith(FINAL_DIR + "/"):
-        raise ValueError(f"{rel} is already a copy in {FINAL_DIR}/; mark the original row")
     if status not in STATUSES:
         raise ValueError(f"status {status!r} not in {STATUSES}")
+    if is_copy(rel):
+        originals = _originals(registry, task, row["sha256"])
+        if originals or status == "final" or not rel.startswith(FINAL_DIR + "/"):
+            hint = f" {originals[0]['file']}" if originals else ""
+            raise ValueError(f"{rel} is a copy in {rel.split('/', 1)[0]}/; mark the original row{hint}")
+        return _retire_copy(registry, row, status, row["note"] if note is None else note)
     row["status"] = status
     if note is not None:
         row["note"] = note
     if status == "final":
         src = registry.root / task / rel
-        final_rel = f"{FINAL_DIR}/{Path(rel).name}"
-        taken = registry.root / task / final_rel
-        if taken.exists() and sha256_file(taken) != row["sha256"]:  # another accepted file of the same name
-            final_rel = f"{FINAL_DIR}/{Path(rel).stem}-{row['sha256'][:8]}{Path(rel).suffix}"
+        copies = _final_copies(registry, task, row["sha256"])
+        if copies:  # this content is already in final/ (an earlier mark, or the same bytes under another name)
+            final_rel = copies[0]["file"]
+        else:
+            final_rel = f"{FINAL_DIR}/{Path(rel).name}"
+            taken = registry.root / task / final_rel
+            if taken.exists() and sha256_file(taken) != row["sha256"]:  # another accepted file of the same name
+                final_rel = f"{FINAL_DIR}/{Path(rel).stem}-{row['sha256'][:8]}{Path(rel).suffix}"
         clone_copy(src, registry.root / task / final_rel)
         copy = dict(row, file=final_rel, sources=[str(src)], registered=date.today().isoformat())
         registry.put(copy)
+    elif not any(r["status"] == "final" for r in _originals(registry, task, row["sha256"])):
+        for copy in _final_copies(registry, task, row["sha256"]):
+            _retire_copy(registry, copy, status, row["note"])
     return row
 
 
@@ -221,9 +284,10 @@ def guess_kind(path: str) -> str:
     return "unknown"
 
 
-def scan(registry: Registry, task: str | None = None) -> int:
+def scan(registry: Registry, task: str | None = None, *, kind: str | None = None, skipped: list[str] | None = None) -> int:
     """Register files that were put into `archive/<task>/` by hand (not through `add`): kind from the folder name
-    or the heuristic, status `final` inside `final/`, else `unknown`. Returns the number of new rows."""
+    or the heuristic, else `kind`; status `final` inside `final/`, else `unknown`. A file none of them gives a kind
+    to is not registered and is listed in `skipped`. Returns the number of new rows."""
     new = 0
     for tdir in sorted(p for p in registry.root.glob("*") if p.is_dir()) + sorted(registry.root.glob("_unsorted/*")):
         rel_task = tdir.relative_to(registry.root).as_posix()
@@ -236,10 +300,17 @@ def scan(registry: Registry, task: str | None = None) -> int:
             if ("archive", rel_task, rel) in registry.rows:
                 continue
             first = rel.split("/", 1)[0]
-            kind = first if first in KINDS else guess_kind(rel)
+            found = first if first in KINDS else guess_kind(rel)
+            basis = "folder" if first in KINDS else "heuristic"
+            if found == "unknown" and kind:
+                found, basis = kind, "given"
+            if found == "unknown":
+                if skipped is not None:
+                    skipped.append(f"{rel_task}/{rel}")
+                continue
             st = path.stat()
-            registry.put(_row(rel_task, rel, kind, "final" if first == FINAL_DIR else "unknown", [str(path)], sha256_file(path),
-                              st.st_size, image_size(path), st.st_mtime, "found in the folder by scan", {"kind_basis": "folder" if first in KINDS else "heuristic"}))
+            registry.put(_row(rel_task, rel, found, "final" if first == FINAL_DIR else "unknown", [str(path)], sha256_file(path),
+                              st.st_size, image_size(path), st.st_mtime, "found in the folder by scan", {"kind_basis": basis}))
             new += 1
     return new
 
@@ -280,7 +351,7 @@ def warn_if_ephemeral(path: Path | str | None, tool: str, *, stream=None) -> str
     if kind and os.environ.get("ARC_IMAGE_ARCHIVE_QUIET") != "1":  # the opt-out is for tests that compare stderr
         where = "a git worktree" if kind == "worktree" else "a temp folder"
         print(f"WARNING {tool}: {path} is inside {where}; it is lost when the worktree is removed or the OS cleans up. "
-              f"Save the task's images with `python3 -B tools/steamwoven_ui/image_archive.py add <TASK> FILE...` "
+              f"Save the task's images with `python3 -B tools/steamwoven_ui/image_archive.py add <TASK> FILE... --kind KIND` "
               f"(archive/<TASK>/ of the main checkout) before posting them.", file=stream or sys.stderr)
     return kind
 
@@ -329,10 +400,13 @@ def cmd_index(args) -> int:
 
 def cmd_scan(args) -> int:
     reg = Registry()
-    n = scan(reg, args.task)
+    skipped: list[str] = []
+    n = scan(reg, args.task, kind=args.kind, skipped=skipped)
     reg.save()
+    for name in skipped:
+        print(f"NO KIND {name}: not registered; name it with `scan <TASK> --kind KIND` or `add`", file=sys.stderr)
     print(f"scan: {n} new rows")
-    return 0
+    return 1 if skipped else 0
 
 
 def cmd_verify(args) -> int:
@@ -365,11 +439,11 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("add", help="copy images into the task archive and register them")
     s.add_argument("task")
     s.add_argument("files", nargs="+")
-    s.add_argument("--kind", choices=KINDS, default="unknown")
+    s.add_argument("--kind", choices=NEW_KINDS, required=True)
     s.add_argument("--status", choices=STATUSES, default="unknown")
     s.add_argument("--note", default="")
     s.set_defaults(func=cmd_add)
-    s = sub.add_parser("mark", help="set the status of an archived file (final also copies it into final/)")
+    s = sub.add_parser("mark", help="set the status of an archived file (final copies it into final/, any other status moves that copy to superseded/)")
     s.add_argument("task")
     s.add_argument("file", help="path inside the task folder, e.g. composite/A.png")
     s.add_argument("status", choices=STATUSES)
@@ -380,6 +454,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_index)
     s = sub.add_parser("scan", help="register files put into archive/<TASK>/ by hand")
     s.add_argument("task", nargs="?")
+    s.add_argument("--kind", choices=NEW_KINDS, help="kind for the files neither the folder nor the name gives one to")
     s.set_defaults(func=cmd_scan)
     s = sub.add_parser("verify", help="every registered file exists and has its hash")
     s.set_defaults(func=cmd_verify)
