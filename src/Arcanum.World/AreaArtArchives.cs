@@ -6,7 +6,8 @@ namespace Arcanum.World;
 /// ARC-RENDER-3414: the art archives the body loaders read (<see cref="AreaBodyMoveArt"/>), each kept open with its file records by
 /// name. A load used to parse the archive's directory and build the name table again for every body, and a map window swap loads a
 /// few dozen bodies in one frame. An archive whose length or write time changed is opened again; what a loader checks (the standing
-/// entry the published snapshot names) is unchanged. One owner, which disposes it; the calls are serialized.
+/// entry the published snapshot names) is unchanged. One owner on one thread, which disposes it: an archive handed out is
+/// closed by a later call that finds its file changed, reaches the limit, forgets it or disposes the set.
 /// </summary>
 public sealed class AreaArtArchives : IDisposable
 {
@@ -42,6 +43,14 @@ public sealed class AreaArtArchives : IDisposable
             Opened++;
             return _held[path] = held;
         }
+    }
+
+    /// <summary>Closes the held archive of <paramref name="path"/>, if any: a loader drops one whose read failed, so the next load
+    /// opens the file again.</summary>
+    internal void Forget(string path)
+    {
+        lock (_gate)
+            if (_held.Remove(path, out var held)) held.Archive.Dispose();
     }
 
     public void Dispose()

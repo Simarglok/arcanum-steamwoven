@@ -183,6 +183,9 @@ facing selects the ART rotation; a stand is animation 0 frame 0 (ST1, and the en
 - **Move ARTs** (`AreaBodyMoveArt.Load`, viewer Core): read on demand from the archive the body's standing art came from,
   once per standing art (dropped with the map's frame overlay at a map change or reload), its archive entry checked
   against the published snapshot (a changed archive is refused); bytes after an ART's last frame are not part of it. The
+  viewer keeps the archives it read open, with their file records by name, across maps and map windows
+  (`AreaArtArchives`, ARC-RENDER-3414), so a window swap does not parse an archive again for every body; an archive whose
+  length or write time changed, or whose read failed, is opened again. The
   names are the body's ART name with new shield, weapon and animation letters (ledger MA3): walk `x<weapon>b` (walk
   clears the shield, MA2), run `xag` (animations 6–19 clear both), stand `<shield><weapon>a`. Missing-art repair (MA1):
   a missing run is drawn as the walk, a missing armed walk as the walk without the weapon (`xab`), a missing

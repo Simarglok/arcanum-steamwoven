@@ -212,6 +212,23 @@ place received the monitor frames (about one a second) and, after asking for the
 `Physical footprint` with its peak and the per-region table. The HUD's app memory and `footprint` differed in one run
 (720 MB on the overlay, 470 MB from `footprint` seconds later), so compare like with like.
 
+## The game's garbage collector (ARC-RENDER-3414)
+
+The exported Mac game runs the .NET **server** collector with 4 heaps (the viewer project; written into the app's
+`Arcanum.TerrainViewer.runtimeconfig.json`). A source run through the Godot editor binary keeps the defaults, and so
+does the Windows game (not measured there).
+
+Why: .NET 8 on macOS counts only free pages as available memory. On a 24 GB Mac with `sysctl kern.memorystatus_level`
+at 63 % free, `GC.GetGCMemoryInfo().MemoryLoadBytes` read 97-99 % of it, above the 90 % high-memory threshold, and the
+workstation collector ran blocking full collections of 50-115 ms while a map window loaded. A higher threshold added
+nothing to the server collector in the same measurement.
+
+Measured 2026-11-27 (M4 Pro, 2560x1440, HD, release package, 110 s of walking across map windows, medians of two runs,
+before to after this change and the held art archives): the frame of a window swap 379 to 93 ms, frames over 50 ms while
+a window loads about 41 to 2 per run, collection pauses about 51 to 14.5 ms per second, the window load about 1.4 to
+0.6 s; the working set at the end of the walk grew from about 1.5 to 1.7-2.0 GB. To compare another setting on one
+package, start it with `DOTNET_gcServer`, `DOTNET_GCHeapCount` or `DOTNET_GCHighMemPercent` (values in hexadecimal).
+
 ## .NET counters (does not work)
 
 `dotnet-counters` 9.0.661903 listed the packaged game (`ps`) and opened a session on it, but received **no values**:

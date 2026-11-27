@@ -168,6 +168,7 @@ public static class AreaBodyMoveArt
         }
         catch (Exception error) when (error is DatException or ArtException or IOException or UnauthorizedAccessException or ArgumentException)
         {
+            if (error is IOException) archives?.Forget(archivePath);
             return Refused(AreaBodyMoveStatus.Unreadable, error.GetType().Name + " " + error.Message);
         }
     }
@@ -250,6 +251,7 @@ public static class AreaBodyMoveArt
         }
         catch (Exception error) when (error is DatException or ArtException or IOException or UnauthorizedAccessException or ArgumentException)
         {
+            if (error is IOException) archives?.Forget(archivePath);
             return new(AreaBodyMoveStatus.Unreadable, null, animation, weapon, shield, error.GetType().Name + " " + error.Message);
         }
     }
