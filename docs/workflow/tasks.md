@@ -518,7 +518,10 @@ committed files. Do not copy the game or the full vault into each worktree.
   screenshots, sheets) is saved to `local/steamwoven-ui/archive/<TASK>/` **of the
   main checkout** before it is posted, never only in a worktree, a session
   scratchpad or `/tmp` (they are lost when the worktree is removed or the OS
-  cleans up). `python3 -B tools/steamwoven_ui/image_archive.py dir <TASK>` creates
+  cleans up). Throwaway probes and working crops count too; one that is never
+  posted is saved before the thread is resolved (excluded classes:
+  [TRD SWI-PRV-5](../ui/steamwoven-interface-trd.md#provenance-and-storage)).
+  `python3 -B tools/steamwoven_ui/image_archive.py dir <TASK>` creates
   and prints the folder (use it as `--out`); `... add <TASK> FILE... --kind
   composite|collage|screenshot|master|raw-codex` copies and registers files; the
   version the owner accepted goes into `<TASK>/final/` (`... mark <TASK>
