@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Data.Terrain;
 using Arcanum.World;
 
@@ -90,6 +91,15 @@ public sealed class AreaTerrainChunks
     public IEnumerable<AreaDrawCommand> CommandsIn((int X, int Y) chunk) =>
         _chunks.TryGetValue(chunk, out var indices) ? indices.Select(index => _terrain[index]) : throw new ArgumentOutOfRangeException(nameof(chunk));
 
+    /// <summary>ARC-RENDER-3438: the light channels of one chunk's terrain commands, in enum order. A chunk with more than
+    /// one is drawn as one texture per channel (<see cref="Compose"/> with that channel's commands shown).</summary>
+    public AreaAmbientChannel[] ChannelsIn((int X, int Y) chunk, IReadOnlyDictionary<AreaVisualKey, AreaAmbientChannel> channels)
+    {
+        ArgumentNullException.ThrowIfNull(channels);
+        return CommandsIn(chunk).Select(command => channels.TryGetValue(command.Visual, out var found)
+            ? found : throw new InvalidOperationException("AREA_AMBIENT_VISUAL_REQUIRED")).Distinct().Order().ToArray();
+    }
+
     /// <summary>Terrain chunks whose world square intersects the half-open world rectangle.</summary>
     public IEnumerable<(int X, int Y)> Intersecting(double x, double y, double width, double height)
     {
@@ -120,8 +130,10 @@ public sealed class AreaTerrainChunks
     }
 
     /// <summary>RGBA of one chunk: for each kept world texel, the last terrain command
-    /// in plan order whose source texel there is opaque; transparent elsewhere.</summary>
-    public byte[] Compose((int X, int Y) chunk, int level)
+    /// in plan order whose source texel there is opaque; transparent elsewhere. With
+    /// <paramref name="shown"/> (ARC-RENDER-3438) a texel whose last opaque command is not shown is
+    /// transparent too, so layers of disjoint command sets share no texel and together make the whole chunk.</summary>
+    public byte[] Compose((int X, int Y) chunk, int level, Func<AreaDrawCommand, bool>? shown = null)
     {
         if (!_chunks.TryGetValue(chunk, out var indices)) throw new ArgumentOutOfRangeException(nameof(chunk));
         var side = Side(level); var step = 1 << level; var phase = level == 0 ? 0 : step >> 1;
@@ -131,6 +143,7 @@ public sealed class AreaTerrainChunks
         {
             var command = _terrain[index]; var frame = _frames[command.Frame];
             var d = command.Destination; var s = command.Source;
+            var keep = shown is null || shown(command);
             // Kept texel j covers world originX + j*step + phase; intersect with [d.X, d.X + d.Width).
             var j0 = Math.Max(0, CeilDiv(d.X - originX - phase, step)); var j1 = Math.Min(side, CeilDiv(d.X + d.Width - originX - phase, step));
             var i0 = Math.Max(0, CeilDiv(d.Y - originY - phase, step)); var i1 = Math.Min(side, CeilDiv(d.Y + d.Height - originY - phase, step));
@@ -145,6 +158,8 @@ public sealed class AreaTerrainChunks
                     var at = (row + sx) * 4;
                     if (frame.Rgba[at + 3] != 255) continue;
                     var to = (i * side + j) * 4;
+                    // A command of another layer covers what this layer had there.
+                    if (!keep) { rgba.AsSpan(to, 4).Clear(); continue; }
                     rgba[to] = frame.Rgba[at]; rgba[to + 1] = frame.Rgba[at + 1]; rgba[to + 2] = frame.Rgba[at + 2]; rgba[to + 3] = 255;
                 }
             }
