@@ -254,7 +254,7 @@ public partial class TerrainViewerApp
 
     private void QuarantineWorld() => WorldObservation(() => QuarantineWorldObserved(true));
     /// <summary>ARC-RENDER-3362: the frame of a window without complete input (no focus): quarantine, then the frame's neutral advance, with one publication of the
-    /// selection (the advance's own, or one after it when it published none). Publishing in both built the whole view twice a frame.</summary>
+    /// selection (the advance's own, or one after it when it published none).</summary>
     private void QuarantineAndAdvanceWorld()
     {
         WorldObservation(() => QuarantineWorldObserved(false));

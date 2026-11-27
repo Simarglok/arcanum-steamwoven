@@ -276,6 +276,7 @@ public partial class TerrainCanvas
     /// a count and a SHA-256 prefix (ARC-UI-006 invariance: equal under Legacy and HD).</summary>
     internal string DrawnDestinationsForSelfTest()
     {
+        EnsureAreaView();
         var items = GetChildren().OfType<AreaDrawItem>().Where(item => item.Visible && item.Command?.Identity is not null).ToArray();
         var text = string.Join(";", items.Select(item => $"{item.Command!.Identity}@{item.Command.Destination.X},{item.Command.Destination.Y},{item.Command.Destination.Width},{item.Command.Destination.Height}"));
         return $"{items.Length} items {Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text)))[..16]}";
