@@ -82,6 +82,43 @@ public sealed class AreaCompositionTests
     }
 
     [TestMethod]
+    public void OrderingOnlyTheBodiesNearAViewDrawsTheSameCommandsAsTheWholeList()
+    {
+        // ARC-RENDER-3417: the view orders the T0 bodies the grid names for its rectangle; filtered by that rectangle the result is the
+        // whole list's, with tied keys inside and outside the view and moved commands leaving, entering and staying.
+        var frame = new ActorDiagnosticFrame(new(2667,0x20000000,0,0,0),9,7,4,3,0,0,1,6);
+        var random = new Random(3417); var bodies = new List<AreaDrawCommand>();
+        TerrainRect Place() => new(random.Next(-4000,4000), random.Next(-4000,4000), random.Next(1,700), random.Next(1,700));
+        for (var i = 0; i < 600; i++)
+        {
+            var tie = i % 5 == 0;
+            var identity = new AreaObjectKey("s", 1, tie ? AreaSourceKind.Mobile : (AreaSourceKind)random.Next(3), 1,
+                tie ? 5 : random.Next(4), tie ? 0 : random.Next(3), "id" + i, 1);
+            bodies.Add(new AreaDrawCommand(default, default!, identity, default, Place(), false, false, 4,
+                AreaScenePlan.CameraOriginX + random.Next(3), AreaScenePlan.CameraOriginY + random.Next(3), random.Next(-1,2), random.Next(-1,2), 255, false));
+        }
+        var cached = new AreaUprightOrder(bodies.OrderBy(_ => random.Next()).ToArray());
+        var index = new AreaVisibilityIndex(cached.BodyDestinations);
+        var actor = ActorDiagnosticScenePlan.Place(Placement(Cases[0]),frame,ActorDiagnosticProfile.HumanFixed);
+        var culled = 0;
+        for (var round = 0; round < 200; round++)
+        {
+            var moving = round % 4 == 0 ? null : bodies.Where(_ => random.Next(8) == 0).Select(b => random.Next(3) == 0
+                ? b with { MapX = b.MapX + 1, Destination = Place() } : b with { Destination = random.Next(2) == 0 ? b.Destination : Place() }).ToList();
+            var (left, top) = (random.Next(-4500,3500), random.Next(-4500,3500));
+            var (right, bottom) = (left + random.Next(1,1800), top + random.Next(1,1200));
+            bool Seen(AreaDrawCommand c) => c.Identity == ActorKey || c.Destination.X < right && c.Destination.X + c.Destination.Width > left
+                && c.Destination.Y < bottom && c.Destination.Y + c.Destination.Height > top;
+            var near = index.Candidates(left, top, right, bottom);
+            if (near.Count < bodies.Count) culled++;
+            var whole = cached.With(Placement(Cases[0]), actor, ActorKey, moving).Where(Seen).ToArray();
+            var narrowed = cached.With(Placement(Cases[0]), actor, ActorKey, moving, near).Where(Seen).ToArray();
+            CollectionAssert.AreEqual(whole, narrowed, $"round {round}");
+        }
+        Assert.IsTrue(culled > 100, "the views must leave bodies out");
+    }
+
+    [TestMethod]
     public void CompleteNormalBranchMatrixHasLiteralGeometryAndInterleaving()
     {
         var frame = new ActorDiagnosticFrame(new(2667,0x20000000,0,0,0),9,7,4,3,0,0,1,6);

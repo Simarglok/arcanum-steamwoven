@@ -128,6 +128,31 @@ public static partial class TerrainViewerSelfTest
             viewport.CanvasTransform=new Transform2D(0,new Vector2(1,1),0,new Vector2(100,100)); await Settle();
             if (canvas.AreaVisibleCount != 600 || canvas.AreaPoolCount != 600 + shownActor || Shown() != 600 + shownActor)
                 throw new InvalidOperationException("AREA draw item pool regrowth");
+            // ARC-RENDER-3417: a moving frame (two selections and a highlight, then the camera set after them) rebuilds the view once.
+            async Task NextFrame() => await host.ToSignal(host.GetTree(),SceneTree.SignalName.ProcessFrame);
+            await NextFrame();
+            var rebuilds = canvas.AreaRebuildCount;
+            input = input with { InstanceOffsetX=4 }; actor = actor.Select(input); canvas.PublishArea(crowd,frames,actor,input,cache);
+            canvas.AreaHighlight = bodies[0].Key;
+            input = input with { InstanceOffsetX=8 }; actor = actor.Select(input); canvas.PublishArea(crowd,frames,actor,input,cache);
+            viewport.CanvasTransform=new Transform2D(0,new Vector2(1,1),0,new Vector2(104,100));
+            if (canvas.AreaRebuildCount != rebuilds) throw new InvalidOperationException("AREA rebuilt before the frame's camera was final");
+            await NextFrame();
+            if (canvas.AreaRebuildCount != rebuilds + 1 || canvas.AreaHighlightDrawnForSelfTest is null || canvas.AreaRebuildCount != rebuilds + 1)
+                throw new InvalidOperationException($"AREA moving frame rebuilds {canvas.AreaRebuildCount - rebuilds}");
+            // A read between a publication and the frame's rebuild sees the new selection, and that rebuild is the frame's only one.
+            await NextFrame(); rebuilds = canvas.AreaRebuildCount;
+            canvas.AreaHighlight = null;
+            if (canvas.AreaHighlightDrawnForSelfTest is not null || canvas.AreaRebuildCount != rebuilds + 1)
+                throw new InvalidOperationException("AREA read between publication and rebuild");
+            await NextFrame();
+            if (canvas.AreaRebuildCount != rebuilds + 1) throw new InvalidOperationException("AREA second rebuild of an unchanged view");
+            // A publication after the canvas's own update (a timer runs after the nodes) is built in the same frame.
+            await host.ToSignal(host.GetTree().CreateTimer(0.000001),SceneTreeTimer.SignalName.Timeout);
+            rebuilds = canvas.AreaRebuildCount;
+            input = input with { InstanceOffsetX=12 }; actor = actor.Select(input); canvas.PublishArea(crowd,frames,actor,input,cache);
+            await NextFrame();
+            if (canvas.AreaRebuildCount != rebuilds + 1) throw new InvalidOperationException($"AREA late publication rebuilds {canvas.AreaRebuildCount - rebuilds}");
             cache.Clear();
             if (cache.CreatedCount != cache.DisposedCount)
                 throw new InvalidOperationException("AREA texture ownership imbalance");

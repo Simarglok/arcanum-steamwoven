@@ -55,6 +55,8 @@ public partial class TerrainCanvas
     private const int AreaPoolFloor = 256;
     private const int AreaPoolTrimPerUpdate = 1024;
     private AreaUprightOrder? _areaUpright;
+    // ARC-RENDER-3417: the same grid over the bodies, so a view orders only the bodies near it, not the whole map's.
+    private AreaVisibilityIndex? _areaBodyIndex;
     // Non-upright commands (phase < 4) in plan order and a coarse grid over them, so a
     // moving view does not scan every command; the exact intersection test is unchanged.
     private AreaDrawCommand[] _areaFlat = Array.Empty<AreaDrawCommand>();
@@ -68,25 +70,31 @@ public partial class TerrainCanvas
     private readonly Dictionary<AreaDrawCommand, (int X, int Y)> _areaChunkCommands = new(ReferenceEqualityComparer.Instance);
     internal bool AreaTerrainChunksEnabled { get; set; } = true;
     /// <summary>Terrain chunk items in the current submission, 0 when terrain is drawn per command.</summary>
-    public int AreaChunkCount { get; private set; }
-    public int AreaChunkLevel { get; private set; }
-    internal long AreaChunkCreatedCount => _areaChunkTextures.CreatedCount;
-    internal long AreaChunkDisposedCount => _areaChunkTextures.DisposedCount;
+    public int AreaChunkCount => Current(ref _areaChunkCount);
+    public int AreaChunkLevel => Current(ref _areaChunkLevel);
+    private int _areaChunkCount, _areaChunkLevel;
+    internal long AreaChunkCreatedCount { get { EnsureAreaView(); return _areaChunkTextures.CreatedCount; } }
+    internal long AreaChunkDisposedCount { get { EnsureAreaView(); return _areaChunkTextures.DisposedCount; } }
     /// <summary>Resident terrain chunk textures and their RGBA bytes.</summary>
-    public int AreaChunkResidentCount => _areaChunkTextures.Count;
-    public long AreaChunkResidentBytes => _areaChunkTextures.Bytes;
+    public int AreaChunkResidentCount { get { EnsureAreaView(); return _areaChunkTextures.Count; } }
+    public long AreaChunkResidentBytes { get { EnsureAreaView(); return _areaChunkTextures.Bytes; } }
     /// <summary>Whether terrain can be drawn as chunks at all (plan admitted, not disabled).</summary>
     public bool AreaTerrainChunked => AreaTerrainChunksEnabled && _areaChunks is not null;
 
     private static readonly AreaObjectKey ActorSentinel = new("controlled-session", 5051, AreaSourceKind.Mobile, null, int.MaxValue, 0, "controlled-session", 0);
     public Action<Exception>? AreaFailure { get; set; }
-    public int AreaVisibleCount { get; private set; }
-    internal int AreaPoolCount => _areaItems.Count;
-    internal long AreaMappingCreatedCount => _areaMappings.CreatedCount;
+    public int AreaVisibleCount => Current(ref _areaVisibleCount);
+    private int _areaVisibleCount;
+    internal int AreaPoolCount { get { EnsureAreaView(); return _areaItems.Count; } }
+    internal long AreaMappingCreatedCount { get { EnsureAreaView(); return _areaMappings.CreatedCount; } }
     /// <summary>Index rows resident in the shared cache (ARC-RENDER-032 smoke).</summary>
-    internal int AreaMappingRows => _areaMappings.Count;
+    internal int AreaMappingRows { get { EnsureAreaView(); return _areaMappings.Count; } }
     public int AreaCulledCount => (_area?.Commands.Count ?? 0) - AreaVisibleCount;
-    public IReadOnlyList<AreaDrawCommand> AreaVisibleCommands { get; private set; } = Array.Empty<AreaDrawCommand>();
+    public IReadOnlyList<AreaDrawCommand> AreaVisibleCommands => Current(ref _areaVisibleCommands);
+    private IReadOnlyList<AreaDrawCommand> _areaVisibleCommands = Array.Empty<AreaDrawCommand>();
+    /// <summary>ARC-RENDER-3417: the last submission's counts for the status line, which asks for no rebuild (it may run before the frame's camera update).</summary>
+    internal (int Visible, int Culled, int Chunks, int ChunkLevel, int ResidentChunks, long ResidentBytes) AreaStatusCounts
+        => (_areaVisibleCount, (_area?.Commands.Count ?? 0) - _areaVisibleCount, _areaChunkCount, _areaChunkLevel, _areaChunkTextures.Count, _areaChunkTextures.Bytes);
     private (Rect2 View, Transform2D Transform, ActorDiagnosticDrawCommand Actor,
         ActorDiagnosticPlacementInput Placement, bool ActorVisible, bool BodiesVisible, bool Chunks, int Moving, AreaObjectKey? Highlight, AreaHoverRingDraw? Ring, bool HideCritters)? _areaView;
 
@@ -99,14 +107,14 @@ public partial class TerrainCanvas
         {
             if (_areaHighlight == value) return;
             _areaHighlight = value;
-            try { UpdateAreaVisible(); }
-            catch (Exception error) { AreaFailure?.Invoke(error); }
+            RequestAreaView();
         }
     }
     /// <summary>The colour the highlight's source pixels are multiplied by before they are added.</summary>
     internal static readonly Color AreaHighlightColour = Color.Color8(AreaHoverWindow.HighlightLevel, AreaHoverWindow.HighlightLevel, AreaHoverWindow.HighlightLevel);
     /// <summary>The highlight command drawn by the current submission (smoke seam), or null.</summary>
-    internal AreaDrawCommand? AreaHighlightDrawnForSelfTest { get; private set; }
+    internal AreaDrawCommand? AreaHighlightDrawnForSelfTest => Current(ref _areaHighlightDrawn);
+    private AreaDrawCommand? _areaHighlightDrawn;
 
     /// <summary>ARC-UI-1117 (ledger OH2, OH4): the rings of the hovered critter or trap, drawn under every body (after the terrain) and over every
     /// body (before the roofs), additive and tinted by the ring colour; null none. The frames must be in the frame repository the area was published with.</summary>
@@ -117,12 +125,12 @@ public partial class TerrainCanvas
         {
             if (_areaRing == value) return;
             _areaRing = value;
-            try { UpdateAreaVisible(); }
-            catch (Exception error) { AreaFailure?.Invoke(error); }
+            RequestAreaView();
         }
     }
     /// <summary>The ring commands drawn by the current submission (smoke seam), or null for a ring not drawn.</summary>
-    internal (AreaDrawCommand? Under, AreaDrawCommand? Over) AreaRingDrawnForSelfTest { get; private set; }
+    internal (AreaDrawCommand? Under, AreaDrawCommand? Over) AreaRingDrawnForSelfTest => Current(ref _areaRingDrawn);
+    private (AreaDrawCommand? Under, AreaDrawCommand? Over) _areaRingDrawn;
 
     public void PublishArea(AreaLoadResult area, ActorDiagnosticScenePlan actor, ActorDiagnosticPlacementInput placement, TerrainTextureCache textures)
         => PublishArea(area.Plan, area.Frames, actor, placement, textures);
@@ -136,6 +144,8 @@ public partial class TerrainCanvas
         // Only a publication of a new plan is timed; the others (a moved hero, a changed body) are per-frame.
         using var lap = PerfProbe.Enabled && (!ReferenceEquals(_area, plan) || !ReferenceEquals(_areaFrames, frames)) ? PerfProbe.Lap("canvas.publish") : null;
         lap?.Step("chunks");
+        // ARC-RENDER-3417: another map, frame repository or texture cache is built at once; a republication of the same ones waits for the frame's rebuild.
+        var replaced = !ReferenceEquals(_textures, textures) || !ReferenceEquals(_area, plan) || !ReferenceEquals(_areaFrames, frames);
         if (!ReferenceEquals(_textures, textures)) _areaView = null;
         if (!ReferenceEquals(_area, plan) || !ReferenceEquals(_areaFrames, frames))
         {
@@ -145,7 +155,11 @@ public partial class TerrainCanvas
             if (_area is not null) ReleaseAreaHd(); // a map change releases the previous map's HD textures
         }
         lap?.Step("upright");
-        if (!ReferenceEquals(_area, plan) || _areaUpright is null) _areaUpright = new AreaUprightOrder(plan.Commands, plan.Chart);
+        if (!ReferenceEquals(_area, plan) || _areaUpright is null)
+        {
+            _areaUpright = new AreaUprightOrder(plan.Commands, plan.Chart);
+            _areaBodyIndex = new AreaVisibilityIndex(_areaUpright.BodyDestinations);
+        }
         lap?.Step("index");
         if (!ReferenceEquals(_area, plan) || _areaIndex is null)
         {
@@ -155,7 +169,8 @@ public partial class TerrainCanvas
         _plan = null; _staticPlan = null;
         _area = plan; _areaFrames = frames; _actorPlan = actor; _areaActorPlacement = placement; _textures = textures;
         lap?.Step("view");
-        UpdateAreaVisible(); QueueRedraw();
+        if (replaced) UpdateAreaVisible(); else RequestAreaView();
+        QueueRedraw();
     }
     /// <summary>Applies a new ambient pair to every item from the next submission (null draws source
     /// pixels unlit). Only the per-item multiplier changes; plan, frames and index rows are reused.</summary>
@@ -202,11 +217,14 @@ public partial class TerrainCanvas
         _areaRoofs = roofs; _areaCoveredTiles = coveredTiles; _areaCovered = coveredBodies; _areaView = null; QueueRedraw();
     }
     /// <summary>ARC-RENDER-022: the frames of the roofs and covered-tile masks the last submission drew per item.</summary>
-    public IReadOnlySet<AreaFrameKey> AreaVisibleRoofFrames { get; private set; } = new HashSet<AreaFrameKey>();
+    public IReadOnlySet<AreaFrameKey> AreaVisibleRoofFrames => Current(ref _areaVisibleRoofFrames);
+    private IReadOnlySet<AreaFrameKey> _areaVisibleRoofFrames = new HashSet<AreaFrameKey>();
     /// <summary>ARC-RENDER-036: what the last submission drew over <see cref="AreaVisibleCommands"/> outside that list: the
     /// covered-tile masks (over the terrain only) and the roofs (over everything), in draw order.</summary>
-    public AreaVisibleCovers AreaVisibleCovers { get; private set; } = AreaVisibleCovers.None;
-    public int AreaVisibleRoofCount { get; private set; }
+    public AreaVisibleCovers AreaVisibleCovers => Current(ref _areaVisibleCovers);
+    private AreaVisibleCovers _areaVisibleCovers = AreaVisibleCovers.None;
+    public int AreaVisibleRoofCount => Current(ref _areaVisibleRoofCount);
+    private int _areaVisibleRoofCount;
     /// <summary>ARC-WORLD-016: moved body commands from the next submission (null or empty = every body at T0).</summary>
     public void SetAreaMovingBodies(IReadOnlyList<AreaDrawCommand>? moving)
     {
@@ -307,7 +325,7 @@ public partial class TerrainCanvas
     // The carried lights' lattice of the current submission, made once for all its terrain items.
     private AreaCarriedBinding? _areaCarriedBinding;
     /// <summary>ARC-DEV-335 smoke seams: the lighting with the hero's carried light of the last submission (null: none) and the hero's placement.</summary>
-    internal AreaLocalLighting? AreaCarriedForSelfTest => _areaCarriedNow;
+    internal AreaLocalLighting? AreaCarriedForSelfTest => Current(ref _areaCarriedNow);
     internal ActorDiagnosticPlacementInput? AreaActorPlacementForSelfTest => _areaActorPlacement;
     /// <summary>ARC-WORLD-1149: where the hero is drawn now, for the light a check reads at a cell (null: no area is shown).</summary>
     internal ActorDiagnosticPlacementInput? AreaActorPlacementNow => _areaActorPlacement;
@@ -401,10 +419,36 @@ public partial class TerrainCanvas
     }
     public override void _Process(double delta)
     {
+        _areaViewFrame = Engine.GetProcessFrames();
         if (_area is null) { ProcessWorldHd(); return; }
+        RebuildAreaView();
+    }
+    // ARC-RENDER-3417: the view is rebuilt once a frame, by this node's _Process, which runs after the viewer's own update has published the
+    // frame's selection and set the camera. A publication that comes after it (a deferred call, a later node's update) queues a rebuild for
+    // the same frame, so it is drawn no later than before. A read of the submission in between rebuilds first.
+    private ulong _areaViewFrame = ulong.MaxValue;
+    private bool _areaViewStale, _areaViewQueued;
+    /// <summary>ARC-RENDER-3417 self-test seam: the visible-view rebuilds made so far.</summary>
+    internal long AreaRebuildCount { get; private set; }
+    private void RequestAreaView()
+    {
+        _areaViewStale = true;
+        if (_areaViewQueued || _areaViewFrame != Engine.GetProcessFrames()) return;
+        _areaViewQueued = true;
+        Callable.From(RebuildQueuedAreaView).CallDeferred();
+    }
+    private void RebuildQueuedAreaView()
+    {
+        _areaViewQueued = false;
+        if (IsInstanceValid(this)) EnsureAreaView();
+    }
+    private void EnsureAreaView() { if (_areaViewStale) RebuildAreaView(); }
+    private void RebuildAreaView()
+    {
         try { UpdateAreaVisible(); }
         catch (Exception error) { AreaFailure?.Invoke(error); }
     }
+    private T Current<T>(ref T submitted) { EnsureAreaView(); return submitted; }
     // ARC-DEV-380: set by a publication of a new plan; the first full view after it is timed (canvas.view.NAME).
     private bool _areaPerfView;
     /// <summary>ARC-RENDER-3063: the town-map render draws no critter body (NPCs and monsters, fallen ones included); scenery, doors and items stay.</summary>
@@ -427,12 +471,14 @@ public partial class TerrainCanvas
     private void UpdateAreaVisible()
     {
         if (!IsInsideTree() || _area is null || _areaFrames is null || _textures is null || _actorPlan is null || _areaActorPlacement is null) return;
+        _areaViewStale = false; // first, so a read made while rebuilding (a failure's status) asks for no second one
         var view = GetViewport().GetVisibleRect(); var inverse = GetViewport().GetCanvasTransform().AffineInverse();
         var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled, _areaMovingStamp, _areaHighlight, _areaRing, HideCritters);
         // Pending HD frames that became ready rebind the same view (ARC-RENDER-014).
         if (_areaView == state && !HdRefreshDue()) { TrimAreaPool(); return; }
         // ARC-RENDER-3126: with the timing probe on, the rebuild's milliseconds (what a pushed lighting view costs at the next draw) are counted.
         var rebuildStart = PerfProbe.Enabled ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+        AreaRebuildCount++;
         using var lap = _areaPerfView && PerfProbe.Enabled ? PerfProbe.Lap("canvas.view") : null;
         _areaPerfView = false;
         lap?.Step("cull");
@@ -447,7 +493,8 @@ public partial class TerrainCanvas
         _areaCarriedBinding = _areaAmbient is { } shown && _areaCarriedNow?.CarriedLattice(shown.Pair) is { } carriedLattice ? AreaCarried(carriedLattice) : null;
         bool Intersects(AreaDrawCommand command) => new Rect2(command.Destination.X, command.Destination.Y,
             command.Destination.Width, command.Destination.Height).Intersects(world);
-        var upright = _areaUpright!.With(_areaActorPlacement, _actorPlan.Current, ActorSentinel, _areaMoving);
+        var upright = _areaUpright!.With(_areaActorPlacement, _actorPlan.Current, ActorSentinel, _areaMoving,
+            _areaBodyIndex!.Candidates(world.Position.X, world.Position.Y, world.End.X, world.End.Y));
         var flat = _areaIndex!.Candidates(world.Position.X, world.Position.Y, world.End.X, world.End.Y);
         // ARC-RENDER-033: flat moved bodies (an item lying where no T0 body stood) join the flat commands in plan order.
         var flatCommands = flat.Select(index => _areaFlat[index]);
@@ -463,7 +510,7 @@ public partial class TerrainCanvas
         _areaMappings.BeginSubmission();
         // Terrain chunks replace the visible terrain commands in the draw list only;
         // AreaVisibleCommands below keeps the per-command visibility.
-        var draw = visible; _areaChunkCommands.Clear(); AreaChunkCount = 0; AreaChunkLevel = 0; var chunked = false;
+        var draw = visible; _areaChunkCommands.Clear(); _areaChunkCount = 0; _areaChunkLevel = 0; var chunked = false;
         lap?.Step("chunks");
         if (AreaTerrainChunksEnabled && _areaChunks is not null)
         {
@@ -477,7 +524,7 @@ public partial class TerrainCanvas
                 var chunkDraws = chunks.Select(chunk => AreaTerrainChunks.Command(chunk, level)).ToArray();
                 for (var index = 0; index < chunks.Length; index++) _areaChunkCommands.Add(chunkDraws[index], chunks[index]);
                 draw = chunkDraws.Concat(visible.Where(command => command.Identity is not null)).ToArray();
-                AreaChunkCount = chunks.Length; AreaChunkLevel = level; chunked = true;
+                _areaChunkCount = chunks.Length; _areaChunkLevel = level; chunked = true;
             }
         }
         // Per-command terrain holds no chunk textures alongside its frame textures.
@@ -489,12 +536,12 @@ public partial class TerrainCanvas
         // ARC-UI-057: the hovered object's second draw follows every body (its blit is queued last, 0x43C9DE) and comes before the roofs.
         var highlight = _areaHighlight is { } lit && visible.LastOrDefault(command => command.Identity == lit) is { } body
             ? body with { Additive = true, Alpha = 255, Multiply = false, WadeRows = 0, Unlit = true } : null;
-        AreaHighlightDrawnForSelfTest = highlight;
+        _areaHighlightDrawn = highlight;
         // ARC-UI-1117 (OH4): the hovered critter's rings, the under one after the terrain (blit order 99,999,999) and the over one after every body (0x7FFFFFFF).
         var ringBody = _areaRing is { } ring && visible.LastOrDefault(command => command.Identity == ring.Target) is { } target ? target : null;
         var ringUnder = ringBody is not null && _areaRing!.Under is { } underFrame ? AreaHoverRingRules.Command(ringBody, underFrame) : null;
         var ringOver = ringBody is not null && _areaRing!.Over is { } overFrame ? AreaHoverRingRules.Command(ringBody, overFrame) : null;
-        AreaRingDrawnForSelfTest = (ringUnder, ringOver);
+        _areaRingDrawn = (ringUnder, ringOver);
         draw = draw.Take(terrainCount).Concat(masks).Concat(ringUnder is null ? Array.Empty<AreaDrawCommand>() : new[] { ringUnder }).Concat(draw.Skip(terrainCount))
             .Concat(highlight is null ? Array.Empty<AreaDrawCommand>() : new[] { highlight }).Concat(ringOver is null ? Array.Empty<AreaDrawCommand>() : new[] { ringOver })
             .Concat(roofs.Select(roof => roof.Command)).ToArray();
@@ -503,10 +550,10 @@ public partial class TerrainCanvas
         var highlightIndex = highlight is null ? -1 : roofStart - 1 - (ringOver is null ? 0 : 1);
         var ringUnderIndex = ringUnder is null ? -1 : maskEnd;
         var ringTint = _areaRing is { } tint ? Color.Color8(tint.Colour.R, tint.Colour.G, tint.Colour.B) : Colors.White;
-        AreaVisibleRoofFrames = masks.Concat(roofs.Select(roof => roof.Command)).Select(command => command.Frame).ToHashSet();
+        _areaVisibleRoofFrames = masks.Concat(roofs.Select(roof => roof.Command)).Select(command => command.Frame).ToHashSet();
         // A roof faded out at all four corners leaves the pixels beneath it as they are.
-        AreaVisibleCovers = new(Array.AsReadOnly(masks), Array.AsReadOnly(roofs.Where(roof => roof.Corners != Vector4.Zero).Select(roof => roof.Command).ToArray()));
-        AreaVisibleRoofCount = roofs.Length;
+        _areaVisibleCovers = new(Array.AsReadOnly(masks), Array.AsReadOnly(roofs.Where(roof => roof.Corners != Vector4.Zero).Select(roof => roof.Command).ToArray()));
+        _areaVisibleRoofCount = roofs.Length;
         lap?.Step("upload");
         _textures.UploadAreaVisible(_areaFrames, draw.Where((command, index) => command.Identity != ActorSentinel
             && (!_areaChunkCommands.ContainsKey(command) || index >= maskStart && index < maskEnd)).Select(command => command.Frame).ToHashSet());
@@ -574,8 +621,8 @@ public partial class TerrainCanvas
             item.Submit(command, raster, rasterSize);
         }
         TrimAreaPool();
-        AreaVisibleCommands = Array.AsReadOnly(logical.Where(command => command.Identity != ActorSentinel).ToArray());
-        AreaVisibleCount = AreaVisibleCommands.Count;
+        _areaVisibleCommands = Array.AsReadOnly(logical.Where(command => command.Identity != ActorSentinel).ToArray());
+        _areaVisibleCount = _areaVisibleCommands.Count;
         _areaView = state;
         if (rebuildStart != 0) LightAnimationProbe.Shared.Rebuild(System.Diagnostics.Stopwatch.GetElapsedTime(rebuildStart).TotalMilliseconds);
     }
@@ -603,10 +650,13 @@ public partial class TerrainCanvas
         _areaRelitExtra = source; _areaView = null; QueueRedraw();
     }
     /// <summary>ARC-RES-1978: the hero's current frame texture (null when none is shown).</summary>
-    internal ImageTexture? HeroFrame() => _areaItems.Take(_areaActive).FirstOrDefault(item => item.Visible && item.Actor is not null)?.FrameTexture;
+    internal ImageTexture? HeroFrame() { EnsureAreaView(); return _areaItems.Take(_areaActive).FirstOrDefault(item => item.Visible && item.Actor is not null)?.FrameTexture; }
     /// <summary>ARC-RES-1978: the frame textures of the shown items with what the relit look treats them as (for the lab's real-frame checks).</summary>
-    internal IEnumerable<(int Kind, ImageTexture Texture)> RelightFrames() =>
-        _areaItems.Take(_areaActive).Where(item => item.Visible && item.FrameTexture is not null).Select(item => (item.RelightKind, item.FrameTexture!));
+    internal IEnumerable<(int Kind, ImageTexture Texture)> RelightFrames()
+    {
+        EnsureAreaView();
+        return _areaItems.Take(_areaActive).Where(item => item.Visible && item.FrameTexture is not null).Select(item => (item.RelightKind, item.FrameTexture!));
+    }
     /// <summary>ARC-RES-1978: redraws the shown items after the relit look was switched (their shader program is picked at draw time), without a new submission.</summary>
     internal void RefreshRelight()
     {
@@ -639,13 +689,13 @@ public partial class TerrainCanvas
     private void ClearArea()
     {
         _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; _areaHidden = null; _areaMoving = null; _areaMovingKeys = new HashSet<AreaObjectKey?>(); _areaAbsent = null; _areaRoofs = null; _areaCoveredTiles = null; _areaCovered = null; DisposeAreaLattice(); DisposeAreaCarried(); _areaCarriedNow = null; _areaCarriedBinding = null;
-        _areaView = null; _areaUpright = null; _areaActive = 0;
+        _areaView = null; _areaViewStale = false; _areaUpright = null; _areaBodyIndex = null; _areaActive = 0;
         // ARC-RENDER-1355: the hover ring's frames live in the repository of the scene just cleared; the viewer sets the ring again from the next scene's own repository.
         _areaRing = null;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
-        _areaItems.Clear(); _areaSlots.Reset(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>(); AreaVisibleCovers = AreaVisibleCovers.None;
+        _areaItems.Clear(); _areaSlots.Reset(); _areaVisibleCount = 0; _areaVisibleCommands = Array.Empty<AreaDrawCommand>(); _areaVisibleCovers = AreaVisibleCovers.None;
         _areaMappings.Clear(); // after the items stopped sampling the rows
-        _areaChunkTextures.Clear(); _areaChunks = null; _areaChunkCommands.Clear(); AreaChunkCount = 0; _areaChunkChannels.Clear();
+        _areaChunkTextures.Clear(); _areaChunks = null; _areaChunkCommands.Clear(); _areaChunkCount = 0; _areaChunkChannels.Clear();
         ReleaseAreaHd(); // after the items stopped sampling HD textures
     }
     public override void _ExitTree()

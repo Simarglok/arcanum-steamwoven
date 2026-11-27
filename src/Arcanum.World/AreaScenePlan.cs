@@ -506,23 +506,39 @@ public sealed class AreaUprightOrder
             .ThenBy(command => command.Identity?.Kind).ThenBy(command => command.Identity?.SourceIndex).ThenBy(command => command.Identity?.Offset).ToArray();
     }
 
+    /// <summary>ARC-RENDER-3417: the destination of each body in this order, for an index that answers which bodies a view may meet.</summary>
+    public IReadOnlyList<TerrainRect> BodyDestinations => Array.ConvertAll(_bodies, command => command.Destination);
+
     public IReadOnlyList<AreaDrawCommand> With(ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity)
+        => With(placement, actor, actorIdentity, _bodies);
+
+    private IReadOnlyList<AreaDrawCommand> With(ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity,
+        ReadOnlySpan<AreaDrawCommand> bodies)
     {
         var marker = AreaScenePlan.ActorMarker(placement, actor, actorIdentity, _chart);
-        var low = UpperBound(_bodies, _bodies.Length, marker);
-        var ordered = new AreaDrawCommand[_bodies.Length + 1];
-        Array.Copy(_bodies, ordered, low); ordered[low] = marker;
-        Array.Copy(_bodies, low, ordered, low + 1, _bodies.Length - low);
+        var ordered = new AreaDrawCommand[bodies.Length + 1];
+        var low = UpperBound(bodies, marker);
+        bodies[..low].CopyTo(ordered); ordered[low] = marker;
+        bodies[low..].CopyTo(ordered.AsSpan(low + 1));
         return Array.AsReadOnly(ordered);
     }
 
     /// <summary>ARC-WORLD-016: the same order with the bodies of <paramref name="moving"/>'s identities taken out of their
     /// T0 place and each moved command inserted after every body with an equal or smaller key, then the actor marker,
-    /// exactly as a stable sort of the remaining bodies with the moved commands and the marker appended places them.</summary>
+    /// exactly as a stable sort of the remaining bodies with the moved commands and the marker appended places them.
+    /// <paramref name="near"/> (ascending indices into this order, ARC-RENDER-3417; null = every body) leaves the other T0 bodies out: what is
+    /// returned keeps the order the whole list would have, so a view that filters by its rectangle gets the same commands from either.</summary>
     public IReadOnlyList<AreaDrawCommand> With(ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity,
-        IReadOnlyList<AreaDrawCommand>? moving)
+        IReadOnlyList<AreaDrawCommand>? moving, IReadOnlyList<int>? near = null)
     {
-        if (moving is null || moving.Count == 0) return With(placement, actor, actorIdentity);
+        ReadOnlySpan<AreaDrawCommand> bodies = _bodies;
+        if (near is not null && near.Count < _bodies.Length)
+        {
+            var chosen = new AreaDrawCommand[near.Count];
+            for (var i = 0; i < chosen.Length; i++) chosen[i] = _bodies[near[i]];
+            bodies = chosen;
+        }
+        if (moving is null || moving.Count == 0) return With(placement, actor, actorIdentity, bodies);
         var keys = moving.Select(command => command.Identity).ToHashSet();
         // ARC-RENDER-035: a moved command whose key equals its T0 body's (an animated scenery on another frame) takes the T0
         // place when no other body or moved command shares that key, which is where the insertion below would put it; so a frame
@@ -533,15 +549,15 @@ public sealed class AreaUprightOrder
             .Where(command => upright.Count(other => AreaScenePlan.CompareUpright(other, command) == 0) == 1)
             .ToDictionary(command => command.Identity!.Value);
         var placed = new HashSet<AreaDrawCommand>(ReferenceEqualityComparer.Instance);
-        var ordered = new AreaDrawCommand[_bodies.Length + moving.Count + 1];
+        var ordered = new AreaDrawCommand[bodies.Length + moving.Count + 1];
         var count = 0;
-        for (var i = 0; i < _bodies.Length; i++)
+        for (var i = 0; i < bodies.Length; i++)
         {
-            var body = _bodies[i];
+            var body = bodies[i];
             if (!keys.Contains(body.Identity)) { ordered[count++] = body; continue; }
             if (body.Identity is { } identity && inPlace.TryGetValue(identity, out var moved) && AreaScenePlan.CompareUpright(body, moved) == 0
-                && (i == 0 || AreaScenePlan.CompareUpright(_bodies[i - 1], moved) < 0)
-                && (i + 1 == _bodies.Length || AreaScenePlan.CompareUpright(_bodies[i + 1], moved) > 0))
+                && (i == 0 || AreaScenePlan.CompareUpright(bodies[i - 1], moved) < 0)
+                && (i + 1 == bodies.Length || AreaScenePlan.CompareUpright(bodies[i + 1], moved) > 0))
             { ordered[count++] = moved; placed.Add(moved); }
         }
         foreach (var command in upright.Where(command => !placed.Contains(command))) Insert(ordered, ref count, command);
@@ -551,15 +567,15 @@ public sealed class AreaUprightOrder
 
     private static void Insert(AreaDrawCommand[] ordered, ref int count, AreaDrawCommand command)
     {
-        var at = UpperBound(ordered, count, command);
+        var at = UpperBound(ordered.AsSpan(0, count), command);
         Array.Copy(ordered, at, ordered, at + 1, count - at);
         ordered[at] = command; count++;
     }
 
     // Upper bound: the first entry that orders strictly after the command.
-    private static int UpperBound(AreaDrawCommand[] ordered, int count, AreaDrawCommand command)
+    private static int UpperBound(ReadOnlySpan<AreaDrawCommand> ordered, AreaDrawCommand command)
     {
-        int low = 0, high = count;
+        int low = 0, high = ordered.Length;
         while (low < high)
         {
             var middle = low + (high - low) / 2;
