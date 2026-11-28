@@ -39,6 +39,11 @@ FEATURE = "steamwoven_package"
 PLAYER_NAME = "Arcanum Steamwoven"
 USER_FOLDER = "Arcanum Steamwoven Game"
 INSTRUCTION = Path("docs/player/alpha-build.md")
+# ARC-DEV-3457: the one committed app icon, and the name it takes inside the extracted viewer project, where the
+# package feature's config/icon names it (res:// cannot reach assets/); Godot converts it to the bundle's and the .exe's icon.
+APP_ICON = Path("assets/app-icon/steamwoven-icon-1024.png")
+PROJECT_ICON = "app-icon.png"
+ICON_SETTING = f'config/icon.{FEATURE}="res://{PROJECT_ICON}"'
 # ARC-DEV-3379: the profiling package's own app name and user folder (the same words) and the page installed beside it.
 PROFILING_NAME = "Arcanum Steamwoven Profiling"
 PROFILING_INSTRUCTION = Path("docs/workflow/mac-performance-monitoring.md")
@@ -167,6 +172,18 @@ def rename_for_profiling(source: Path) -> None:
             raise PackageError(f"project.godot does not set {line.strip()} exactly once: the profiling package cannot take its own name")
         text = text.replace(line, f'{setting}.{FEATURE}="{PROFILING_NAME}"\n')
     project.write_text(text, encoding="utf-8")
+
+
+def place_app_icon(source: Path) -> None:
+    """The commit's app icon, copied into the extracted viewer project (never into the checkout). A commit whose
+    project.godot names no package icon is older than it and keeps Godot's."""
+    project = source / PROJECT / "project.godot"
+    if not project.is_file() or ICON_SETTING not in project.read_text(encoding="utf-8").splitlines():
+        return
+    icon = source / APP_ICON
+    if not icon.is_file():
+        raise PackageError(f"project.godot names the app icon, but the commit has no {APP_ICON}")
+    shutil.copyfile(icon, source / PROJECT / PROJECT_ICON)
 
 
 def check_smoke_log(text: str, commit: str, user_folder: str = USER_FOLDER) -> None:
@@ -342,6 +359,7 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
             if not presets.is_file() or f'name="{platform.preset}"' not in presets.read_text(encoding="utf-8"):
                 raise PackageError(f"{commit[:10]} has no export preset {platform.preset!r}: it is older than the profiling package")
             rename_for_profiling(source)
+        place_app_icon(source)
         product = work / "out" / platform.product
         platform.export_target(product).parent.mkdir(parents=True)  # Godot refuses a Windows export path whose folder is missing
         for name, command in steps(platform, source, product, environment):
