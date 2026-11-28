@@ -419,6 +419,8 @@ public sealed class LauncherScreen
         return progress.Stage switch
         {
             SteamImportStage.Checking => "Checking the download…",
+            SteamImportStage.Verifying => "Checking the downloaded archives…"
+                + (progress.BytesTotal > 0 ? $" {progress.BytesDone / (1024 * 1024)}/{progress.BytesTotal / (1024 * 1024)} MB" : ""),
             SteamImportStage.Copying => $"Copying the game files… {progress.FilesDone}/{progress.FilesTotal} files, "
                 + $"{progress.BytesDone / (1024 * 1024)}/{progress.BytesTotal / (1024 * 1024)} MB",
             _ => "Checking the copied game folder…",
@@ -430,15 +432,15 @@ public sealed class LauncherScreen
     {
         ArgumentNullException.ThrowIfNull(result);
         var detail = result.Detail is { Length: > 0 } text ? $" ({text})" : "";
-        var partial = target is null ? "" : $" Files may be left in {target}; empty it or choose another folder before trying again.";
+        var partial = target is null || !result.Partial ? "" : $" Files may be left in {target}; empty it or choose another folder before trying again.";
         return result.Status switch
         {
             SteamImportStatus.Imported => "Copied.",
             SteamImportStatus.InvalidPath => "That folder cannot be used" + detail + ".",
             SteamImportStatus.SourceMissing => "The downloaded folder does not exist" + detail + ".",
             SteamImportStatus.Incomplete => "The download is not complete" + detail + ". Wait for \"Depot download complete\" in the Steam console, "
-                + "or run the command again.",
-            SteamImportStatus.UnsupportedSource => "That folder cannot be copied" + detail + ".",
+                + "or run the command again; a folder you chose must be depot_" + SteamDepot.DepotId + " itself.",
+            SteamImportStatus.UnsupportedSource => "That folder cannot be copied" + detail + "." + partial,
             SteamImportStatus.TargetNotEmpty => "Choose a new or empty folder to copy into; that one has files in it" + detail + ".",
             SteamImportStatus.NotEnoughSpace => "Not enough free disk space to copy" + detail + ".",
             SteamImportStatus.SourceChanged => "Steam seems to be still downloading" + detail + "." + partial,

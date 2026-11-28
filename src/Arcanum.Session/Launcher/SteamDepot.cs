@@ -101,12 +101,24 @@ public static class SteamDepot
         return candidates.AsReadOnly();
     }
 
-    /// <summary>The downloaded depot's folder: the first candidate that is a game folder, else the first that exists (so the import can
-    /// say what it lacks); null when none exists.</summary>
+    /// <summary>The downloaded depot's folder: of the candidates that are game folders the one holding the most bytes (an abandoned partial
+    /// download does not hide a finished one; equal ones keep their order), else the first that exists (so the import can say what it
+    /// lacks); null when none exists.</summary>
     public static string? Find(SteamPlatform platform)
     {
         var existing = Candidates(platform).Where(Directory.Exists).ToArray();
-        return existing.FirstOrDefault(folder => GameFolderLocator.Check(folder).Ready) ?? existing.FirstOrDefault();
+        var ready = existing.Where(folder => GameFolderLocator.Check(folder).Ready).ToArray();
+        return ready.Length > 1 ? ready.OrderByDescending(Bytes).First() : ready.FirstOrDefault() ?? existing.FirstOrDefault();
+    }
+
+    private static long Bytes(string folder)
+    {
+        try
+        {
+            return new DirectoryInfo(folder).EnumerateFiles("*", new EnumerationOptions { RecurseSubdirectories = true, MaxRecursionDepth = 16 })
+                .Sum(file => file.Length);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return 0; }
     }
 
     private static bool Admissible(string? path)

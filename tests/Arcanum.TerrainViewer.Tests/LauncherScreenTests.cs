@@ -195,6 +195,10 @@ public sealed class LauncherScreenTests
         screen.SteamImportDone(new(SteamImportStatus.Incomplete, "5 of about 100 MB are there"));
         Assert.AreEqual(detected, screen.Folder!.Path, "an unfinished download leaves the folder as it was");
         StringAssert.Contains(screen.Notice!, "The download is not complete (5 of about 100 MB are there)");
+        Assert.IsFalse(screen.Notice!.Contains("Files may be left", StringComparison.Ordinal), "nothing was written");
+        screen.BeginSteamImport("depot", "partly");
+        screen.SteamImportDone(new(SteamImportStatus.Cancelled, Partial: true));
+        StringAssert.Contains(screen.Notice!, "Files may be left in partly");
         Assert.IsTrue(screen.SteamGuideOpen && screen.CanPlay);
 
         var copied = Game(Path.Combine(_root, "copied"));

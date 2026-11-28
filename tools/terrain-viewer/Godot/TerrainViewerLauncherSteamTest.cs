@@ -22,7 +22,7 @@ public partial class TerrainViewerApp
         _launcherOpenUriForSelfTest = uri => { opened = uri; return true; };
         _launcherClipboardForSelfTest = text => copied = text;
         _launcherSteamPickForSelfTest = source => picked = source;
-        _launcherImporterForSelfTest = () => new SteamDepotImporter(new SteamImportOptions { MinimumBytes = 1, FreeSpace = _ => long.MaxValue, OpenArchives = _ => null });
+        _launcherImporterForSelfTest = () => new SteamDepotImporter(new SteamImportOptions { MinimumBytes = 1, FreeSpace = _ => long.MaxValue, VerifyArchives = (_, _, _) => null });
         try
         {
             await start(true);

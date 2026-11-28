@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Arcanum.Data.Content;
 using Arcanum.Session.Launcher;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -40,7 +41,7 @@ public sealed class SteamDepotImporterTests
     }
 
     private static SteamImportOptions Options(long? minimum = null, Func<string, long?>? space = null)
-        => new() { MinimumBytes = minimum ?? Total, FreeSpace = space ?? (_ => long.MaxValue), OpenArchives = _ => null };
+        => new() { MinimumBytes = minimum ?? Total, FreeSpace = space ?? (_ => long.MaxValue), VerifyArchives = (_, _, _) => null };
 
     private Task<SteamImportResult> Import(SteamImportOptions? options = null, string? target = null, Action<SteamImportProgress>? progress = null,
         CancellationToken cancel = default)
@@ -114,6 +115,8 @@ public sealed class SteamDepotImporterTests
         // An archive that does not open: the default check over these synthetic bytes.
         var closed = await Import(new SteamImportOptions { MinimumBytes = Total, FreeSpace = _ => long.MaxValue });
         Assert.AreEqual(SteamImportStatus.Incomplete, closed.Status, closed.Detail);
+        StringAssert.Contains(closed.Detail, ".dat");
+        Assert.IsFalse(small.Partial || closed.Partial);
         // A file of the game is not there yet.
         File.Delete(Path.Combine(_depot, "arcanum2.dat"));
         var missing = await Import();
@@ -175,7 +178,91 @@ public sealed class SteamDepotImporterTests
         using var cancel = new CancellationTokenSource();
         var result = await Import(progress: step => { if (step.Stage == SteamImportStage.Copying) cancel.Cancel(); }, cancel: cancel.Token);
         Assert.AreEqual(SteamImportStatus.Cancelled, result.Status);
+        Assert.IsTrue(result.Partial);
         Assert.IsNull(result.Folder);
+    }
+
+    [TestMethod]
+    public async Task CompressedEntriesAreUnpackedSoAHoleInAnArchiveIsRefused()
+    {
+        var content = Enumerable.Range(0, 4000).Select(i => (byte)(i % 7)).ToArray();
+        foreach (var name in new[] { "tig.dat", "arcanum1.dat", "arcanum2.dat", "modules/Arcanum.dat" })
+            WriteArchive(Path.Combine(_depot, name), content, holed: false);
+        var options = new SteamImportOptions { MinimumBytes = 1, FreeSpace = _ => long.MaxValue };
+        var steps = new List<SteamImportProgress>();
+        var whole = await Import(options, progress: steps.Add);
+        Assert.AreEqual(SteamImportStatus.Imported, whole.Status, whole.Detail);
+        var verified = steps.Last(step => step.Stage == SteamImportStage.Verifying);
+        Assert.IsTrue(verified.BytesTotal > 0 && verified.BytesDone == verified.BytesTotal);
+
+        // The index and the length stay, the payload is zeros: what a preallocated, unfinished download looks like.
+        WriteArchive(Path.Combine(_depot, "arcanum1.dat"), content, holed: true);
+        var holed = await Import(options, target: Path.Combine(_root, "second"));
+        Assert.AreEqual(SteamImportStatus.Incomplete, holed.Status, holed.Detail);
+        StringAssert.Contains(holed.Detail, "arcanum1.dat");
+        Assert.IsFalse(Directory.Exists(Path.Combine(_root, "second")));
+    }
+
+    [TestMethod]
+    public async Task ATargetReachedThroughALinkIntoTheDownloadIsRefused()
+    {
+        if (OperatingSystem.IsWindows()) return; // creating a link needs a privilege there
+        var link = Path.Combine(_root, "link");
+        Directory.CreateSymbolicLink(link, _depot);
+        var result = await Import(target: Path.Combine(link, "copy"));
+        Assert.AreEqual(SteamImportStatus.InvalidPath, result.Status, result.Detail);
+        Assert.IsFalse(Directory.Exists(Path.Combine(_depot, "copy")));
+    }
+
+    [TestMethod]
+    public void OfTwoReadyDownloadsTheLargerOneIsFound()
+    {
+        var candidates = SteamDepot.Candidates(Mac());
+        WriteDepot(candidates[0]);
+        WriteDepot(candidates[1]);
+        Assert.AreEqual(candidates[0], SteamDepot.Find(Mac()));
+        File.WriteAllBytes(Path.Combine(candidates[1], "data", "more.bin"), new byte[100]);
+        Assert.AreEqual(candidates[1], SteamDepot.Find(Mac()));
+    }
+
+    /// <summary>A synthetic 1TAD archive of one zlib entry; <paramref name="holed"/> leaves the payload as zeros.</summary>
+    private static void WriteArchive(string path, byte[] content, bool holed)
+    {
+        using var packed = new MemoryStream();
+        using (var zlib = new ZLibStream(packed, CompressionLevel.Optimal, leaveOpen: true)) zlib.Write(content);
+        var payload = packed.ToArray();
+        var name = "entry.bin\0"u8.ToArray();
+        using var index = new MemoryStream();
+        using (var writer = new BinaryWriter(index, System.Text.Encoding.ASCII, leaveOpen: true))
+        {
+            writer.Write(1u);
+            writer.Write((uint)name.Length);
+            writer.Write(name);
+            writer.Write(new byte[4]);
+            writer.Write(2u); // zlib
+            writer.Write((uint)content.Length);
+            writer.Write((uint)payload.Length);
+            writer.Write(0u);
+        }
+        using var output = new BinaryWriter(File.Create(path));
+        output.Write(holed ? new byte[payload.Length] : payload);
+        output.Write(index.ToArray());
+        output.Write(new byte[16]);
+        output.Write("1TAD"u8);
+        output.Write((uint)name.Length);
+        output.Write((uint)(index.Length + 28));
+    }
+
+    /// <summary>Opt-in: the whole check and copy over a real installation (a folder holding the same files as the depot), into a
+    /// temporary folder.</summary>
+    [TestMethod]
+    [TestCategory("RealData")]
+    public async Task ARealInstallationPassesTheCheckAndIsCopied()
+    {
+        var source = Environment.GetEnvironmentVariable("ARC_STEAM_SOURCE");
+        if (string.IsNullOrEmpty(source)) Assert.Inconclusive("ARC_STEAM_SOURCE is not set");
+        var result = await new SteamDepotImporter(new SteamImportOptions { MinimumBytes = 1 }).ImportAsync(source!, _target);
+        Assert.AreEqual(SteamImportStatus.Imported, result.Status, result.Detail);
     }
 
     private SteamPlatform Mac() => new(GameFolderPlatformKind.MacOS, _root, null, () => null);
