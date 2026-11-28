@@ -24,9 +24,16 @@ public partial class TerrainViewerApp
             GD.Print(Tag + " encounters smoke FAIL: " + why);
             throw new InvalidOperationException("AREA_ENCOUNTERS_SMOKE_FAILED");
         }
+        // Every wait of the stage on real time or on a background read is bounded by the clock, never by a count of frames (#3464); the bound only ends a wait that will not end.
+        static bool Waiting(ref long giveUpAt, long boundMs = 60_000)
+        {
+            var now = (long)Time.GetTicksMsec();
+            if (giveUpAt == 0) giveUpAt = now + boundMs;
+            return now < giveUpAt;
+        }
         if (_areaSession is not { } session || session.QueryHero() is null || _readyArea is not { } area || _createdPrototypeRead is not { } read || _inventoryHost is null)
         { GD.Print(Tag + " native-smoke encounters NONE map=" + _readyMapName + " (needs --hero, an area session, the inventory and the created-prototype reader)"); return; }
-        for (var i = 0; i < 1200 && _worldMapData is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptWorldMapData(); }
+        for (long until = 0; _worldMapData is null && Waiting(ref until);) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptWorldMapData(); }
         if (_worldMapData is not { Status: AreaWorldMapDataStatus.Ready, Data: { } data }) { GD.Print($"{Tag} native-smoke encounters NONE (world-map data {_worldMapData?.Status} {_worldMapData?.Detail})"); return; }
         if (area.Snapshot.RuntimeMap != data.StartRuntime) { GD.Print($"{Tag} native-smoke encounters SKIP (map {_readyMapName} is not the start map)"); return; }
         if (data.Encounters.Status != EncounterTablesStatus.Loaded) { GD.Print($"{Tag} native-smoke encounters NONE (the module's tables: {data.Encounters.Detail})"); return; }
@@ -84,7 +91,7 @@ public partial class TerrainViewerApp
         try
         {
             _encounterHost = (data, new AreaEncounterHost(tables, EncounterSiteNow));
-            for (var wait = 0; wait < 600 && AreaAiHostNow() is null; wait++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            for (long until = 0; AreaAiHostNow() is null && Waiting(ref until);) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(AreaAiHostNow() is not null, "the AI host is built");
             await Pass(2);
             Require(session.QueryRandomEncounterDeadlines().Count == 1, "the first event pass armed the event");
@@ -106,7 +113,7 @@ public partial class TerrainViewerApp
             await Settle();
             var host = AreaAiHostNow()!;
             Require(first.Made.All(o => host.Scene.Npcs.Any(n => n.Entity == o.Entity)), "the AI host holds each made critter");
-            for (var wait = 0; wait < 900 && _createdInventoryPending.Count > 0; wait++) await Settle(1);
+            for (long until = 0; _createdInventoryPending.Count > 0 && Waiting(ref until);) await Settle(1);
             Require(_createdInventoryPending.Count == 0, "the made critters' goods were taken (the restock host is ready)");
             GD.Print($"{Tag} encounters plain made={first.Made.Count} lost={first.Lost} prototype={prototype} at=({location.X},{location.Y}) cells={string.Join(";", first.Made.Select(o => $"{o.Cell.X},{o.Cell.Y}"))} west={(first.Made.Count > 0 ? (first.Made[0].Cell.X < hero.X).ToString() : "-")}");
             await DestroyMade();
@@ -132,8 +139,8 @@ public partial class TerrainViewerApp
             await DestroyMade();
             InventoryKey(Key.W);
             Require(!WorldMapOpen && (_worldMapStatus ?? "").Contains("602", StringComparison.Ordinal), "W was refused with message 602: " + _worldMapStatus);
-            for (var i = 0; i < 1200 && _clockHostMs <= lockedUntil; i++) await Pass();
-            Require(_clockHostMs > lockedUntil, "the lock ran out");
+            for (long until = 0; _clockHostMs <= lockedUntil && Waiting(ref until, WorldMapEncounterLockMs + 30_000);) await Pass();
+            Require(_clockHostMs > lockedUntil, $"the lock ran out: clock {_clockHostMs} locked until {lockedUntil}");
             InventoryKey(Key.W);
             Require(WorldMapOpen, "W opens after the 4,000 ms: " + _worldMapStatus);
             GD.Print($"{Tag} encounters map made={third.Made.Count} lock-ms={WorldMapEncounterLockMs}");
@@ -157,14 +164,14 @@ public partial class TerrainViewerApp
             firedBefore = _encountersFired;
             InventoryKey(Key.Enter);
             Require(worldMap.Travelling, "Enter started the journey");
-            for (var i = 0; i < 600 && _encountersFired == firedBefore && WorldMapOpen; i++) await Pass();
+            for (long until = 0; _encountersFired == firedBefore && WorldMapOpen && Waiting(ref until);) await Pass();
             Require(_encountersFired == firedBefore + 1 && _lastEncounterNotice is { Outcome: SessionEncounterOutcome.Fired }, $"the roll fell during the journey: {_lastEncounterNotice?.Outcome} {_lastEncounterNotice?.Roll}");
             var fourth = _lastEncounterNotice!;
             made.AddRange(fourth.Made);
             var marker = fourth.Place!.Value.Location;
             Require(marker.X != hero.X || marker.Y != hero.Y, $"the roll's place is the marker, not the hero's tile: {marker}");
             // The journey ends in a landing where the marker stood.
-            for (var i = 0; i < 36000 && (WorldMapOpen || _mapHandoff is not null); i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            for (long until = 0; (WorldMapOpen || _mapHandoff is not null) && Waiting(ref until, 300_000);) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(!WorldMapOpen && _mapHandoff is null && ReferenceEquals(_areaSession, session), "the journey ended in a landing and the session is carried");
             Require(session.QueryRealStep(SessionRealStep.WorldMapStep) is null, "no travel step is left pending");
             var actor = session.QueryActor();
@@ -173,7 +180,7 @@ public partial class TerrainViewerApp
             Require(WorldMapLockedUntilForSelfTest > 0, "the opener is locked after the roll");
             Require(fourth.Made.All(o => Math.Abs(o.Cell.X - marker.X) <= 2 * EncounterRules.Ring && Math.Abs(o.Cell.Y - marker.Y) <= 2 * EncounterRules.Ring), $"the critters stand round the marker: {string.Join(";", fourth.Made.Select(o => $"{o.Cell.X},{o.Cell.Y}"))} (marker {marker.X},{marker.Y})");
             // The window of the landing holds them: each is a created critter of the session and the AI host hosts it there.
-            for (var wait = 0; wait < 600 && AreaAiHostNow() is null; wait++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            for (long until = 0; AreaAiHostNow() is null && Waiting(ref until);) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await Settle(12);
             var landed = AreaAiHostNow();
             Require(landed is not null && fourth.Made.All(o => session.QueryCreatedObject(o.Entity) is not null), "the made critters are still the session's");
