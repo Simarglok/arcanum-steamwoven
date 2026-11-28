@@ -6,6 +6,8 @@ Every image a task produces (raw Codex outputs, collages, fitted masters, compos
 the accepted version also under `<TASK>/final/`, and each file has one row in `archive/registry.jsonl`
 (task, file, kind, status, sources, hash, size, date). Nothing here is committed: the images are derived from the
 player's own data (SWI-PRV-1). Standard library only.
+Parallel sessions share the registry: `add`, `mark` and `scan` run one at a time (`registry.lock`), and a save
+applies only what its session added, changed or removed to the rows on disk (ARC-DEV-3439).
 
     image_archive.py dir ARC-UI-3040                 # create and print the task folder (use it as --out of any tool)
     image_archive.py add ARC-UI-3040 A.png B.png --kind composite [--status unknown] [--note TEXT]
@@ -18,6 +20,8 @@ player's own data (SWI-PRV-1). Standard library only.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import copy
 import hashlib
 import json
 import os
@@ -99,19 +103,49 @@ def clone_copy(src: Path, dst: Path) -> None:
 
 # ---------------------------------------------------------------- the registry
 
+@contextlib.contextmanager
+def _lock(root: Path):
+    """Hold `registry.lock` of `root`: one writer at a time. Not re-entrant."""
+    root.mkdir(parents=True, exist_ok=True)
+    with (root / "registry.lock").open("a") as lock:
+        try:
+            import fcntl
+            fcntl.flock(lock, fcntl.LOCK_EX)
+        except ImportError:  # no flock (Windows): single writer assumed
+            pass
+        yield
+
+
+@contextlib.contextmanager
+def writing(root: Path | None = None):
+    """A freshly loaded registry that no other writer touches until it is saved (also after an error), so a row
+    and the files it moves are read and changed in one step. Do not call `save` inside."""
+    root = root or archive_root()
+    with _lock(root):
+        registry = Registry(root)
+        try:
+            yield registry
+        finally:
+            registry._write()
+
+
 class Registry:
     """The rows of `registry.jsonl`, keyed by (location, task, file)."""
 
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or archive_root()
         self.path = self.root / REGISTRY_NAME
-        self.rows: dict[tuple[str, str, str], dict] = {}
-        self.removed: set[tuple[str, str, str]] = set()  # rows this session took away: `save` must not read them back
-        if self.path.is_file():
-            for line in self.path.read_text(encoding="utf-8").splitlines():
-                if line.strip():
-                    row = json.loads(line)
-                    self.rows[self.key(row)] = row
+        self.loaded = self._read() or {}  # the rows as last read or written: what this session changed is the difference
+        self.rows: dict[tuple[str, str, str], dict] = copy.deepcopy(self.loaded)
+        self.put_keys: set[tuple[str, str, str]] = set()  # written by `put`, ours even when equal to the loaded row
+        self.removed: set[tuple[str, str, str]] = set()  # rows this session took away
+
+    def _read(self) -> dict[tuple[str, str, str], dict] | None:
+        """The rows on disk; None when there is no registry file."""
+        if not self.path.is_file():
+            return None
+        rows = (json.loads(line) for line in self.path.read_text(encoding="utf-8").splitlines() if line.strip())
+        return {self.key(row): row for row in rows}
 
     @staticmethod
     def key(row: dict) -> tuple[str, str, str]:
@@ -127,32 +161,61 @@ class Registry:
 
     def put(self, row: dict) -> dict:
         self.rows[self.key(row)] = row
+        self.put_keys.add(self.key(row))
         self.removed.discard(self.key(row))
         return row
 
     def drop(self, row: dict) -> None:
         self.rows.pop(self.key(row), None)
+        self.put_keys.discard(self.key(row))
         self.removed.add(self.key(row))
 
+    def _has_file(self, row: dict) -> bool:
+        base = self.root.parent if row.get("location") == "pipeline" else self.root / row["task"]
+        return (base / row["file"]).exists()
+
+    def _merged(self, disk: dict) -> dict:
+        """`disk` with this session's removals, additions and changed fields applied; everything else stays as on disk."""
+        merged = {key: row for key, row in disk.items() if key not in self.removed}
+        for key, mine in self.rows.items():
+            base, theirs = self.loaded.get(key), merged.get(key)
+            if mine == base and key not in self.put_keys:
+                continue  # not ours: disk decides, also when another session removed the row
+            if theirs is None:
+                if base is None or self._has_file(mine):  # a row another session removed comes back only with its file
+                    merged[key] = mine
+                continue
+            if base is not None:
+                changed = {f: v for f, v in mine.items() if v != base.get(f)}
+            else:  # both sessions added this row: our unknown status does not replace theirs
+                changed = {f: v for f, v in mine.items() if mine["status"] != "unknown" or f not in ("status", "note")}
+            if "sources" in changed:
+                changed["sources"] = sorted(set(theirs["sources"]) | set(changed["sources"]))
+            merged[key] = {**theirs, **changed}
+        return merged
+
     def save(self) -> None:
-        """Write the registry under a lock; rows another session wrote since this one loaded are kept (this one wins on a shared key)."""
-        self.root.mkdir(parents=True, exist_ok=True)
-        with (self.root / "registry.lock").open("a") as lock:
-            try:
-                import fcntl
-                fcntl.flock(lock, fcntl.LOCK_EX)
-            except ImportError:  # no flock (Windows): single writer assumed
-                pass
-            if self.path.is_file():
-                for line in self.path.read_text(encoding="utf-8").splitlines():
-                    if line.strip():
-                        row = json.loads(line)
-                        if self.key(row) not in self.removed:
-                            self.rows.setdefault(self.key(row), row)
-            body = "".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n" for _, r in sorted(self.rows.items()))
-            tmp = self.path.with_name(f"{REGISTRY_NAME}.{os.getpid()}.tmp")
-            tmp.write_text(body, encoding="utf-8")
-            os.replace(tmp, self.path)
+        """Under the lock, apply what this session added, changed or removed to the rows now on disk."""
+        with _lock(self.root):
+            self._write()
+
+    def _write(self) -> None:
+        disk = self._read()
+        merged = self._merged(self.loaded if disk is None else disk)
+        body = "".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n" for _, r in sorted(merged.items()))
+        tmp = self.path.with_name(f"{REGISTRY_NAME}.{os.getpid()}.tmp")
+        tmp.write_text(body, encoding="utf-8")
+        os.replace(tmp, self.path)
+        for key in [k for k in self.rows if k not in merged]:
+            del self.rows[key]
+        for key, row in merged.items():
+            held = self.rows.setdefault(key, row)
+            if held != row:  # updated in place: a caller may still hold the row
+                held.clear()
+                held.update(row)
+        self.loaded = copy.deepcopy(self.rows)
+        self.put_keys.clear()
+        self.removed.clear()
 
 
 def _row(task, rel, kind, status, sources, digest, size_bytes, size, mtime, note, basis, location="archive"):
@@ -380,8 +443,7 @@ def cmd_dir(args) -> int:
 
 
 def cmd_add(args) -> int:
-    reg = Registry()
-    try:  # a later file may fail after an earlier one moved a copy: the registry still records it
+    with writing() as reg:  # a later file may fail after an earlier one moved a copy: the registry still records it
         for name in args.files:
             src = Path(name)
             if not src.is_file() or src.suffix.lower() not in IMAGE_EXTS:
@@ -389,17 +451,12 @@ def cmd_add(args) -> int:
                 continue
             row = add_file(reg, args.task, src, kind=args.kind, status=args.status, note=args.note)
             print(f"{row['task']}/{row['file']}  {row['status']}  {row['sha256'][:12]}")
-    finally:
-        reg.save()
     return 0
 
 
 def cmd_mark(args) -> int:
-    reg = Registry()
-    try:
+    with writing() as reg:
         row = mark(reg, args.task, args.file, args.status, args.note)
-    finally:
-        reg.save()
     print(f"{row['task']}/{row['file']} -> {row['status']}")
     return 0
 
@@ -419,10 +476,9 @@ def cmd_index(args) -> int:
 
 
 def cmd_scan(args) -> int:
-    reg = Registry()
     skipped: list[str] = []
-    n = scan(reg, args.task, kind=args.kind, skipped=skipped)
-    reg.save()
+    with writing() as reg:
+        n = scan(reg, args.task, kind=args.kind, skipped=skipped)
     for name in skipped:
         print(f"NO KIND {name}: not registered; name it with `scan <TASK> --kind KIND` or `add`", file=sys.stderr)
     print(f"scan: {n} new rows")

@@ -227,6 +227,84 @@ class ArchiveTests(unittest.TestCase):
         self.reg.save()
         self.assertEqual(2, len(ia.Registry(self.root).rows))
 
+    def stale_pair(self, status: str = "unknown") -> tuple[dict, ia.Registry]:
+        """One saved row, then a second session that loaded the registry at that moment (`self.reg` is its stale peer)."""
+        row = ia.add_file(self.reg, "ARC-UI-6", self.image("m.png"), kind="master", status=status)
+        self.reg.save()
+        return row, ia.Registry(self.root)
+
+    def row(self, rel: str) -> dict | None:
+        return ia.Registry(self.root).rows.get(("archive", "ARC-UI-6", rel))
+
+    def test_a_stale_save_keeps_another_sessions_mark(self) -> None:
+        row, other = self.stale_pair()
+        ia.mark(other, "ARC-UI-6", row["file"], "final", "accepted")
+        other.save()
+        ia.add_file(self.reg, "ARC-UI-6", self.image("n.png", 1), kind="master")
+        self.reg.save()
+        self.assertEqual("final", self.row(row["file"])["status"])
+        self.assertEqual("final", self.row("final/m.png")["status"])
+        self.assertIsNotNone(self.row("master/n.png"))
+        self.assertEqual("final", row["status"])  # the held row shows what is on disk now
+
+    def test_a_stale_save_does_not_bring_back_a_row_another_session_removed(self) -> None:
+        row, other = self.stale_pair("final")
+        ia.mark(other, "ARC-UI-6", row["file"], "rejected")
+        other.save()
+        ia.add_file(self.reg, "ARC-UI-6", self.image("n.png", 1), kind="master")
+        self.reg.save()
+        self.assertIsNone(self.row("final/m.png"))
+        self.assertEqual("rejected", self.row("superseded/m.png")["status"])
+
+    def test_a_row_another_session_removed_is_not_put_back_without_its_file(self) -> None:
+        row, other = self.stale_pair("final")
+        ia.mark(other, "ARC-UI-6", row["file"], "rejected")
+        other.save()
+        self.reg.put(self.reg.rows[("archive", "ARC-UI-6", "final/m.png")])
+        self.reg.save()
+        self.assertIsNone(self.row("final/m.png"))
+
+    def test_a_row_both_sessions_changed_keeps_both_changes(self) -> None:
+        row, other = self.stale_pair()
+        ia.mark(other, "ARC-UI-6", row["file"], "rejected", "owner")
+        other.save()
+        ia.add_file(self.reg, "ARC-UI-6", self.image("again.png"), kind="master")  # same bytes: only a source is added
+        self.reg.save()
+        held = self.row(row["file"])
+        self.assertEqual(("rejected", "owner", 2), (held["status"], held["note"], len(held["sources"])))
+
+    def test_a_row_both_sessions_added_keeps_the_marked_status(self) -> None:
+        ia.add_file(self.reg, "ARC-UI-6", self.image("m.png"), kind="master")  # copied, not yet saved
+        other = ia.Registry(self.root)
+        ia.scan(other)
+        ia.mark(other, "ARC-UI-6", "master/m.png", "final")
+        other.save()
+        self.reg.save()
+        self.assertEqual("final", self.row("master/m.png")["status"])
+
+    def test_a_second_save_does_not_repeat_the_first_one(self) -> None:
+        row, _ = self.stale_pair()
+        ia.mark(self.reg, "ARC-UI-6", row["file"], "intermediate")
+        self.reg.save()
+        other = ia.Registry(self.root)
+        ia.mark(other, "ARC-UI-6", row["file"], "rejected")
+        other.save()
+        self.reg.save()
+        self.assertEqual("rejected", self.row(row["file"])["status"])
+
+    def test_writing_holds_the_lock_until_the_registry_is_saved(self) -> None:
+        try:
+            import fcntl
+        except ImportError:
+            self.skipTest("no flock")
+        with ia.writing(self.root) as reg:
+            ia.add_file(reg, "ARC-UI-6", self.image("m.png"), kind="master")
+            with (self.root / "registry.lock").open("a") as peer, self.assertRaises(BlockingIOError):
+                fcntl.flock(peer, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with (self.root / "registry.lock").open("a") as peer:
+            fcntl.flock(peer, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self.assertIsNotNone(self.row("master/m.png"))
+
     def test_scan_registers_hand_copied_files(self) -> None:
         (self.root / "ARC-UI-9" / "final").mkdir(parents=True)
         (self.root / "ARC-UI-9" / "final" / "x.png").write_bytes(fake_png(8, 8))
