@@ -146,7 +146,8 @@ A second copy of the game for measuring, built on this Mac and **never distribut
     ./arcanum package mac --profiling        # fetch origin main, build that commit, smoke it, install it
 
 **Rebuild it before measuring** (ARC-DEV-3478): only this command updates it, neither `./arcanum daily` nor
-`./arcanum package mac` does (they print a WARNING when it is behind the commit they packaged, and run nothing for it).
+`./arcanum package mac` does (they print a WARNING when it holds neither the commit they
+packaged nor a later one, and run nothing for it).
 To see which commit a build holds (run in the main checkout):
 
     head -2 artifacts/packages/macos-profiling/BUILD.txt     # commit and date; artifacts/packages/macos for the player's

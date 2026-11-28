@@ -14,7 +14,7 @@ the same commit and the same precompiled game code, exported with the debug temp
 debugger can attach) and the get-task-allow entitlement (so Instruments needs no password), under its own app name,
 bundle id and user folder, into `artifacts/packages/macos-profiling/`. The player package is not touched.
 ARC-DEV-3478: no other package run rebuilds it, so a player package run (and `./arcanum daily`) ends with a WARNING and the
-rebuild command when the installed profiling package is behind the commit it packaged.
+rebuild command when the installed profiling package holds neither the commit it packaged nor a later one.
 """
 from __future__ import annotations
 
