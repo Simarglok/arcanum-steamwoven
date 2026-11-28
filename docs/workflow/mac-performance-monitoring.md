@@ -145,6 +145,17 @@ A second copy of the game for measuring, built on this Mac and **never distribut
 
     ./arcanum package mac --profiling        # fetch origin main, build that commit, smoke it, install it
 
+**Rebuild it before measuring** (ARC-DEV-3478): only this command updates it, neither `./arcanum daily` nor
+`./arcanum package mac` does (they print a WARNING when it holds neither the commit they
+packaged nor a later one, and run nothing for it).
+To see which commit a build holds (run in the main checkout):
+
+    head -2 artifacts/packages/macos-profiling/BUILD.txt     # commit and date; artifacts/packages/macos for the player's
+
+A running game says the same in the bottom right corner of its launcher and main menu
+(`Arcanum Steamwoven alpha · main <first 10 digits> · <date>`) and in its `ARC-DEV-047 build ...` start line. Compare it
+with `git rev-parse --short=10 origin/main` after a `git fetch origin main`.
+
 It lands in `artifacts/packages/macos-profiling/Arcanum Steamwoven Profiling.app` of the main checkout; the player
 package is not touched ([packaging](packaging.md#profiling-package-arc-dev-3379)). Same commit and same game code,
 compiled as for the player (optimized, ReadyToRun). The differences:

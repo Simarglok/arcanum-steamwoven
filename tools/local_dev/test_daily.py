@@ -224,6 +224,19 @@ class DailyTests(unittest.TestCase):
         self.assertIn("RESULT PASS packaged", self.report())
         self.assertEqual((self.output / "macos" / "reports" / "bug-1.txt").read_text(), "player report\n")
 
+    def test_a_stale_profiling_package_is_named_in_the_report_and_does_not_fail_the_day(self) -> None:  # ARC-DEV-3478
+        self.write_build("macos-profiling", "1" * 40)
+        (self.output / "macos-profiling" / package.PROFILING.installed).mkdir()
+        self.assertEqual(self.run_daily(), daily.PASS)
+        self.assertNotIn("package-profiling", self.names())
+        lines = self.report().splitlines()
+        self.assertIn("./arcanum package mac --profiling", lines[-2])
+        self.assertIn("main 1111111111", lines[-2])
+        self.assertTrue(lines[-1].startswith("RESULT PASS"))
+        self.codes.update({"package-mac": 1, "package-win": 1})
+        self.run_daily(force=True)
+        self.assertNotIn("profiling", self.report(), "nothing was packaged, so there is nothing to be behind")
+
     def test_the_root_checks_run_without_the_owners_opt_in_variables_and_with_the_oracle_venv(self) -> None:
         self.run_daily()
         environments = {name: environment for name, _, _, environment, _ in self.calls}
@@ -413,6 +426,7 @@ class DailyTests(unittest.TestCase):
 
 class LauncherTests(unittest.TestCase):
     def test_package_passes_the_map_smoke_result_to_the_builder(self) -> None:
+        patched = mock.patch.object(package, "stale_profiling_after", return_value=None); patched.start(); self.addCleanup(patched.stop)
         project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
         args = project["parser"]().parse_args(["package", "mac", "--ref", "abc", "--no-fetch", "--map-smoke", "PASS (main)"])
         with mock.patch.object(run_queue, "run", return_value=0) as queued:
@@ -426,6 +440,15 @@ class LauncherTests(unittest.TestCase):
             with mock.patch.object(run_queue, "run", return_value=0) as queued:
                 self.assertEqual(args.func(args), 0)
             self.assertEqual("--profiling" in queued.call_args.args[1], forwarded)
+        # ARC-DEV-3478: after a successful player run the launcher itself prints the stale-profiling warning.
+        for words, code, shown in ((["package", "mac"], 0, True), (["package", "win"], 0, True),
+                                   (["package", "mac", "--profiling"], 0, False), (["package", "mac"], 1, False)):
+            args = project["parser"]().parse_args(words)
+            with mock.patch.object(run_queue, "run", return_value=code), \
+                    mock.patch.object(package, "stale_profiling_after", return_value="WARNING behind"), \
+                    redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(args.func(args), code)
+            self.assertEqual(out.getvalue(), "package: WARNING behind\n" if shown else "")
         args = project["parser"]().parse_args(["package", "win", "--profiling"])
         with mock.patch.object(run_queue, "run", return_value=0) as queued, mock.patch("sys.stderr"):
             self.assertEqual(args.func(args), 2)

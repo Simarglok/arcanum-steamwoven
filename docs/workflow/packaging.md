@@ -109,7 +109,11 @@ these differences. Use: [Mac performance monitoring](mac-performance-monitoring.
 | Installed to | `artifacts/packages/macos/` | `artifacts/packages/macos-profiling/`, with `BUILD.txt` (a `profiling` line), this build's monitoring page as `README.md` and its own `previous/`; logs in `artifacts/packages/logs/macos-profiling/` |
 
 A commit older than this option has no `macOS profiling` preset and is refused. `--profiling` is for `mac` only.
-`./arcanum daily` does not build it. `./arcanum clean` treats its folder like a platform's
+Only this command builds it: `./arcanum daily` and a player package run leave it as it is. So it cannot go stale
+unnoticed (ARC-DEV-3478), a successful `./arcanum package mac` or `win` prints, and `./arcanum daily` puts into its
+report after packaging, `WARNING the profiling package is out of date: ...` with both commits and this command, when the
+installed profiling package holds neither the packaged commit nor a later one; the exit code and result do not change.
+`./arcanum clean` treats its folder like a platform's
 ([build retention](build-retention.md)), and the launch queue of a checkout with this change treats a game running from
 it like the player package ([details](mac-performance-monitoring.md#profiling-package-arc-dev-3379)).
 

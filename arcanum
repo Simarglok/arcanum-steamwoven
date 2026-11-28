@@ -15,7 +15,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from tools.local_dev import clean, config, daily, launch, main_smoke, manifests, menubar, qa, run_queue, smoke, start_check  # noqa: E402
+from tools.local_dev import clean, config, daily, launch, main_smoke, manifests, menubar, package, qa, run_queue, smoke, start_check  # noqa: E402
 
 LOCAL = ROOT / "tools" / "arcanum-local"
 DEFAULT_GAME_ROOT = Path("/Applications/Arcanum")
@@ -206,8 +206,14 @@ def package_build(args: argparse.Namespace) -> int:
     # ARC-DEV-400: a package build takes the queue's front like the owner's viewer launches (after the runs already holding
     # a place): its turn by arrival time plus 3 of its estimates let the smokes of the lanes pass it for ever.
     label = f"package {args.platform}" + (" profiling" if args.profiling else "")
-    return run_queue.run("export", command, label=label, quiet=not args.verbose,
+    code = run_queue.run("export", command, label=label, quiet=not args.verbose,
                          priority=run_queue.FRONT)
+    # ARC-DEV-3478: said here, not by the builder, whose output a quiet run keeps in its log.
+    if code == 0 and not args.profiling:
+        warning = package.stale_profiling_after(ROOT, package.PLATFORMS[args.platform])
+        if warning:
+            print(f"package: {warning}", flush=True)
+    return code
 
 
 def positive(value: str) -> int:

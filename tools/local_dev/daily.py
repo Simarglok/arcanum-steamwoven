@@ -5,7 +5,8 @@ BUILD.txt), unless --force. Otherwise it checks the commit out into a fresh deta
 the owner's checkout or working tree), and from there runs the commit's own commands: the root checks (CLAUDE.md §2: the
 solution's restore, build and tests through the launch queue, the dat probe and oracle self-tests), the complete map smoke
 run (`./arcanum smoke complete`), then `./arcanum package mac` and `win` of that same commit, each told the chain's result
-for its BUILD.txt. Owner decision 2026-10-29: any failure blocks the packages; a failed check or smoke ends the day
+for its BUILD.txt. The profiling package is not built here: after packaging, a WARNING line says when it holds
+neither that commit nor a later one (ARC-DEV-3478). Owner decision 2026-10-29: any failure blocks the packages; a failed check or smoke ends the day
 with no package and the report names each failed step with its run log and first error, so a fix thread can start; the
 package is built by the first day after the fix. ARC-DEV-2224 (owner 2026-11-15): the smoke runs even when the root checks
 failed or timed out (a red or slow check hid a day of smoke); both results are reported, the timeout of a step with its
@@ -367,6 +368,9 @@ def daily(*, root: Path, output: Path, fetch: bool, force: bool, keep_work: bool
         day.note(f"map-smoke {line}")
         packaged = [key for key in package.PLATFORMS if day.run(package_step(key, commit, line))[0] == 0]
         failed = [key for key in package.PLATFORMS if key not in packaged]
+        stale = package.stale_profiling(root, output, commit) if packaged else None
+        if stale:  # ARC-DEV-3478: the step's own line stays in its log; the report and stdout say it
+            day.note(stale)
         if failed:
             day.note(f"RESULT FAIL package {', '.join(failed)} failed" + (f" (installed: {', '.join(packaged)})" if packaged else ""))
         else:
