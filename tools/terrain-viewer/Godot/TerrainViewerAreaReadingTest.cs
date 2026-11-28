@@ -343,9 +343,9 @@ public partial class TerrainViewerApp
             foreach (var line in placed)
             {
                 var font = FontOf(line.Font);
-                var right = line.X + (line.Glyphs.Count == 0 ? 0 : line.Glyphs[^1].X + line.Glyphs[^1].Glyph.Width);
+                var right = line.X + (line.Glyphs.Count == 0 ? 0 : line.Glyphs[^1].X + line.Glyphs[^1].Glyph.Width) * line.Scale;
                 var window = AreaReadingArtLayout.Window;
-                if (line.X < 0 || line.Y < 0 || line.Y + font.LineHeight > window.Height || right > window.Width) outside++;
+                if (line.X < 0 || line.Y < 0 || line.Y + font.LineHeight * line.Scale > window.Height || right > window.Width) outside++;
             }
         }
         return new(composed, lines, pages, outside);
