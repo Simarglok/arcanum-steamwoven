@@ -286,6 +286,40 @@ class PackageTests(unittest.TestCase):
         self.run_profiling(smoke_folder=self.root)
         self.assertIn("own user folder Arcanum Steamwoven Profiling", (self.root / "out" / "macos-profiling" / "BUILD.txt").read_text())
 
+    def test_a_profiling_package_behind_the_packaged_commit_is_named_with_the_rebuild_command(self) -> None:  # ARC-DEV-3478
+        def commit(message: str) -> str:
+            subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", message, "--allow-empty"],
+                           cwd=self.repo, check=True, capture_output=True)
+            return subprocess.check_output(["git", "-C", str(self.repo), "rev-parse", "HEAD"], text=True).strip()
+        old, new = self.commit, commit("next")
+        output = self.repo / "artifacts" / "packages"
+        profiling = output / package.PROFILING.folder
+
+        def write(folder: Path, held: str) -> None:
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "BUILD.txt").write_text(f"commit {held}\ndate 2026-10-28\n")
+        self.assertIsNone(package.stale_profiling(self.repo, output, new), "none installed")
+        write(profiling, old)
+        self.assertIsNone(package.stale_profiling(self.repo, output, new), "a BUILD.txt without the app is not installed")
+        (profiling / package.PROFILING.installed).mkdir()
+        warning = package.stale_profiling(self.repo, output, new)
+        for words in (f"main {old[:10]}", f"packaged {new[:10]}", "./arcanum package mac --profiling"):
+            self.assertIn(words, warning)
+        for held, packaged in ((new, new), (new, old)):  # current, and newer than what was packaged
+            write(profiling, held)
+            self.assertIsNone(package.stale_profiling(self.repo, output, packaged))
+        write(profiling, "0" * 40)  # a commit the repository does not have
+        self.assertIn("main 0000000000", package.stale_profiling(self.repo, output, new))
+        (profiling / "BUILD.txt").unlink()
+        self.assertIn("an unknown commit", package.stale_profiling(self.repo, output, new))
+        # After a player run the commit is the one in that platform's BUILD.txt; without one there is nothing to compare.
+        write(profiling, old)
+        mac = package.PLATFORMS["mac"]
+        self.assertIsNone(package.stale_profiling_after(self.repo, mac))
+        write(output / mac.folder, new)
+        self.assertIn(f"packaged {new[:10]}", package.stale_profiling_after(self.repo, mac))
+        self.assertIsNone(package.stale_profiling_after(self.root / "no-repository", mac))
+
     def test_the_builders_option_selects_the_profiling_package(self) -> None:
         for words, platform in ((["mac", "--profiling"], package.PROFILING), (["mac"], package.PLATFORMS["mac"]),
                                 (["win"], package.PLATFORMS["win"])):

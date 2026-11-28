@@ -13,6 +13,8 @@ ARC-DEV-3379: `package mac --profiling` builds the profiling package for the own
 the same commit and the same precompiled game code, exported with the debug template (so the Godot editor's remote
 debugger can attach) and the get-task-allow entitlement (so Instruments needs no password), under its own app name,
 bundle id and user folder, into `artifacts/packages/macos-profiling/`. The player package is not touched.
+ARC-DEV-3478: no other package run rebuilds it, so a player package run (and `./arcanum daily`) ends with a WARNING and the
+rebuild command when the installed profiling package is behind the commit it packaged.
 """
 from __future__ import annotations
 
@@ -419,6 +421,46 @@ def package(platform: Platform, *, root: Path, output: Path, ref: str, fetch: bo
 
 def main_checkout(root: Path = ROOT) -> Path:
     return Path(git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")).parent
+
+
+def built_commit(folder: Path) -> str | None:
+    """The commit in a package folder's BUILD.txt, or None when there is no readable one."""
+    try:
+        text = (folder / "BUILD.txt").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    found = re.search(r"^commit ([0-9a-f]{40})$", text, re.MULTILINE)
+    return found.group(1) if found else None
+
+
+def stale_profiling(root: Path, output: Path, commit: str) -> str | None:
+    """ARC-DEV-3478: what a package run of `commit` says when the installed profiling package holds neither that commit
+    nor a later one that contains it; None when it does, or when none is installed."""
+    folder = output / PROFILING.folder
+    if not (folder / PROFILING.installed).is_dir():
+        return None
+    held = built_commit(folder)
+    if held == commit:
+        return None
+    if held is not None:
+        try:
+            git(root, "merge-base", "--is-ancestor", commit, held)
+            return None  # it is newer than the packaged commit
+        except PackageError:
+            pass  # older, another branch's, or a commit this repository no longer has
+    return (f"WARNING the profiling package is out of date: it holds {f'main {held[:10]}' if held else 'an unknown commit'}, "
+            f"not the packaged {commit[:10]}; before measuring rebuild it: ./arcanum package mac --profiling")
+
+
+def stale_profiling_after(checkout: Path, platform: Platform) -> str | None:
+    """`stale_profiling` after a player package run from `checkout`, for the commit that run installed (its BUILD.txt)."""
+    try:
+        root = main_checkout(checkout)
+        output = root / "artifacts" / "packages"
+        commit = built_commit(output / platform.folder)
+        return stale_profiling(root, output, commit) if commit else None
+    except (OSError, PackageError):  # a note only: it never turns an installed package into a failed run
+        return None
 
 
 PROFILING_HELP = ("mac only (ARC-DEV-3379): the profiling package for Instruments and the Godot remote debugger, a debug export "
