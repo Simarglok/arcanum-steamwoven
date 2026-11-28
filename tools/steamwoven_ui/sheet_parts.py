@@ -254,46 +254,46 @@ def smooth_pieces(label: list[list[int]]) -> list[list[int]]:
     return out
 
 
-def shadow_profile(light: list[list[float]], dist: list[list[float]], owner: list[list[int]], sy: list[list[int]], sx: list[list[int]], target: int) -> list[list[float]]:
+def shadow_profile(light: list[list[float]], dist: list[list[float]], owner: list[list[int]], sy: list[list[int]], sx: list[list[int]], target: int, reach: int = REACH, reference: tuple[int, int] = REFERENCE) -> list[list[float]]:
     """(A part whose box touches the frame edge, the ruler's right edge and bottom, has no reference ring there: those sectors take the median of all sectors.) The shadow's alpha by (sector, distance px): the median luma of the bin against the median of the unshadowed ring beyond, smoothed, flat toward the rim, non-increasing outward, under a floor cleared, tapered at the reach."""
     height, width = len(light), len(light[0])
-    bins = [[[] for _ in range(REACH + 1)] for _ in range(SECTORS)]
+    bins = [[[] for _ in range(reach + 1)] for _ in range(SECTORS)]
     rings: list[list[float]] = [[] for _ in range(SECTORS)]
     for y in range(height):
         for x in range(width):
             if owner[y][x] != target:
                 continue
             d = dist[y][x]
-            if d < 0.5 or d >= REFERENCE[1]:
+            if d < 0.5 or d >= reference[1]:
                 continue
             angle = math.atan2(y - sy[y][x], x - sx[y][x]) % (2 * math.pi)
             sector = int(angle / (2 * math.pi) * SECTORS) % SECTORS
-            if d <= REACH + 0.5:
+            if d <= reach + 0.5:
                 bins[sector][int(round(d))].append(light[y][x])
-            elif d >= REFERENCE[0]:
+            elif d >= reference[0]:
                 rings[sector].append(light[y][x])
     everything_ring = [v for ring in rings for v in ring]
     if len(everything_ring) < MIN_BIN:
         raise ValueError("no ring of unshadowed wood beyond the part: the read box is too small")
     general_ring = median(everything_ring)
-    general = [median([v for s in range(SECTORS) for v in bins[s][d]]) if any(bins[s][d] for s in range(SECTORS)) else general_ring for d in range(REACH + 1)]
+    general = [median([v for s in range(SECTORS) for v in bins[s][d]]) if any(bins[s][d] for s in range(SECTORS)) else general_ring for d in range(reach + 1)]
     profile = []
     for sector in range(SECTORS):
         ground = median(rings[sector]) if len(rings[sector]) >= MIN_BIN * 4 else general_ring
-        raw = [0.0] * (REACH + 1)
-        for d in range(1, REACH + 1):
+        raw = [0.0] * (reach + 1)
+        for d in range(1, reach + 1):
             tone = median(bins[sector][d]) if len(bins[sector][d]) >= MIN_BIN else general[d]
             raw[d] = min(max(1.0 - tone / max(ground, 1.0), 0.0), 1.0)
         smooth = raw[:]
-        for d in range(1, REACH + 1):
-            smooth[d] = 0.25 * raw[max(d - 1, 1)] + 0.5 * raw[d] + 0.25 * raw[min(d + 1, REACH)]
-        peak = max(range(1, min(REACH, 9) + 1), key=lambda i: smooth[i])
+        for d in range(1, reach + 1):
+            smooth[d] = 0.25 * raw[max(d - 1, 1)] + 0.5 * raw[d] + 0.25 * raw[min(d + 1, reach)]
+        peak = max(range(1, min(reach, 9) + 1), key=lambda i: smooth[i])
         for d in range(1, peak):  # the rim's own edge blur makes the nearest bins read light: flat toward the rim
             smooth[d] = smooth[peak]
-        for d in range(peak + 1, REACH + 1):  # non-increasing outward
+        for d in range(peak + 1, reach + 1):  # non-increasing outward
             smooth[d] = min(smooth[d], smooth[d - 1])
-        for d in range(1, REACH + 1):
-            taper = min(max((REACH - d) / 4.0, 0.0), 1.0)
+        for d in range(1, reach + 1):
+            taper = min(max((reach - d) / 4.0, 0.0), 1.0)
             smooth[d] = smooth[d] * taper
             if smooth[d] < FLOOR:
                 smooth[d] = 0.0
@@ -303,24 +303,28 @@ def shadow_profile(light: list[list[float]], dist: list[list[float]], owner: lis
 
 def cut_solid(rgb: list[list[list[float]]], anchor: tuple[int, int], keep: tuple[float, float, float, float] | None = None) -> Solid:
     """`rgb` is the read box of the HD frame ([channel][y][x] floats, with unshadowed wood round the part); `anchor` a px inside the part; `keep` the part's own box (x0, y0, x1, y1) in px of the read box, the shadow fades out toward its edge."""
-    height, width = len(rgb[0]), len(rgb[0][0])
     label, target = find_part(rgb, anchor)
-    label = smooth_pieces(label)
+    return cut_labelled(rgb, smooth_pieces(label), target, keep)
+
+
+def cut_labelled(rgb: list[list[list[float]]], label: list[list[int]], target: int, keep: tuple[float, float, float, float] | None = None, reach: int = REACH) -> Solid:
+    """The cut of `cut_solid` for a part already found: `label` numbers the pieces of the read box (0 = wood) and `target` is the part's own; `window_parts.py` (ARC-UI-3474) finds its pieces its own ways."""
+    height, width = len(rgb[0]), len(rgb[0][0])
     dist, owner, sy, sx = nearest_piece(label)
     light = [[label_parts.luma(rgb[0][y][x], rgb[1][y][x], rgb[2][y][x]) for x in range(width)] for y in range(height)]
-    profile = shadow_profile(light, dist, owner, sy, sx, target)
+    profile = shadow_profile(light, dist, owner, sy, sx, target, reach, (reach + REFERENCE[0] - REACH, reach + REFERENCE[1] - REACH))
     core = [[label[y][x] == target for x in range(width)] for y in range(height)]
     soft = label_parts.blur([[1.0 if core[y][x] else 0.0 for x in range(width)] for y in range(height)], EDGE_SIGMA)
     shadow = [[0.0] * width for _ in range(height)]
     for y in range(height):
         for x in range(width):
             d = dist[y][x]
-            if owner[y][x] == target and 0.0 < d <= REACH + 0.5:
+            if owner[y][x] == target and 0.0 < d <= reach + 0.5:
                 t = (math.atan2(y - sy[y][x], x - sx[y][x]) % (2 * math.pi)) / (2 * math.pi) * SECTORS - 0.5
                 i0 = int(math.floor(t)) % SECTORS
                 frac = t - math.floor(t)
                 i1 = (i0 + 1) % SECTORS
-                k = min(int(round(d)), REACH)
+                k = min(int(round(d)), reach)
                 shadow[y][x] = profile[i0][k] * (1 - frac) + profile[i1][k] * frac
     shadow = label_parts.blur(shadow, SHADOW_SIGMA)
     if keep is not None:

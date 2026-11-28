@@ -1,4 +1,4 @@
-"""ARC-UI-3098: the rule-drawn fixtures of the kit: sizes, determinism, the manifest, the drawn shapes (no original pixel anywhere)."""
+"""ARC-UI-3098: the fixtures of the kit: sizes, the manifest, and the one drawn by rule, the item grids' cell well (no original pixel anywhere). The cut ones have their cutters' tests."""
 from __future__ import annotations
 
 import tempfile
@@ -15,7 +15,7 @@ class FixtureTests(unittest.TestCase):
     def test_sizes_are_the_census_rule(self) -> None:
         for units in (17, 32, 61, 324, 388, 506):
             self.assertEqual(fixtures.snap(units), kit_check.snap(units))
-        self.assertEqual(BY("fixture.pack_pit").master, (1164, 1398))
+        self.assertEqual(BY("fixture.pack_pit").master, (1194, 1428))
         self.assertEqual(BY("grid.inventory_cells").master, (114, 114))
 
     def test_every_fixture_is_a_placed_part_of_the_manifest(self) -> None:
@@ -29,36 +29,15 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(manifest["fixture.mt_ruler"]["kind"], "fixture")
 
     def test_the_manifest_rows_come_from_the_table(self) -> None:
-        self.assertEqual(build_kit.fixture_part(BY("fixture.count_pit"))["size"], [222, 60])
+        self.assertEqual(build_kit.fixture_part(BY("fixture.count_pit"))["size"], [228, 72])
 
-    def test_drawing_is_deterministic_and_draws(self) -> None:
-        for variant in fixtures.VARIANTS:
-            for fixture in (f for f in fixtures.FIXTURES if not f.cut):
-                first = fixtures.draw(fixture.ident, variant)
-                self.assertEqual((first.w, first.h), fixture.master, fixture.ident)
-                self.assertTrue(any(first.data[3::4]), f"{fixture.ident} {variant}: nothing drawn")
-                self.assertEqual(first.data, fixtures.draw(fixture.ident, variant).data, f"{fixture.ident} {variant}: not deterministic")
-
-    def test_brass_is_the_default_look(self) -> None:
-        self.assertEqual(fixtures.draw("fixture.count_pit").data, fixtures.draw("fixture.count_pit", "brass").data)
-        self.assertNotEqual(fixtures.draw("fixture.count_pit").data, fixtures.draw("fixture.count_pit", "flat").data)
-
-    def test_the_two_looks_differ_in_the_trim_only(self) -> None:
-        flat, brass = fixtures.draw("fixture.name_pit", "flat"), fixtures.draw("fixture.name_pit", "brass")
-        self.assertNotEqual(flat.data, brass.data)
-        centre = (flat.h // 2 * flat.w + flat.w // 2) * 4
-        self.assertEqual(flat.data[centre:centre + 4], brass.data[centre:centre + 4], "the pit's black is the same")
-        self.assertEqual(flat.pixel(0, 0)[3], 255)
-
-    def test_shapes_sit_where_the_original_has_them(self) -> None:
-        corner = fixtures.draw("fixture.weapon_frame")
-        self.assertEqual(corner.pixel(corner.w - 1, 2)[3], 0, "the quarter frame leaves its far top corner clear")
-        for ident, across in (("fixture.weapon_frame", 0.35), ("fixture.shield_frame", 0.65)):
-            frame = fixtures.draw(ident)
-            ground = frame.pixel(round(frame.w * across), round(frame.h * 0.65))
-            self.assertEqual(tuple(ground), (0, 0, 0, 255), f"{ident}: the ground under the picture is the original's black")
-        sheet = fixtures.draw("grid.schematic")
-        self.assertEqual(sheet.pixel(5, 5)[3], 0, "the ruling leaves the paper clear between its lines")
+    def test_only_the_cell_well_is_drawn_by_rule(self) -> None:
+        self.assertEqual([f.ident for f in fixtures.FIXTURES if not f.cut], ["grid.inventory_cells"])
+        first = fixtures.draw("grid.inventory_cells")
+        self.assertEqual((first.w, first.h), BY("grid.inventory_cells").master)
+        self.assertEqual(first.data, fixtures.draw("grid.inventory_cells").data, "not deterministic")
+        with self.assertRaises(KeyError):
+            fixtures.draw("fixture.pack_pit")
 
     def test_the_item_grids_lines_lie_where_the_original_has_them(self) -> None:
         """ARC-UI-3342: the original's lines are one unit wide on the last column and row of units of a cell, and none lies before a grid's first cell."""
@@ -69,20 +48,6 @@ class FixtureTests(unittest.TestCase):
             self.assertEqual(len(centres), 1, centres)
             self.assertAlmostEqual(centres[0], 31.5, delta=0.1)
         self.assertEqual(cell.pixel(cell.w // 2, cell.h // 2), (0, 0, 0, 255), "the original's black ground")
-        # The grid pits share that ground, draw no line round the grid, and their trim hugs the grid's visible units with nothing outside it.
-        for ident, (x, y, w, h) in fixtures.GRID_PITS.items():
-            for variant in fixtures.VARIANTS:
-                pit, part = fixtures.draw(ident, variant), BY(ident)
-                x0, y0 = round(x * pit.w / part.width), round(y * pit.h / part.height)
-                x1, y1 = round((x + w) * pit.w / part.width), round((y + h) * pit.h / part.height)
-                mx, my = (x0 + x1) // 2, (y0 + y1) // 2
-                ground = (0, 0, 0, 255)
-                self.assertTrue(all(pit.pixel(i, my) == ground for i in range(x0, x1)) and all(pit.pixel(mx, i) == ground for i in range(y0, y1)), f"{ident} {variant}: the ground")
-                for beside in (pit.pixel(x0 - 1, my), pit.pixel(x1, my), pit.pixel(mx, y0 - 1), pit.pixel(mx, y1)):
-                    self.assertTrue(beside[3] == 255 and beside != ground, f"{ident} {variant}: the trim touches the grid ({beside})")
-                self.assertEqual(pit.pixel(0, 0)[3], 0, f"{ident} {variant}: clear outside the trim")
-        self.assertEqual(fixtures.GRID_PITS["fixture.doll_pit"], (5, 7, 319, 287), "the doll's frame stands on its grid's last unit")
-
     def test_every_grid_s_lines_meet_the_original_s(self) -> None:
         """ARC-UI-3342: the cell well laid as the viewer lays it gives the first and last grey line of the original's art, per grid, read from the player's arts 221, 223, 234 and 235 (numbers only)."""
         cell = fixtures.draw("grid.inventory_cells")
@@ -98,12 +63,12 @@ class FixtureTests(unittest.TestCase):
                 for ours, theirs in zip(laid, original):
                     self.assertAlmostEqual(ours, theirs, delta=0.1, msg=name)
 
-    def test_build_writes_the_masters(self) -> None:
+    def test_build_writes_the_masters_it_draws(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
-            written = fixtures.build(Path(folder), "flat", {"fixture.count_pit", "grid.inventory_cells"})
-            self.assertEqual(sorted(written), ["fixture.count_pit", "grid.inventory_cells"])
-            image = pngio.read(Path(folder) / "fixture.count_pit.png")
-            self.assertEqual((image.w, image.h), BY("fixture.count_pit").master)
+            written = fixtures.build(Path(folder), {"fixture.count_pit", "grid.inventory_cells"})
+            self.assertEqual(written, ["grid.inventory_cells"], "a cut part is its cutter's to write")
+            image = pngio.read(Path(folder) / "grid.inventory_cells.png")
+            self.assertEqual((image.w, image.h), BY("grid.inventory_cells").master)
 
 
 def BY(ident: str) -> fixtures.Fixture:
