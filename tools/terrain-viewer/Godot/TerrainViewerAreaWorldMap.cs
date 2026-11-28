@@ -84,12 +84,12 @@ public partial class TerrainViewerApp
         // A source the background open finished but nothing adopted is dropped with its stack otherwise.
         _townMapSource ??= _townMapTask is { IsCompletedSuccessfully: true } done ? done.Result : null;
         _townMapSource?.Dispose(); _townMapSource = null;
-        _townMapTask = SelfTestBootstrap || module is null ? null : Task.Run(() =>
+        _townMapTask = SelfTestBootstrap || module is null ? null : ViewerEngineTeardown.Work.Track(Task.Run(() =>
         {
             var source = AreaTownMapSource.Open(module, out var detail);
             GD.Print($"ARC-UI-084 town maps {(source is null ? "not read: " : "read: ")}{detail}");
             return source;
-        });
+        }));
     }
 
     /// <summary>The town-map files once their background open is done (null before, and when they did not open).</summary>
