@@ -79,7 +79,7 @@ public partial class TerrainViewerApp
                 _warmKey = (pack, enabled);
                 (_warmBuilt, _warmBuildMilliseconds, _warmSlices, _warmSliceMilliseconds, _warmSliceWorstMilliseconds) = (false, 0, 0, 0, 0);
                 var (slots, step) = (_windowArtSlots!, _warmStep);
-                _warmTask = Task.Run(() => WarmWorker(slots, step, enabled ? pack : null));
+                _warmTask = ViewerEngineTeardown.Work.Track(Task.Run(() => WarmWorker(slots, step, enabled ? pack : null)));
                 return;
             }
             if (!_warmTask.IsCompleted) return;

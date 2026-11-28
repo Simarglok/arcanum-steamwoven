@@ -1390,6 +1390,8 @@ public partial class TerrainViewerApp : Node
         // ARC-DEV-032: the main app (not a self-test's child) removes the automated run's own folder after its last save.
         if (!SelfTestBootstrap) ViewerAutomatedStorage.Delete();
         if (!SelfTestBootstrap) BugReportLogger.Remove();
+        // ARC-DEV-3304: last, after everything above let go of its engine objects.
+        if (!SelfTestBootstrap) ViewerEngineTeardown.Run();
     }
 }
 
