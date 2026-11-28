@@ -145,6 +145,9 @@ public partial class TerrainViewerApp
             Require(HeroRunsHost()?.WalkRun is null, "no walk is left before the stun");
             // The stun nodes run over the AI host's ports (the host is off in automated runs unless asked for): it is on for this part and off again after.
             _aiForSmoke = true;
+            // ARC-COMBAT-3482: a played stun's length follows the critter's constitution (its plays) and its ART, so the waits are bounded by both, not by a fixed count of 50-unit ticks.
+            // Each play is at most one step per frame and one to restart; a frame's delay is 1000/fps ms, at 8 animation units each.
+            static int StunTickLimit(int plays, int frames, int framesPerSecond) => 100 + Math.Max(plays, 1) * (frames + 1) * (8000 / (Math.Max(framesPerSecond, 1) * 50) + 1);
             for (var i = 0; i < 4; i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
             Require(_aiHost is not null, "the AI host is built for the stun's nodes");
             // ARC-COMBAT-1865: the hero's stun that plays out and the deaths of its dying goal, as local steps run for the hero's own body and again for a hero in a monster body (<paramref name="label"/> names the body in the output and the captures).
@@ -154,7 +157,8 @@ public partial class TerrainViewerApp
                 Require(stunLands.Outcome?.Events.HasFlag(LifeEvents.Stunned) == true && HeroRunsHost()?.StunRun is not null, $"the second stun started its goal: {stunLands.Disposition} {stunLands.Failure}");
                 var stunFramesDrawn = new HashSet<int>(); var stunTicks = 0;
                 var stunPlays = HeroRunsHost()!.StunRun!.Bottom.Count;
-                for (var i = 0; i < 1200 && HeroRunsHost()?.StunRun is not null; i++, stunTicks++)
+                var stunLimit = StunTickLimit(stunPlays, bodyProfile.Stunned?.FramesPerGroup ?? 0, bodyProfile.Stunned?.RawFramesPerSecond ?? 0);
+                for (var i = 0; i < stunLimit && HeroRunsHost()?.StunRun is not null; i++, stunTicks++)
                 {
                     Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector());
                     if (_readyActor is { Action: ActorDiagnosticAction.Stunned } stunDrawn) stunFramesDrawn.Add(stunDrawn.Frame);
@@ -169,7 +173,7 @@ public partial class TerrainViewerApp
                 }
                 Frame();
                 Require(HeroRunsHost()?.StunRun is null && session.QueryHeroLife()!.Status.IsActive && _worldActor.DownPose is null,
-                    $"the stun ended: the goal is gone, the bit is clear and the hero stands again (run {HeroRunsHost()?.StunRun is not null}, active {session.QueryHeroLife()!.Status.IsActive}, pose {_worldActor.DownPose})");
+                    $"the stun ended: the goal is gone, the bit is clear and the hero stands again (run {HeroRunsHost()?.StunRun is not null}, active {session.QueryHeroLife()!.Status.IsActive}, pose {_worldActor.DownPose}, ticks {stunTicks} of {stunLimit}, plays {stunPlays})");
                 GD.Print($"ARC-COMBAT-1741 hero stun lasted {label} ticks={stunTicks} frames={stunFramesDrawn.Count} plays={stunPlays} art={(bodyProfile.Stunned is null ? "none" : $"{bodyProfile.Stunned.FramesPerGroup}f@{bodyProfile.Stunned.RawFramesPerSecond}")}");
             }
             await HeroStunPlays(profile, "");
@@ -191,7 +195,9 @@ public partial class TerrainViewerApp
                 var npcLands = session.ApplyDamage(session.Version, npcTarget, new LifeDamage { Effects = CriticalHitEffects.Stun });
                 Require(npcLands.Outcome?.Events.HasFlag(LifeEvents.Stunned) == true, $"the NPC's stun landed: {npcLands.Disposition} {npcLands.Failure}");
                 var npcFrames = new HashSet<int>(); var npcTicks = 0; var npcSeen = false; var npcDrawn = false;
-                for (var i = 0; i < 1500; i++, npcTicks++)
+                // The NPC's plays are at most 10 (constitution 0).
+                var npcLimit = StunTickLimit(10, npcClip?.Frames ?? 0, npcClip?.FramesPerSecond ?? 0);
+                for (var i = 0; i < npcLimit; i++, npcTicks++)
                 {
                     Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector());
                     SyncAreaCombatBodies();
@@ -202,7 +208,7 @@ public partial class TerrainViewerApp
                     Require(npcSeen && npcFrames.Count > 1 && npcDrawn, $"the NPC's stun played {npcFrames.Count} frames over {npcTicks} ticks and was drawn as a pose ({npcDrawn})");
                 else Require(!npcSeen, "an NPC with no stunned ART shows none");
                 Frame();
-                Require(session.QueryLife(npcTarget).View?.Status.IsActive != false && _aiHost?.ArtOf(npc) is null, "the NPC's stun ended: its bit is clear and its art is back to standing");
+                Require(session.QueryLife(npcTarget).View?.Status.IsActive != false && _aiHost?.ArtOf(npc) is null, $"the NPC's stun ended: its bit is clear and its art is back to standing (ticks {npcTicks} of {npcLimit})");
                 GD.Print($"ARC-COMBAT-1741 npc stun lasted entity={npc} ticks={npcTicks} frames={npcFrames.Count} art={(npcClip is { } c ? $"{c.Frames}f@{c.FramesPerSecond}" : "none")}");
             }
             // ARC-DEV-189 (MIG13 S13c): a knock-down result leaves the hero conscious and it still falls: the session starts goal 62, which interrupts the walk, forces the fall and ends when it lies;
