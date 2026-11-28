@@ -9,8 +9,8 @@ namespace Arcanum.TerrainViewer;
 /// first), the selected save's details and preview, a description field (save mode), and Save/Load, Delete and Close buttons; a
 /// question (overwrite, delete) shows Yes and No. The app owns the state and rebuilds the window after every change.
 /// ARC-UI-062: with the game's art (<see cref="SetArt"/>) the window is drawn in the original's look (<see cref="AreaSaveListArtView"/>)
-/// and the description is typed into the new-save row; PROJECT: the selected save's details, a notice and the Yes/No question stand in
-/// the bottom strip's middle box (the original's common question box is not drawn here, F0). ARC-UI-067: the selected save's info
+/// and the description is typed into the new-save row; ARC-UI-3503: the bottom strip's middle box is the original's message window with
+/// the buttons' hints; PROJECT: a refusal's notice is written there too (a question is the original's dialog box). ARC-UI-067: the selected save's info
 /// display over the preview (its texts, its portrait from <see cref="PortraitSource"/>).
 /// </summary>
 public partial class AreaSaveListPanel : CanvasLayer
@@ -168,7 +168,8 @@ public partial class AreaSaveListPanel : CanvasLayer
     /// <summary>ARC-UI-3503: the pointer came over a button or the toggle (its hint's number) or left it (null).</summary>
     public event Action<int?>? HintRequested;
 
-    /// <summary>ARC-UI-3503: writes a button's hint to the message window; null: the pointer left, the window is blank again. A notice gives way to the hint.</summary>
+    /// <summary>ARC-UI-3503: writes a button's hint to the message window; null: the pointer left, the window is blank again. A notice gives way to the
+    /// hint until the next notice, which takes the window back (<see cref="ShowArtTexts"/>).</summary>
     public void ShowHint(AreaMessageEntry? hint, long now)
     {
         if (hint is null) _messageLog.ClearHover(); else _messageLog.Post(hint, now);
@@ -256,13 +257,19 @@ public partial class AreaSaveListPanel : CanvasLayer
         ResizePanel();
     }
 
-    /// <summary>The box's texts in the original's font: the notice (a refusal of the viewer's) while no hint shows; a question is the dialog box.</summary>
+    /// <summary>The box's texts in the original's font: a notice (a refusal of the viewer's) takes the box from the hint under the pointer, so it
+    /// is seen, until the pointer moves to another button or away; a question is the dialog box.</summary>
     private void ShowArtTexts(bool asking)
     {
         var notice = _notice.Text;
         var boxed = asking && _dialog.HasArt;
         if (boxed) _dialog.Show(notice, AreaDialogBoxKind.YesNo, AreaDialogBoxLayout.QuitPoint); else _dialog.Close();
         _noticeArt.SetText(boxed ? "" : notice, NoticeColour);
+        if (!boxed && notice.Length > 0)
+        {
+            _messageLog.ClearHover();
+            _noticeArt.Visible = true;
+        }
         _messageView.Render();
     }
 

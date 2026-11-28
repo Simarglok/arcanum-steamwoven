@@ -113,7 +113,10 @@ public partial class TerrainViewerApp
         if (picture == AreaLoadPicture.SavedGameText) EnsureSaveLoadingText();
         // The frame is read before the screen goes up, so it holds the window the load was chosen in.
         if (picture == AreaLoadPicture.FrozenWindow)
-            TransitionPanel().SetStill(DisplayServer.GetName() == "headless" ? null : GetViewport().GetTexture()?.GetImage());
+        {
+            using var frame = DisplayServer.GetName() == "headless" ? null : GetViewport().GetTexture()?.GetImage();
+            TransitionPanel().SetStill(frame);
+        }
         _transitionLoads++;
         _transitionScreen.BeginLoad(picture);
         DrawTransitionScreen();

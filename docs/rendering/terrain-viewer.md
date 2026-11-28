@@ -2077,11 +2077,10 @@ window's frame, buttons and list are the original's with the game's art (below),
   scroll top (Up/Down keep the selected row shown, the wheel over the list scrolls, a press on a row selects it; no double press),
   each the save's description, "..." when too wide, the selected one gold; the save window's first row "New" (MainMenu.mes 5055) or
   the description being typed into it (only spaces: "New"; a description wider than the row shows its start and "...", and
-  characters the font lacks are not drawn, though they are saved). PROJECT: the selected save's details, a notice and the Yes/No
-  question stand in the bottom strip's middle box (a question without the details), and while a question is open the art buttons,
-  the toggle and the rows do nothing. (ARC-UI-3503 moved the details out of the box, below.) Not drawn yet: the live view in the lens ([#3510](https://github.com/Simarglok/arcanum-steamwoven/issues/3510)) and the scroll bar ([#3511](https://github.com/Simarglok/arcanum-steamwoven/issues/3511)). The synthetic self-tests (no game folder) keep the
+  characters the font lacks are not drawn, though they are saved). PROJECT: a notice of the viewer's stands in the bottom strip's
+  middle box, and while a question (the dialog box) is open the art buttons, the toggle and the rows do nothing. Not drawn yet: the live view in the lens ([#3510](https://github.com/Simarglok/arcanum-steamwoven/issues/3510)) and the scroll bar ([#3511](https://github.com/Simarglok/arcanum-steamwoven/issues/3511)). The synthetic self-tests (no game folder) keep the
   diagnostic window. The menu stage (`ARC-UI-062 native-smoke save window art PASS`, Load Game from the single-player window with
-  the F7 auto-save listed and its details in the box, a press on its row selecting it, Previous Screen clicked back to the menu) and the scene stage (the in-play Save Game window, row "New") check it:
+  the F7 auto-save listed and its hints in the message window, a press on its row selecting it, Previous Screen clicked back to the menu) and the scene stage (the in-play Save Game window, row "New") check it:
   the art read, the rows as drawn, the selected row shown, the pointer lighting the confirm button; `ARC_AREA_SAVE_CAPTURE=PATH`
   saves each window's picture to an ignored path (`-load` / `-save` added to the name).
 - **Picture and info (ARC-UI-067,** [ledger MW22–MW25](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): the selected
@@ -2101,9 +2100,9 @@ window's frame, buttons and list are the original's with the game's art (below),
   bottom message window (art 354 at the screen's (196, 492)) stands on the bottom strip. The pointer over Load or Save, Previous Screen,
   Delete or the info toggle writes `MainMenu.mes` 6999 ("Action:") and the button's hint there with the hover icon, and leaving blanks
   it; the window opens blank. The viewer's own details line is gone (the preview shows them, as the original's); a refusal of the
-  viewer's is written in the same box while no hint shows (PROJECT), and a question is the dialog box. With no game text no hint is
-  written. The menu stage checks the confirm button's and the toggle's hints (`ARC_AREA_SAVE_CAPTURE` adds `-load-hint` or
-  `-save-hint`).
+  viewer's is written in the same box and takes it from the hint until the pointer moves to another button or away (PROJECT), and a question is the dialog box. With no game text no hint is
+  written. The menu stage checks the confirm button's and the toggle's hints (`ARC_AREA_SAVE_CAPTURE` adds `-Load-hint` or
+  `-Save-hint`).
 - **While a load runs (ARC-UI-3503,** [ledger LS5, LS6](../research/ledger/world.md#load-screen-and-transition-presentation-arc-dev-204)):
   a load chosen in the load window, from the main menu or from play, keeps the window's last frame on screen, the hint of a pressed
   button included, with the clock over it until the load ends (the viewer keeps a picture of that frame; headless runs have none and

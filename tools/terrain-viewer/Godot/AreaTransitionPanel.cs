@@ -58,7 +58,15 @@ public partial class AreaTransitionPanel : CanvasLayer
     }
 
     /// <summary>ARC-UI-3503: the frame that stands while a load window's save loads; null (a headless run) leaves the screen black.</summary>
-    public void SetStill(Image? frame) => _still.Texture = frame is null || frame.IsEmpty() ? null : ImageTexture.CreateFromImage(frame);
+    public void SetStill(Image? frame) => ReplaceStill(frame is null || frame.IsEmpty() ? null : ImageTexture.CreateFromImage(frame));
+
+    // A window-sized texture: freed at once, the garbage collector does not see its native size.
+    private void ReplaceStill(Texture2D? next)
+    {
+        var old = _still.Texture;
+        _still.Texture = next;
+        old?.Dispose();
+    }
 
     /// <summary>ARC-UI-3503: gives the panel the saved game's loading line and its font (null: no line is drawn).</summary>
     public void SetLoadingText(AreaArtFontFace? face, string text) => _loadingText.SetContent(face, text);
@@ -79,7 +87,7 @@ public partial class AreaTransitionPanel : CanvasLayer
         var still = screen.Picture == AreaLoadPicture.FrozenWindow && _still.Texture is not null;
         _still.Visible = still;
         // The standing frame is let go with the load window's load.
-        if (screen.Picture != AreaLoadPicture.FrozenWindow) _still.Texture = null;
+        if (screen.Picture != AreaLoadPicture.FrozenWindow && _still.Texture is not null) ReplaceStill(null);
         var text = screen.Picture == AreaLoadPicture.SavedGameText;
         // Fitted on every draw: the window may change size while the load runs.
         if (text) _loadingText.Fit(GetViewport().GetVisibleRect().Size);

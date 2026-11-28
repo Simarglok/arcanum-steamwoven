@@ -105,7 +105,7 @@ public partial class AreaSaveListArtView : Control
         if (_font is null) throw new InvalidOperationException("ARC-UI-062: the save window art is not set");
         var opened = !Visible;
         // MW25: the toggle is made anew (up) with the window; the info display keeps its state.
-        if (opened) { _top = 0; _hovered = null; _pressed = null; _toggleDown = false; }
+        if (opened) { _top = 0; _hovered = null; _overToggle = false; _pressed = null; _toggleDown = false; }
         var follow = opened || selected != _selected;
         (_mode, _rows, _selected, _preview, _blocked, _info, _portrait, _unread) = (mode, rows, selected, preview, blocked, info, portrait, unread);
         if (blocked) _pressed = null;
@@ -126,6 +126,7 @@ public partial class AreaSaveListArtView : Control
     {
         Visible = false;
         (_hovered, _pressed, _preview, _portrait, _info) = (null, null, null, null, null);
+        _overToggle = false;
         _kit.Release();
         _ownBackdropDrawn = [];
     }
@@ -311,8 +312,13 @@ public partial class AreaSaveListArtView : Control
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } button:
                 var at = ButtonAt(button.Position);
                 if (_blocked) { AcceptEvent(); break; }
-                // The press lights what is under it even when the pointer did not move since the opening (GB3: down over it).
-                _hovered = at;
+                // The press lights what is under it even when the pointer did not move since the opening (GB3: down over it), and writes its hint.
+                var pressedToggle = ToggleAt(button.Position);
+                if (at != _hovered || pressedToggle != _overToggle)
+                {
+                    (_hovered, _overToggle) = (at, pressedToggle);
+                    HintChanged?.Invoke(HintAt(at, pressedToggle));
+                }
                 // MW25: a press on the toggle turns it on (the info hidden, 3000) or off (shown again, 3001); its release does nothing.
                 if (button.Pressed && at is null && _pressed is null && ToggleAt(button.Position))
                 {

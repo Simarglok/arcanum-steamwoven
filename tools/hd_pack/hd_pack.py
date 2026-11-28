@@ -1063,7 +1063,8 @@ def cmd_fonts_plan(a) -> int:
     arts = None
     if a.art:
         try:
-            arts = {int(x) for x in a.art.split(",")}
+            # `tig` names the default font of tig.dat, which hd_font writes as art number 0 (ARC-UI-3503).
+            arts = {0 if x.strip().lower() == "tig" else int(x) for x in a.art.split(",")}
         except ValueError as e:
             raise PackError(f"--art {a.art!r} is not a comma list of numbers") from e
     plan, counts = font_plan(fonts, real, a.pack_id, arts)

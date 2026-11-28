@@ -139,6 +139,14 @@ public partial class TerrainViewerApp
             Require(_saveListPanel.HintForSelfTest == "Action:\nLoad Game" && !_saveListPanel.NoticeArtForSelfTest.Visible, "the hint shows: " + _saveListPanel.HintForSelfTest);
             _saveListPanel.ShowHint(null, MessageLogNow);
             Require(_saveListPanel.HintForSelfTest.Length == 0 && _saveListPanel.NoticeArtForSelfTest.Visible, "leaving blanks the box: " + _saveListPanel.HintForSelfTest);
+            // A notice that comes while a hint shows takes the box, so a refusal under the pointer is seen.
+            _saveListPanel.ShowHint(AreaMessageEntry.Text(AreaMessageKind.Hover, "Action:\nDelete Save Game"), MessageLogNow);
+            _saveList.Refresh(_saveList.Entries, _saveList.SelectedEntry!.Name, "synthetic refusal");
+            _saveListPanel.Render(_saveList, SelectedPreview());
+            Require(_saveListPanel.NoticeArtForSelfTest.Visible && _saveListPanel.NoticeArtForSelfTest.Text == "synthetic refusal" && _saveListPanel.HintForSelfTest.Length == 0,
+                "a refusal shows over the hint: " + _saveListPanel.ArtNoticeForSelfTest + " | " + _saveListPanel.HintForSelfTest);
+            _saveList.Refresh(_saveList.Entries, _saveList.SelectedEntry!.Name, null);
+            _saveListPanel.Render(_saveList, SelectedPreview());
             InventoryKey(Key.Enter);
             Require(_saveList.Prompt == AreaSavePrompt.ConfirmOverwrite && _saveListPanel.DialogForSelfTest.Visible && _saveListPanel.DialogForSelfTest.TextForSelfTest.StartsWith("Overwrite", StringComparison.Ordinal)
                 && _saveListPanel.ArtNoticeForSelfTest == _saveListPanel.DialogForSelfTest.TextForSelfTest
