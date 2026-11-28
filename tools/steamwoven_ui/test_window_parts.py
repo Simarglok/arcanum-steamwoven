@@ -30,7 +30,13 @@ class WindowPartTests(unittest.TestCase):
     def test_the_table_s_notes_name_the_place_of_each_part(self) -> None:
         for part in window_parts.PARTS:
             x, y = part.place
-            self.assertRegex(fixtures.BY_ID[part.ident].note, rf"(at|and) {x}, {y}\b|at 725, 70 \+ 23 k" if part.ident != "fixture.pack_pit" else rf"at {x}, {y}\b", part.ident)
+            if part.ident == "fixture.count_pit":  # five of them, 23 units apart
+                pattern = rf"at {x}, {y} \+ 23 k"
+            elif part.ident == "fixture.pack_pit":
+                pattern = rf"at {x}, {y}\b"
+            else:
+                pattern = rf"(at|and) {x}, {y}\b"
+            self.assertRegex(fixtures.BY_ID[part.ident].note, pattern, part.ident)
 
     def test_the_viewer_draws_each_part_at_the_corner_of_its_cut(self) -> None:
         source = STAND_INS.read_text(encoding="utf-8")

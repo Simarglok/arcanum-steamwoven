@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 try:
@@ -69,6 +69,7 @@ class WindowPart:
     holes: tuple[Polygon, ...] = ()  # "shapes": the wood seen through the part
     ground: bool = False  # near-black pixels of the part become pure black
     reach: int = sheet_parts.REACH  # HD px the cast shadow is measured and drawn out to (the gears' wide soft shadow reaches further)
+    clear: tuple[tuple[int, int, int, int], ...] = ()  # boxes (x0, y0, x1, y1) in HD px of the frame left see-through: a neighbour's pixels the find takes with the part
 
     @property
     def place(self) -> tuple[int, int]:
@@ -121,7 +122,7 @@ PARTS: tuple[WindowPart, ...] = (
     WindowPart("fixture.count_icons", 221, 332, 67, 38, 118, 358, "shapes", shapes=COUNT_SIGNS, holes=COUNT_HOLES),
     WindowPart("fixture.arrange_legend", 221, 333, 193, 68, 34, 358, "shapes", shapes=LEGEND_SHAPES),
     WindowPart("fixture.name_pit", 223, 113, 21, 245, 66, 0, "brass", anchor=(230, 50)),
-    WindowPart("fixture.doll_pit", 223, 8, 101, 350, 299, 0, "brass", anchor=(180, 200), ground=True),
+    WindowPart("fixture.doll_pit", 223, 8, 101, 350, 299, 0, "brass", anchor=(180, 200), ground=True, clear=((165, 404, 465, 415),)),  # the foot of the round view's ring over the top rim
     WindowPart("fixture.weapon_frame", 223, 21, 311, 101, 89, 0, "brass", anchor=(50, 370)),
     WindowPart("fixture.shield_frame", 223, 246, 311, 101, 89, 0, "brass", anchor=(310, 370)),
     WindowPart("fixture.holder_pit_loot", 234, 2, 130, 354, 270, 0, "rect", rect=(19, 532, 1403, 1586), ground=True),
@@ -211,7 +212,7 @@ def build_part(frame: pngio.Image, part: WindowPart) -> pngio.Image:
         for x in range(max(-ox, 0), min(px_w, solid.width - ox)):
             sx, sy = ox + x, oy + y
             a = solid.alpha[sy][sx]
-            if a <= 0.0:
+            if a <= 0.0 or any(cx0 <= x0 * HD + sx < cx1 and cy0 <= y0 * HD + sy < cy1 for cx0, cy0, cx1, cy1 in part.clear):
                 continue
             colour = [solid.rgb[c][sy][sx] for c in range(3)]
             if part.ground and solid.core[sy][sx] and label_parts.luma(*(read[c][sy][sx] for c in range(3))) < GROUND_LUMA:
@@ -290,6 +291,9 @@ def self_test() -> int:
         problems.append("the pit's ground is not pure black in the master")
     if build_part(flat, part).data != master.data:
         problems.append("the cut is not deterministic")
+    cleared = build_part(flat, replace(part, clear=((60, 80, 80, 100),)))
+    if cleared.data[(my * master.w + mx) * 4 + 3] != 0 or cleared.data == master.data:
+        problems.append("a clear box is not left see-through")
     mask = raster(20, 20, [((2.0, 2.0), (18.0, 2.0), (18.0, 18.0), (2.0, 18.0))], [((6.0, 6.0), (14.0, 6.0), (14.0, 14.0), (6.0, 14.0))])
     if not mask[3][3] or mask[10][10] or mask[0][0] or sum(map(sum, mask)) != 256 - 64:
         problems.append("the outline raster is wrong")
@@ -297,7 +301,7 @@ def self_test() -> int:
         print("WINDOW PARTS FAIL:", problem)
     if problems:
         return 1
-    print(f"WINDOW PARTS PASS: {len(PARTS)} parts, boxes inside their arts and fixture sizes, outline raster, see-through black, pit shadow and black ground, deterministic")
+    print(f"WINDOW PARTS PASS: {len(PARTS)} parts, boxes inside their arts and fixture sizes, outline raster, see-through black, pit shadow and black ground, clear box, deterministic")
     return 0
 
 
