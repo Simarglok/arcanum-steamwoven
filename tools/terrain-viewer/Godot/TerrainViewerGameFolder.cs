@@ -28,7 +28,7 @@ public partial class TerrainViewerApp
     private LauncherSettings _launcherSettings = LauncherSettings.Defaults;
     private LauncherPanel? _launcherPanel;
     private LauncherScreen? _launcher;
-    /// <summary>ARC-DEV-074: stops the running unpack (Cancel, Quit).</summary>
+    /// <summary>ARC-DEV-074: stops the running unpack or (ARC-DEV-3515) Steam copy (Cancel, Quit).</summary>
     private CancellationTokenSource? _installCancel;
     /// <summary>The self-test's stand-in for the unpacker (null result: no tool) instead of this machine's innoextract.</summary>
     private Func<GogInstallerUnpacker?>? _launcherUnpackerForSelfTest;
@@ -156,7 +156,8 @@ public partial class TerrainViewerApp
             _launcherPanel.HdPackRequested += LauncherHdPack;
             _launcherPanel.InstallRequested += LauncherInstallRequested;
             _launcherPanel.InstallChosen += (installer, target) => _ = LauncherInstallAsync(installer, target);
-            _launcherPanel.CancelInstallRequested += () => { GD.Print("ARC-DEV-074/069 cancel requested (installer unpack or game data)"); _installCancel?.Cancel(); };
+            _launcherPanel.CancelInstallRequested += () => { GD.Print("ARC-DEV-074/069 cancel requested (installer unpack, Steam copy or game data)"); _installCancel?.Cancel(); };
+            WireSteamInstall(_launcherPanel);
             _launcherPanel.PlayRequested += LauncherPlay;
             _launcherPanel.ResetRequested += () => LauncherChange(LauncherReset);
             _launcherPanel.QuitRequested += () => { GD.Print("ARC-UI-014 launcher quit"); _installCancel?.Cancel(); GetTree().Quit(); };

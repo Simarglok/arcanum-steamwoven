@@ -74,16 +74,29 @@ These steps follow Microsoft's documentation; they have not yet been tried with 
 
 ## 4. Point the game at your Arcanum files
 
-The game needs the folder of an installed GOG Arcanum: the folder that holds `Arcanum.exe`, `arcanum1.dat`,
+The game needs the folder of your own Arcanum (GOG or Steam): the folder that holds `Arcanum.exe`, `arcanum1.dat`,
 `arcanum2.dat` and `modules/Arcanum.dat`.
 
-**On Windows**, install Arcanum from GOG as usual (GOG Galaxy or the offline installer). The launcher looks, in this order,
+**From Steam** (Windows or Mac). Steam sells Arcanum for Windows only; its console can still download the files on a Mac.
+Start Steam and sign in to the account that owns the game. On the launcher screen press **Install from Steam…**, then:
+
+1. **Open the Steam console.** If no console tab appears, quit Steam and start it with the `-console` option (on a Mac:
+   `/Applications/Steam.app/Contents/MacOS/steam_osx -console` in Terminal).
+2. **Copy command**, paste `download_depot 500810 500811` into the console and press Enter. Steam downloads about 1.2 GB.
+3. When the console says `Depot download complete`, press **Import the download…** and pick a new or empty folder. The
+   launcher finds the download in Steam's folder (if Steam is installed in an unusual place, use **Choose the downloaded
+   folder…** with the path the console printed), copies it into your folder and chooses it.
+
+The launcher never asks for your Steam password. This route has not been tried with a real Steam download yet. The first
+**Play** may need the 1.0.7.4 `Arcanum.exe` (see below); if the Steam files carry another executable, the screen says so.
+
+**From GOG on Windows**, install Arcanum from GOG as usual (GOG Galaxy or the offline installer). The launcher looks, in this order,
 at the install folder GOG records in the registry (the GOG game key of Arcanum), then at `C:\GOG Games\Arcanum` (the
 offline installer's default) and `C:\Program Files (x86)\GOG Galaxy\Games\Arcanum` (GOG Galaxy's default). A game
 installed elsewhere is found through the registry; if it is not, press **Choose folder…** and pick the folder that holds
 `Arcanum.exe`. This detection has so far been tested only with synthetic folders, not on a Windows PC.
 
-**On a Mac**, GOG sells Arcanum for Windows only, so use one of these:
+**From GOG on a Mac**: GOG sells Arcanum for Windows only, so use one of these:
 
 - **A. Copy an installed game from Windows.** Install Arcanum from GOG on a Windows PC (GOG Galaxy or the offline
   installer; the default folder is `C:\GOG Games\Arcanum`) and copy that whole folder to the Mac as
