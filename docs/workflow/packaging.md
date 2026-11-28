@@ -196,6 +196,8 @@ Nothing else under `artifacts/packages` is written by `daily` itself, so the bug
   since a preset's icon would win. The icon macOS 27 reports for the `.app` (the one Finder shows) has a grey rounded
   tile, drawn by the system behind the transparent ground (other versions not checked;
   [#3468](https://github.com/Simarglok/arcanum-steamwoven/issues/3468)).
+  The copy is made by the builder of the running checkout, so a checkout from before ARC-DEV-3457 must be updated before
+  it packages a newer commit (`./arcanum daily` runs the packaged commit's own builder).
   Source runs, the endpoint exports and the start-up splash keep Godot's logo
   ([#3467](https://github.com/Simarglok/arcanum-steamwoven/issues/3467)).
 - **Build line**: the package step sets the MSBuild properties `ArcanumPackageCommit` and `ArcanumPackageDate` (as
