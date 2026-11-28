@@ -254,9 +254,11 @@ The session's plan carries each presentation step; the viewer's hosts answer the
   top-right corner, two pixels in, at the art's own frame rate (CP17: the original draws a frame per loading step; the viewer loads in the
   background). It goes when the map is there, or when the origin is loaded again after a failure. The Crash Site's cave swap loads nothing (both
   scenes are loaded), so it shows none.
-- **Load of a save (ARC-UI-1362, LS4).** A load of a save opens its map the same way, so the same screen shows: from the main menu's choice of a
-  save (Last Save, a row of the load window) before any map stands, until the save is in (the menu's wait note is gone), and for a quick load
-  (F8) or a load from the in-play menu that opens another map, until that map is there. A load that does not take (the save's map cannot be
+- **Load of a save (ARC-UI-1362, LS4; ARC-UI-3503, LS5 and LS6).** A load of a save raises the same screen and clock until the save is in.
+  What stands behind the clock follows the original's path: **Last Save** (the main menu) shows black with the line "Loading Save Game..."
+  in the original's font; a load chosen in the **load window**, from the main menu or in play, keeps that window's last frame (the original
+  fills nothing black on that path); a **quick load** (F8) shows black (what the original shows there is open,
+  [#3505](https://github.com/Simarglok/arcanum-steamwoven/issues/3505)). A load that does not take (the save's map cannot be
   found or does not load, a refusal after the map loaded) clears the screen and gives the menu or the running game back with the reason. A load of
   the map already shown (ARC-UI-1504) is one synchronous step of the viewer, so the screen is raised first and the load runs on a later frame,
   after the screen was drawn at least once (the player's loads only: F8, the load window, Last Save; the smokes, the death reload and a menu

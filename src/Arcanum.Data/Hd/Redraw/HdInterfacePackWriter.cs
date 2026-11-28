@@ -110,7 +110,9 @@ public static class HdInterfacePackWriter
                 if (!keys.Add((frame.Art.FileName.ToLowerInvariant(), frame.Frame))) return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, $"{frame.Art.FileName} frame {frame.Frame} is given twice");
                 var png = HdPng.EncodeRgba(frame.Width * scale, frame.Height * scale, frame.Rgba);
                 var sha = HdPackPath.Sha256(png);
-                var file = $"interface/{Sanitise(Path.GetFileNameWithoutExtension(frame.Art.FileName))}-f{frame.Frame}-{sha[..8]}.png";
+                // ARC-UI-3503: the default font of tig.dat shares its file name with an interface font; its frames are named apart.
+                var outside = HdInterfaceKey.IsOutsideInterfaceFolder(frame.Art.FileName) ? "tig-" : "";
+                var file = $"interface/{outside}{Sanitise(Path.GetFileNameWithoutExtension(frame.Art.FileName))}-f{frame.Frame}-{sha[..8]}.png";
                 var legacyRgba = frame.Art.Frames[frame.Frame].Rgba;
                 files.Add((file, png, new JsonObject
                 {

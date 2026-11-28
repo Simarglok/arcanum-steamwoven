@@ -13,6 +13,8 @@ public sealed class AreaMainMenuTexts
     /// <summary>A button's hotkey letter is its label's message + 10 (original window build, ledger MM3).</summary>
     public const int HotkeyOffset = 10;
     public const string MainMenuPath = "mes/MainMenu.mes";
+    /// <summary>ARC-UI-3503: the line of the load screen while a save chosen in the main menu loads (MM4, LS5).</summary>
+    public const int LoadingSaveGame = 5;
     /// <summary>ARC-UI-012: the question of the quit box (SF3).</summary>
     public const int QuitQuestion = 5100;
     /// <summary>ARC-UI-3120 (ledger MW32): the title line of every menu button's hover text (ledger MW32); the hint of a button is its table's hint number (7002, 7003, ...).</summary>
@@ -22,6 +24,7 @@ public sealed class AreaMainMenuTexts
     private const int MaxQuestion = 256;
     private static readonly IReadOnlyDictionary<int, string> ProjectText = WithSaveMessages(new Dictionary<int, string>
     {
+        [LoadingSaveGame] = "Loading Save Game...",
         [10] = "Single Player", [11] = "MultiPlayer", [12] = "Options", [13] = "Credits", [14] = "Exit Game",
         [20] = "S", [21] = "M", [22] = "O", [23] = "C", [24] = "E",
         [50] = "New Game", [51] = "Load Game", [52] = "Last Save", [53] = "View Intro", [54] = "Cancel",

@@ -88,13 +88,16 @@ def ensure_venv(argv: list[str]) -> None:
 
 # --- helpers -----------------------------------------------------------------------------------------------------------
 
-def parse_arts(text: str) -> list[int]:
+TIG_ART = "tig"  # ARC-UI-3503: --art tig traces the default font of tig.dat
+
+
+def parse_arts(text: str) -> list[int | str]:
     try:
-        numbers = [int(part) for part in text.split(",") if part.strip()]
+        numbers = [TIG_ART if part.strip().lower() == TIG_ART else int(part) for part in text.split(",") if part.strip()]
     except ValueError as error:
-        raise SystemExit(f"hd_font: --art must be a comma-separated list of interface ART numbers: {error}") from error
-    if not numbers or len(set(numbers)) != len(numbers) or any(number < 0 for number in numbers):
-        raise SystemExit("hd_font: --art needs one or more distinct non-negative numbers")
+        raise SystemExit(f"hd_font: --art must be a comma-separated list of interface ART numbers (or `{TIG_ART}`): {error}") from error
+    if not numbers or len(set(numbers)) != len(numbers) or any(isinstance(number, int) and number < 0 for number in numbers):
+        raise SystemExit("hd_font: --art needs one or more distinct non-negative numbers (or `tig`)")
     return numbers
 
 
@@ -135,7 +138,7 @@ def check_receipt(out: Path) -> None:
 
 def font_dir_name(number: int, file: str) -> str:
     stem = Path(file).stem.lower()
-    return f"{number}-{stem}"
+    return f"tig-{stem}" if "/" in file else f"{number}-{stem}"
 
 
 def sha256_hex(data: bytes) -> str:
@@ -158,7 +161,8 @@ def load_fonts(args: argparse.Namespace):
     game_dir = Path(args.game_dir or os.environ.get("ARCANUM_GAME_DIR") or DEFAULT_GAME_DIR).expanduser()
     try:
         content = artfont.Content(artfont.discover_sources(game_dir, args.module))
-        return [artfont.load_font(content, number) for number in parse_arts(args.art)], content
+        return [artfont.load_tig_font(content) if number == TIG_ART else artfont.load_font(content, number)
+                for number in parse_arts(args.art)], content
     except artfont.FontError as error:
         raise SystemExit(f"hd_font: {error}") from error
 
@@ -263,7 +267,7 @@ def build_parser() -> argparse.ArgumentParser:
     trace = commands.add_parser("trace", help="trace the player's interface fonts into 4x coverage frames under local/hd-font/")
     trace.add_argument("--out", required=True, help="output folder, under <checkout>/local/hd-font/; one sub-folder per font")
     trace.add_argument("--art", default=",".join(str(number) for number in DEFAULT_ARTS),
-                       help="comma-separated interface ART numbers (default: 27,229,171,327,840)")
+                       help="comma-separated interface ART numbers, `tig` for the default font of tig.dat (default: 27,229,171,327,840)")
     trace.add_argument("--game-dir", help=f"the player's game folder (default: $ARCANUM_GAME_DIR or {DEFAULT_GAME_DIR})")
     trace.add_argument("--module", default=DEFAULT_MODULE, help="module whose archive and patches are mounted (default: Arcanum)")
     trace.add_argument("--alpha-max", type=float, default=ALPHA_MAX_DEFAULT,

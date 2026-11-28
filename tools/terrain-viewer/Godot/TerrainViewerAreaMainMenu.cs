@@ -363,7 +363,7 @@ public partial class TerrainViewerApp
                 // ARC-DEV-387: no scene yet (the start map is not loaded): the save's own map loads and the save loads into it.
                 if (_menuAwaitsScene)
                 {
-                    if (BeginSaveSceneFlow(latest.Name, "Last save ") is { } lastRefused) { _mainMenu.Notice = lastRefused; break; }
+                    if (BeginSaveSceneFlow(latest.Name, "Last save ", AreaLoadPicture.SavedGameText) is { } lastRefused) { _mainMenu.Notice = lastRefused; break; }
                     ShowSaveLoadingMenu();
                     return;
                 }
@@ -373,7 +373,7 @@ public partial class TerrainViewerApp
                     if (ok) { EndMainMenu("last save " + latest.Name); return; }
                     if (_mainMenu is not { } menu) return;
                     menu.Notice = _quickSaveStatus; RenderMainMenu(); RefreshAreaStatus();
-                });
+                }, AreaLoadPicture.SavedGameText);
                 return;
             case AreaMenuCommandKind.ViewIntro:
                 // ARC-RENDER-1170 (0x5445F0): movies 1 and 7, then the window shows again; the menu stands under the movies.
@@ -1149,6 +1149,8 @@ public partial class TerrainViewerApp
             // ARC-DEV-387: a game saved here, then Last Save before any scene: the save's own map loads and the save into it.
             QuickKey(Key.F7);
             Require(_saveLibraryForSelfTest.AutoSlot.Exists, "F7 saved the game for the last-save check: " + _quickSaveStatus);
+            // ARC-UI-3503: the load window's load from the main menu shows the loading line too.
+            await ListLoadFromMenuForSmoke(Require, Choose, texts);
             await LastSaveBeforeSceneForSmoke(Require, Choose, texts);
         }
         finally

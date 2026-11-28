@@ -15,6 +15,17 @@ public enum AreaTransitionShade
     FadingIn,
 }
 
+/// <summary>ARC-UI-3503: what the load screen shows behind the clock.</summary>
+public enum AreaLoadPicture
+{
+    /// <summary>Black.</summary>
+    Black,
+    /// <summary>Black with the line that says a save is loading ("Last Save", ledger LS5).</summary>
+    SavedGameText,
+    /// <summary>The frame on screen when the load was chosen, standing still: the original's load window stays while its save loads (LS6).</summary>
+    FrozenWindow,
+}
+
 /// <summary>
 /// ARC-DEV-204 (B16, MIG11 presentation): the black screen of a change of place, as the original's request flags and its map load make it
 /// (ledger CP1, CP3, CP7, [CP17](../../../docs/architecture/change-of-place.md#the-b16-read-of-the-executable)). Godot-free; the panel
@@ -50,6 +61,9 @@ public sealed class AreaTransitionScreen
     /// <summary>True while a map load is shown (black with the indicator).</summary>
     public bool Loading { get; private set; }
 
+    /// <summary>ARC-UI-3503: what shows behind the clock, from the load's start until the screen is given back.</summary>
+    public AreaLoadPicture Picture { get; private set; }
+
     /// <summary>The time the indicator has run, in milliseconds.</summary>
     public double IndicatorMilliseconds { get; private set; }
 
@@ -78,6 +92,7 @@ public sealed class AreaTransitionScreen
     public void BeginFadeOut()
     {
         if (Shade == AreaTransitionShade.Black) return;
+        Picture = AreaLoadPicture.Black;
         // From a fade-in in progress the veil goes on from its own darkness, not from clear.
         _fadeElapsed = Shade == AreaTransitionShade.FadingIn ? Math.Clamp(1 - Alpha, 0, 1) * FadeMilliseconds : 0;
         Shade = AreaTransitionShade.FadingOut;
@@ -86,10 +101,12 @@ public sealed class AreaTransitionScreen
     /// <summary>Blacks the screen at once (request flag 0x20 of the local player's request, CP1).</summary>
     public void Blank() => Shade = AreaTransitionShade.Black;
 
-    /// <summary>Starts showing a map load: black with the clock, from the first frame of the clock.</summary>
-    public void BeginLoad()
+    /// <summary>Starts showing a map load: the clock over <paramref name="picture"/>, from the first frame of the clock. The picture lasts until
+    /// the screen is given back; a load that goes on while one shows (the saved map opening) and asks for plain black keeps it.</summary>
+    public void BeginLoad(AreaLoadPicture picture = AreaLoadPicture.Black)
     {
-        if (!Loading) IndicatorMilliseconds = 0;
+        if (!Loading) { IndicatorMilliseconds = 0; Picture = AreaLoadPicture.Black; }
+        if (picture != AreaLoadPicture.Black) Picture = picture;
         Loading = true;
         if (Shade != AreaTransitionShade.FadingOut) Shade = AreaTransitionShade.Black;
     }
@@ -101,6 +118,7 @@ public sealed class AreaTransitionScreen
     public void BeginFadeIn()
     {
         Loading = false;
+        Picture = AreaLoadPicture.Black;
         if (Shade == AreaTransitionShade.Clear) return;
         _fadeElapsed = 0;
         Shade = AreaTransitionShade.FadingIn;
@@ -110,6 +128,7 @@ public sealed class AreaTransitionScreen
     public void Release()
     {
         Loading = false;
+        Picture = AreaLoadPicture.Black;
         if (Shade == AreaTransitionShade.Black) Shade = AreaTransitionShade.Clear;
     }
 
@@ -117,6 +136,7 @@ public sealed class AreaTransitionScreen
     public void Clear()
     {
         Loading = false;
+        Picture = AreaLoadPicture.Black;
         Shade = AreaTransitionShade.Clear;
         _fadeElapsed = 0;
         IndicatorMilliseconds = 0;

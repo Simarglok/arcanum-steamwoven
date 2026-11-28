@@ -986,6 +986,7 @@ def cmd_stage(a) -> int:
 
 
 FONT_PLAN_KIND = "arcanum-steamwoven-hd-interface-plan"
+TIG_FONT_FILE = "art/morph15font.art"  # ARC-UI-3503: the one font named by its path (tig.dat's default font, hd_font --art tig)
 
 
 def font_plan(fonts: Path, out: Path, pack_id: str, arts: set[int] | None) -> tuple[dict, dict]:
@@ -1009,7 +1010,7 @@ def font_plan(fonts: Path, out: Path, pack_id: str, arts: set[int] | None) -> tu
             raise PackError(f"{folder}/font.json is not a hd_font font file")
         if arts is not None and number not in arts:
             continue
-        if "/" in file or "\\" in file or not file.lower().endswith(".art"):
+        if ("/" in file and file != TIG_FONT_FILE) or "\\" in file or not file.lower().endswith(".art"):
             raise PackError(f"{folder}/font.json: {file!r} is not an ART file name")
         scales.add(scale)
         images, tiles = [], []
@@ -1062,7 +1063,8 @@ def cmd_fonts_plan(a) -> int:
     arts = None
     if a.art:
         try:
-            arts = {int(x) for x in a.art.split(",")}
+            # `tig` names the default font of tig.dat, which hd_font writes as art number 0 (ARC-UI-3503).
+            arts = {0 if x.strip().lower() == "tig" else int(x) for x in a.art.split(",")}
         except ValueError as e:
             raise PackError(f"--art {a.art!r} is not a comma list of numbers") from e
     plan, counts = font_plan(fonts, real, a.pack_id, arts)

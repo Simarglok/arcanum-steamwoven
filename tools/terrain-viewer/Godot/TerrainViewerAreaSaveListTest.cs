@@ -132,17 +132,30 @@ public partial class TerrainViewerApp
             // the box on the plate, no Godot Label or Button; Escape answers no and ClearArt gives the diagnostic window back.
             AttachSyntheticSaveArtForSelfTest(_saveListPanel);
             _saveListPanel.Render(_saveList, SelectedPreview());
-            Require(_saveListPanel.ArtMode && _saveListPanel.DetailArtForSelfTest.Items.Count == 1 && _saveListPanel.DetailArtForSelfTest.Text == AreaSaveList.Detail(_saveList.SelectedEntry!)
-                && !_saveListPanel.DialogForSelfTest.Visible, "the details are art text with the font: " + _saveListPanel.ArtDetailForSelfTest);
+            Require(_saveListPanel.ArtMode && _saveListPanel.NoticeArtForSelfTest.Text.Length == 0 && _saveListPanel.HintForSelfTest.Length == 0
+                && !_saveListPanel.DialogForSelfTest.Visible, "the box is blank with the art: " + _saveListPanel.ArtNoticeForSelfTest);
+            // ARC-UI-3503 (MW33): a hint takes the box and gives it back.
+            _saveListPanel.ShowHint(AreaMessageEntry.Text(AreaMessageKind.Hover, "Action:\nLoad Game"), MessageLogNow);
+            Require(_saveListPanel.HintForSelfTest == "Action:\nLoad Game" && !_saveListPanel.NoticeArtForSelfTest.Visible, "the hint shows: " + _saveListPanel.HintForSelfTest);
+            _saveListPanel.ShowHint(null, MessageLogNow);
+            Require(_saveListPanel.HintForSelfTest.Length == 0 && _saveListPanel.NoticeArtForSelfTest.Visible, "leaving blanks the box: " + _saveListPanel.HintForSelfTest);
+            // A notice that comes while a hint shows takes the box, so a refusal under the pointer is seen.
+            _saveListPanel.ShowHint(AreaMessageEntry.Text(AreaMessageKind.Hover, "Action:\nDelete Save Game"), MessageLogNow);
+            _saveList.Refresh(_saveList.Entries, _saveList.SelectedEntry!.Name, "synthetic refusal");
+            _saveListPanel.Render(_saveList, SelectedPreview());
+            Require(_saveListPanel.NoticeArtForSelfTest.Visible && _saveListPanel.NoticeArtForSelfTest.Text == "synthetic refusal" && _saveListPanel.HintForSelfTest.Length == 0,
+                "a refusal shows over the hint: " + _saveListPanel.ArtNoticeForSelfTest + " | " + _saveListPanel.HintForSelfTest);
+            _saveList.Refresh(_saveList.Entries, _saveList.SelectedEntry!.Name, null);
+            _saveListPanel.Render(_saveList, SelectedPreview());
             InventoryKey(Key.Enter);
             Require(_saveList.Prompt == AreaSavePrompt.ConfirmOverwrite && _saveListPanel.DialogForSelfTest.Visible && _saveListPanel.DialogForSelfTest.TextForSelfTest.StartsWith("Overwrite", StringComparison.Ordinal)
-                && _saveListPanel.ArtDetailForSelfTest.Length == 0 && _saveListPanel.ArtNoticeForSelfTest == _saveListPanel.DialogForSelfTest.TextForSelfTest
+                && _saveListPanel.ArtNoticeForSelfTest == _saveListPanel.DialogForSelfTest.TextForSelfTest
                 && _saveListPanel.DialogForSelfTest.ButtonCentreForSelfTest(true) is not null, "the overwrite question is the dialog box: " + _saveListPanel.ArtNoticeForSelfTest);
             InventoryKey(Key.Escape);
-            Require(_saveList.Prompt == AreaSavePrompt.None && !_saveListPanel.DialogForSelfTest.Visible && _saveListPanel.DetailArtForSelfTest.Text.Length > 0, "Escape closed the box and the details came back");
+            Require(_saveList.Prompt == AreaSavePrompt.None && !_saveListPanel.DialogForSelfTest.Visible && _saveListPanel.NoticeArtForSelfTest.Text.Length == 0, "Escape closed the box");
             _saveListPanel.ClearArt();
             _saveListPanel.Render(_saveList, SelectedPreview());
-            Require(!_saveListPanel.ArtMode && !_saveListPanel.DialogForSelfTest.Visible && _saveListPanel.DetailArtForSelfTest.Text.Length == 0, "without the art the plate's texts are gone");
+            Require(!_saveListPanel.ArtMode && !_saveListPanel.DialogForSelfTest.Visible && _saveListPanel.NoticeArtForSelfTest.Text.Length == 0, "without the art the plate's texts are gone");
             // The open window owns the keys: F7 saves nothing, L opens no logbook.
             InventoryKey(Key.F7); InventoryKey(Key.L);
             Require(!System.IO.File.Exists(File("quicksave.json")) && !LogbookOpen && SaveListOpen, "F7 and L did nothing under the save window");
@@ -199,8 +212,8 @@ public partial class TerrainViewerApp
                 OpenSaveList(AreaSaveListMode.Load);
                 var beforeScreen = _areaSession; var screens = _transitionLoads;
                 InventoryKey(Key.Down); InventoryKey(Key.Enter);
-                Require(SaveListOpen && _pendingLoad is not null && ReferenceEquals(beforeScreen, _areaSession) && _transitionScreen is { Loading: true, Alpha: >= 1 } && _transitionLoads == screens + 1,
-                    "Return raised the load screen before the load ran");
+                Require(SaveListOpen && _pendingLoad is not null && ReferenceEquals(beforeScreen, _areaSession) && _transitionScreen is { Loading: true, Alpha: >= 1, Picture: AreaLoadPicture.FrozenWindow } && _transitionLoads == screens + 1,
+                    "Return raised the load screen over the standing load window before the load ran (ARC-UI-3503)");
                 TickTransitionScreen(100);
                 Require(SaveListOpen && _pendingLoad is not null && ReferenceEquals(beforeScreen, _areaSession), "a frame drew the screen before the load ran");
                 TickTransitionScreen(100);

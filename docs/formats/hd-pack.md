@@ -348,7 +348,7 @@ fields:
 | Part | Interface ART |
 | --- | --- |
 | `art.sha256`, `art.view` | SHA-256 and byte length of the **whole file** the content stack's winner holds (interface art is read whole, with trailing bytes allowed) |
-| `art.nameSha256` | SHA-256 of the lowercase ASCII path `art/interface/<file>` (`HdInterfaceKey.Path`), not a DAT entry's raw name |
+| `art.nameSha256` | SHA-256 of the lowercase ASCII path `art/interface/<file>` (`HdInterfaceKey.Path`), not a DAT entry's raw name; a file name that already starts with `art/` is its own path (ARC-UI-3503: the default font `art/morph15font.art` of `tig.dat`) |
 | `group`, `palette` | 0 and 0 (interface art draws palette slot 0) |
 | `frame` | the frame number |
 
