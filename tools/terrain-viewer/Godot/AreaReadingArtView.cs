@@ -129,7 +129,7 @@ public partial class AreaReadingArtView : Control
     {
         AreaArtFont FontOf(int number) => Face(number).Font;
         if (document.Subtype == WrittenSubtype.Book) { _pages = AreaReadingFlow.BookPages(document.Body, FontOf); _single = []; }
-        else { _pages = []; _single = AreaReadingFlow.Single(document, FontOf, InterfaceHd.Enabled && AreaReadingArtLayout.NoteBodyFonts.All(_faces.ContainsKey)); }
+        else { _pages = []; _single = AreaReadingFlow.Single(document, FontOf); }
     }
 
     /// <summary>The font art a line of font <paramref name="number"/> is drawn with (<see cref="AreaReadingText.ShownFont"/> at the current screen factor, when that font read), else the font itself.</summary>

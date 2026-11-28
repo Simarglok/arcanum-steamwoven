@@ -92,14 +92,10 @@ Why every aspect: in the Steam Hardware Survey of October 2026 (primary display,
 - **SWI-LAY-15** No text is baked into any part; all text is drawn with fonts
   ([#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462)): the original's fonts (HD frames in HD), sizes per step in the
   [font note](steamwoven-interface-fonts.md).
-  **Note body (ARC-UI-2765, [#2765](https://github.com/Simarglok/arcanum-steamwoven/issues/2765), owner decision 2026-11-24).** The owner could not read a letter in the original's handwriting
-  (Pepper20, art 497) at the window's scale. With the generated interface a note's body is drawn in art 840 (NewTimes16, the player's font, the pack's HD version in HD;
-  `AreaReadingFlow.Note`, `AreaReadingArtLayout.NoteBodyFonts`): the address (first line, ending in a comma) and the signature (the last short line, with a short closing line ending in a comma before it)
-  stay in Pepper20 and the body between them is NewTimes16 (`AreaReadingNoteRule`); a letter that does not fit this rule is drawn whole in NewTimes16; a letter NewTimes16 does not hold in the note's
-  215 x 300 rectangle is tried the same way in Nick16 (art 301, smaller), and one neither holds keeps the original's Pepper20. The Original look and every other written kind are unchanged. Census over the game's 23 letters
-  (local): the rule fits 2; 14 are whole NewTimes16, 6 whole Nick16, 1 Nick16 body with Pepper20 address and signature, 1 NewTimes16 body with them, and 1 stays Pepper20 (a 14-line letter); of the 21 that miss the rule 17 have a first
-  line without a comma and 4 are shorter than three lines. Local capture (never committed): the Steamwoven `bar` smoke with `ARC_AREA_READING_NOTE_CENSUS=FILE` (start lines and reasons, no text) and
-  `ARC_AREA_READING_NOTE_LINES=A,B` (captures those notes as `reading-note-N`).
+  **Note text (ARC-UI-3484, [#3484](https://github.com/Simarglok/arcanum-steamwoven/issues/3484), owner decision 2026-11-28).** A whole note (letter), not only its address and signature, is drawn in the
+  original's handwriting face Pepper20 (art 497) in both looks; with HD on, the pack's current HD frames of it (thinned by ARC-UI-2779) are drawn. The layout is the original's: the note's 215 x 300 rectangle, line by
+  line while the next line fits. This replaces the owner decision of 2026-11-24 (ARC-UI-2765, [#2765](https://github.com/Simarglok/arcanum-steamwoven/issues/2765): a readable serif body between a handwritten
+  address and signature). Local capture (never committed): the Steamwoven `bar` smoke with `ARC_AREA_READING_NOTE_LINES=A,B` (captures the notes with those start lines as `reading-note-N`).
 - **SWI-LAY-16** The follower group moves as one: the portraits, the scroll arrows and the show/hide button (FP1: the button 67 × 13 units at (0, 428), the arrows at (0, 415) and (33, 415), the portraits at x 11, y 50 + 62 per slot) stay **inside the composition** on their original places, counted from the composition's left edge and top, at its scale `s`;
   the button stands on the top left corner of the bottom strip, as in the original, at every window size, and the group is identical to the original at 4:3. **Owner decision 2026-11-20 ([#2925](https://github.com/Simarglok/arcanum-steamwoven/issues/2925)):** no group part is carried to the window's edge and the button has no backing of its own (a first plan, the group at the window's left edge on a small brass backing, was built, compared in a composite and dropped). **As built (#2925):** `AreaFollowerPortraits` hangs from the strips' screen (`AreaGameBarPanel.TopScreen`) in the column mode as in the full-width layout; the Steamwoven bar smoke checks every part's place, the button's corner and the group's left edge at each size.
 

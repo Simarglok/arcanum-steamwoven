@@ -528,8 +528,7 @@ public partial class TerrainViewerApp
     private async Task VerifySteamwovenWindowsAsync(string tag, SteamwovenHudPlan? plan, AreaGameBarPanel panel, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
     {
         for (var wait = 0; wait < 1800 && (_barterData is null || _readingData is null); wait++) { AdoptBarterData(); AdoptReadingData(); await frames(1); }
-        // ARC-UI-2765: a local census of the note address and signature rule (counts and prototype numbers only), and ARC_AREA_READING_NOTE_LINES=A,B captures the notes with those start lines as reading-note-N.
-        if (System.Environment.GetEnvironmentVariable("ARC_AREA_READING_NOTE_CENSUS") is { Length: > 0 } censusFile) ReadingNoteCensus(censusFile);
+        // ARC-UI-2765: ARC_AREA_READING_NOTE_LINES=A,B captures the notes with those start lines as reading-note-N.
         var noteLines = (System.Environment.GetEnvironmentVariable("ARC_AREA_READING_NOTE_LINES") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(part => int.TryParse(part, out var n) ? n : -1).Where(n => n >= 0).ToArray();
         SteamwovenWindowProbe[] windows =
         [
