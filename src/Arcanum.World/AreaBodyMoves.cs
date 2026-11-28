@@ -120,9 +120,9 @@ public static class AreaBodyMoveArt
     public const int Stand = 0, Walk = 1, Sneak = 3, Run = 6;
     public const string Policy = "steamwoven-body-move-v1";
     private static readonly DatReaderOptions Options = new() { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 };
-    private const uint DirectoryRecord = 0x400, IgnoredRecord = 0x800;
 
-    public static AreaBodyMoves Load(AreaVisualRecord visual, string? archivePath)
+    /// <param name="archives">The caller's open archives, or null to open (and close) the archive for this load.</param>
+    public static AreaBodyMoves Load(AreaVisualRecord visual, string? archivePath, AreaArtArchives? archives = null)
     {
         ArgumentNullException.ThrowIfNull(visual);
         if (visual.RawArt >> 28 is not (2 or 12 or 13) || visual.Policy.Contains("badart", StringComparison.Ordinal))
@@ -130,16 +130,14 @@ public static class AreaBodyMoveArt
         if (archivePath is null || !File.Exists(archivePath)) return Refused(AreaBodyMoveStatus.SourceUnavailable, visual.Entry.Source.ToString());
         try
         {
-            using var archive = DatArchive.Open(archivePath, Options);
+            using var own = archives is null ? new AreaArtArchives() : null;
+            var held = (archives ?? own!).Get(archivePath, Options);
+            var (archive, named) = (held.Archive, held.Named);
             if (AreaFallenPoses.StandingEntry(archive, visual) is not { } standing) return Refused(AreaBodyMoveStatus.EntryMismatch, $"ordinal {visual.Entry.Ordinal}");
             var name = AreaFallenPoses.Name(standing);
             var dot = name.LastIndexOf('.');
             if (dot < 4) return Refused(AreaBodyMoveStatus.WalkMissing, "name");
             char shield = name[dot - 3], weapon = name[dot - 2];
-            // One pass over the file records (no directory or ignored ones); a name held twice is ambiguous and never chosen.
-            var named = archive.Entries.Where(e => (e.Flags & (DirectoryRecord | IgnoredRecord)) == 0)
-                .GroupBy(e => AreaFallenPoses.Name(e), StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.Count() == 1 ? g.First() : null, StringComparer.OrdinalIgnoreCase);
             var refused = new List<string>();
             AreaBodyArt? Find(int animation, params (char Shield, char Weapon)[] tries)
             {
@@ -170,6 +168,7 @@ public static class AreaBodyMoveArt
         }
         catch (Exception error) when (error is DatException or ArtException or IOException or UnauthorizedAccessException or ArgumentException)
         {
+            if (error is IOException) archives?.Forget(archivePath);
             return Refused(AreaBodyMoveStatus.Unreadable, error.GetType().Name + " " + error.Message);
         }
     }
@@ -206,7 +205,7 @@ public static class AreaBodyMoveArt
     /// hero (the session's wear check does not test the art, WA8: NOT READY), without the shield, then bare-handed. The first readable one
     /// is the load's, with the animation, weapon and shield it names.
     /// </summary>
-    public static AreaBodyArmedLoad LoadArmed(AreaVisualRecord visual, string? archivePath, int animation, int weapon, int shield)
+    public static AreaBodyArmedLoad LoadArmed(AreaVisualRecord visual, string? archivePath, int animation, int weapon, int shield, AreaArtArchives? archives = null)
     {
         ArgumentNullException.ThrowIfNull(visual);
         if (animation is < 0 or > 24 || weapon is < 0 or >= WeaponArtRules.WeaponParts || shield is not (0 or 1))
@@ -224,16 +223,14 @@ public static class AreaBodyMoveArt
         }
         try
         {
-            using var archive = DatArchive.Open(archivePath, Options);
+            using var own = archives is null ? new AreaArtArchives() : null;
+            var held = (archives ?? own!).Get(archivePath, Options);
+            var (archive, named) = (held.Archive, held.Named);
             if (AreaFallenPoses.StandingEntry(archive, visual) is not { } standing)
                 return new(AreaBodyMoveStatus.EntryMismatch, null, animation, weapon, shield, $"ordinal {visual.Entry.Ordinal}");
             var name = AreaFallenPoses.Name(standing);
             var dot = name.LastIndexOf('.');
             if (dot < 4) return new(AreaBodyMoveStatus.WalkMissing, null, animation, weapon, shield, "name");
-            // One pass over the file records (no directory or ignored ones); a name held twice is ambiguous and never chosen.
-            var named = archive.Entries.Where(e => (e.Flags & (DirectoryRecord | IgnoredRecord)) == 0)
-                .GroupBy(e => AreaFallenPoses.Name(e), StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.Count() == 1 ? g.First() : null, StringComparer.OrdinalIgnoreCase);
             var refused = new List<string>();
             foreach (var (a, w, s) in tries)
             {
@@ -254,6 +251,7 @@ public static class AreaBodyMoveArt
         }
         catch (Exception error) when (error is DatException or ArtException or IOException or UnauthorizedAccessException or ArgumentException)
         {
+            if (error is IOException) archives?.Forget(archivePath);
             return new(AreaBodyMoveStatus.Unreadable, null, animation, weapon, shield, error.GetType().Name + " " + error.Message);
         }
     }

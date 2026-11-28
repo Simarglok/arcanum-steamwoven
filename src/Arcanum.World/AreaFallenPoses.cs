@@ -113,10 +113,12 @@ public static class AreaFallenPoses
     /// (ordinal, flags, sizes, offset, name digest); null otherwise.</summary>
     internal static DatEntry? StandingEntry(DatArchive archive, AreaVisualRecord visual)
     {
-        var standing = archive.Entries.Where(e => e.Ordinal == visual.Entry.Ordinal).ToArray();
-        return standing.Length != 1 || standing[0].Flags != visual.Entry.Flags || standing[0].StoredSize != visual.Entry.StoredBytes ||
-            standing[0].DeclaredOutputSize != visual.Entry.DecodedBytes || standing[0].Offset != visual.Entry.Offset ||
-            Digest(standing[0].RawNameBytes.ToArray()) != visual.Entry.NameSha256 ? null : standing[0];
+        // The records are listed in ordinal order (DatArchive numbers them as it reads the directory).
+        if (visual.Entry.Ordinal < 0 || visual.Entry.Ordinal >= archive.Entries.Count) return null;
+        var standing = archive.Entries[visual.Entry.Ordinal];
+        return standing.Ordinal != visual.Entry.Ordinal || standing.Flags != visual.Entry.Flags || standing.StoredSize != visual.Entry.StoredBytes ||
+            standing.DeclaredOutputSize != visual.Entry.DecodedBytes || standing.Offset != visual.Entry.Offset ||
+            Digest(standing.RawNameBytes.ToArray()) != visual.Entry.NameSha256 ? null : standing;
     }
 
     internal static string Name(DatEntry entry) => System.Text.Encoding.ASCII.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0', ' ').Replace('\\', '/');

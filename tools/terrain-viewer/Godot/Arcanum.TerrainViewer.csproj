@@ -11,6 +11,17 @@
   <PropertyGroup Condition="'$(Configuration)' == 'ExportRelease' or ('$(Configuration)' == 'ExportDebug' and '$(ArcanumProfiling)' == 'true')">
     <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
+  <!-- ARC-RENDER-3414: the Mac game's garbage collector. .NET 8 on macOS counts only the free pages as available memory, so a Mac
+       with an ordinary file cache reads as 97-99 % loaded and the workstation collector ran blocking full collections of
+       50-115 ms while a map window loaded. The server collector marks in parallel and cuts those pauses; 4 heaps keep its memory
+       bounded. This reaches the exported game: a source run through the Godot editor binary starts .NET with GodotSharp's own
+       runtimeconfig and keeps the defaults. The Windows game keeps the defaults (not measured there). -->
+  <PropertyGroup Condition="'$(GodotTargetPlatform)' == 'macos'">
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(GodotTargetPlatform)' == 'macos'">
+    <RuntimeHostConfigurationOption Include="System.GC.HeapCount" Value="4" />
+  </ItemGroup>
   <ItemGroup>
     <Compile Include="../../../src/Arcanum.Input.Godot/GodotInputAdapter.cs" Link="GodotInputAdapter.cs" />
     <!-- ARC-RES-2000: the relight lab's CPU normal generator, for the smoke stage's Godot-native comparison (normal maps of the same frames); one source, no copy. -->
