@@ -339,6 +339,20 @@ status=... sha12=... pack=...` names the file read. A missing or refused file le
 chosen as described under [HD pack source](#hd-pack-source-arc-dev-350). No `hd_pack.py` command changes this file (the `menu-art`
 command was retired, ARC-DEV-3030): changing it is a separate task, with a backup and the owner's go.
 
+### Start-up loading pictures (ARC-UI-3501)
+
+The three files `splash/splash1-16x9.png` to `splash3-16x9.png` ([format](../formats/hd-pack.md#start-up-loading-pictures))
+are added to the installed pack by one command, dry run first:
+
+```bash
+python3 -B tools/hd_pack/hd_pack.py splash --pictures FOLDER --task ARC-UI-3501 --dry-run
+```
+
+It takes any of the three files from `FOLDER`, checks their shape, writes only `splash/` and refuses to overwrite a
+different picture unless `--replace` is given (the old file then goes to the backup folder; to go back, copy it in with
+the same command). The sources are the owner's Codex redraws of the original pictures, kept in the image archive
+(`local/steamwoven-ui/archive/ARC-UI-3501/`). Run `mirror` afterwards so the iCloud copy has them too.
+
 ### HD pack source (ARC-DEV-350)
 
 The game chooses its HD pack at startup from the **HD pack** line of the launcher screen (after *HD*; ARC-UI-143 moved it there from the options window's Game page, ARC-UI-146), saved as the `hd pack` (`auto`, `game`, `custom`) and `hd pack path` lines of `arcanum.cfg` (a missing line reads as Auto). A change

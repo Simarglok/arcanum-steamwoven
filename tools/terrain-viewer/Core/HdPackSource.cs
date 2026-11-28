@@ -42,7 +42,11 @@ public sealed record HdPackAvailability(int Files, int Local, int Missing, int W
         return parts.Count == 0 ? "the pack has no files" : string.Join("; ", parts);
     }
 
-    /// <summary>Checks every manifest file, the recipe and the unlisted main-menu picture (when the folder has one).</summary>
+    /// <summary>The unlisted pictures the viewer reads besides the manifest: the main-menu plate and the original's three start-up pictures.</summary>
+    private static readonly string[] UnlistedPictures =
+        [HdPack.MainMenuBackdropFile, .. new[] { "splash1", "splash2", "splash3" }.Select(stem => HdPack.StartupPictureFile(stem)!)];
+
+    /// <summary>Checks every manifest file, the recipe and the unlisted pictures (those the folder has).</summary>
     public static HdPackAvailability Check(HdPack pack, IHdFileProbe probe)
     {
         ArgumentNullException.ThrowIfNull(pack);
@@ -62,9 +66,12 @@ public sealed record HdPackAvailability(int Files, int Local, int Missing, int W
         }
         foreach (var entry in pack.Entries) Count(probe.Probe(HdPackFiles.Full(pack.Directory, entry.File), entry.Bytes));
         Count(probe.Probe(HdPackFiles.Full(pack.Directory, pack.RecipeFile), -1));
-        // The menu picture is outside the manifest: it only counts when the folder has it (or a placeholder of it).
-        var menu = probe.Probe(HdPackFiles.Full(pack.Directory, "main-menu-16x9.png"), -1);
-        if (menu != HdFileState.Missing) Count(menu);
+        // These pictures are outside the manifest: one only counts when the folder has it (or a placeholder of it).
+        foreach (var file in UnlistedPictures)
+        {
+            var state = probe.Probe(HdPackFiles.Full(pack.Directory, file), -1);
+            if (state != HdFileState.Missing) Count(state);
+        }
         return new(files, local, missing, wrong, online, unverified);
     }
 }

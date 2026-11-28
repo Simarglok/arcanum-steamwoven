@@ -125,12 +125,18 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   the screen before Play, where `PATH` is `NAME.png`).
 - **Skip the start-up movies (ARC-UI-3453, owner request 2026-11-27).** A checkbox, off by default (the original plays them),
   stored by Play as `skipStartupMovies` of the `launcher` line (Reset settings turns it off). On, the two logos and movie 8
-  do not play before the first menu; View Intro, the new game's movies and the scripts' movies play as before. The user
+  do not play before the first menu (the loading picture still shows, ARC-UI-3501); View Intro, the new game's movies and the scripts' movies play as before. The user
   argument `--skip-startup-movies` (after `--`, with or without other arguments) does the same for one run without storing
   anything, for tool runs and measurements of the packaged build. Either way the log says
   `ARC-UI-3453 start-up movies skipped`. Source and automated runs never play the installed start-up movies; the smoke stages `movies`, `slides` and `kerghan-talk` turn movies on for their own checks (`movies` checks the start-up queue with generated stand-in files)
   ([where movies play](../workflow/toolchain.md#movie-decoder-arc-render-1170)). Checked by the launcher self-test and the
   `movies` smoke stage.
+- **Start-up loading picture (ARC-UI-3501).** Between the Troika logo and movie 8 the game build shows one of the
+  installed `art\splash` pictures on the movie screen, in the original's rotation by the `splash` line of `arcanum.cfg`
+  (saved when the game closes), for 3 seconds that no key ends; it shows without a movie decoder too and when the start-up
+  movies are skipped (owner decision 2026-11-28; moving the real loading under it is #3507). HD off draws the
+  original's 800 × 600 screen with the picture in its play view; HD on draws the pack's 16:9 redraw
+  ([rules and differences](../research/startup-loading-picture.md)). Checked by unit tests and the `movies` smoke stage.
 - **Separate rendering thread (ARC-RENDER-3420).** A checkbox, off by default, stored by Play as `separateRenderThread` of the
   `launcher` line (Reset settings turns it off). On, the game draws on the engine's own rendering thread (`--render-thread separate`),
   which the engine calls experimental. The engine reads its thread model only when it starts, so the first process always runs the

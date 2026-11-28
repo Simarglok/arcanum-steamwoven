@@ -21,6 +21,7 @@ Every command that writes takes --dry-run, which prints the same plan and change
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -34,8 +35,11 @@ import time
 
 try:
     from tools.hd_pack import layout
+    from tools.steamwoven_ui import pngio
 except ImportError:  # run as a script: python3 tools/hd_pack/hd_pack.py
     import layout  # type: ignore[no-redef]
+    sys.path.append(str(Path(__file__).resolve().parents[2]))
+    from tools.steamwoven_ui import pngio
 
 GAME_SUPPORT = Path.home() / "Library" / "Application Support" / "Arcanum Steamwoven Game"
 PACK_ID = "interface-redraw-4x"
@@ -910,6 +914,82 @@ def png_header(path: Path) -> tuple[int, int, int, int, int]:
     return w, h, depth, ctype, interlace
 
 
+STARTUP_STEMS = ("splash1", "splash2", "splash3")
+
+
+def startup_picture(path: Path) -> None:
+    """One start-up picture the game takes: an opaque 16:9 8-bit RGBA PNG, not interlaced, up to 3840 x 2160 and 40 MiB,
+    whose pixels all decode (a few seconds at full size)."""
+    if path.is_symlink() or not path.is_file():
+        raise PackError(f"{path} is not a plain file")
+    if path.stat().st_size > 40 * 1024 * 1024:
+        raise PackError(f"{path} is larger than 40 MiB")
+    w, h, depth, ctype, interlace = png_header(path)
+    if (depth, ctype, interlace) != (8, 6, 0):
+        raise PackError(f"{path} is not a non-interlaced 8-bit RGBA PNG")
+    if w > 3840 or w * 9 != h * 16:
+        raise PackError(f"{path} is {w} x {h}; it must be 16:9 and at most 3840 wide")
+    try:
+        image = pngio.read(path)
+    except (pngio.PngError, struct.error) as e:
+        raise PackError(f"{path} does not decode: {e}") from e
+    if image.data[3::4].count(255) != w * h:
+        raise PackError(f"{path} has transparent pixels")
+
+
+def splash_plan(pictures: Path, installed: Path) -> list[tuple[Path, str, bool]]:
+    """(source, pack path, the pack already holds another file) for every picture the pack does not hold yet."""
+    found = [(stem, pictures / f"{stem}-16x9.png") for stem in STARTUP_STEMS]
+    found = [(stem, src) for stem, src in found if src.exists()]
+    if not found:
+        raise PackError(f"{pictures}: none of " + ", ".join(f"{s}-16x9.png" for s in STARTUP_STEMS))
+    todo = []
+    for stem, src in found:
+        startup_picture(src)
+        rel = f"splash/{stem}-16x9.png"
+        dst = installed / rel
+        if dst.is_file() and sha256(dst) == sha256(src):
+            print(f"  same {rel}")
+            continue
+        todo.append((src, rel, dst.is_file()))
+        print(f"  {'replace' if dst.is_file() else 'add'} {rel} sha256={sha256(src)[:12]}")
+    return todo
+
+
+def cmd_splash(a) -> int:
+    guard_installed(a.installed, a.allow_symlink)
+    guard_backup(a.backup_root, a.installed)
+    inst = a.installed
+    backup = a.backup_root / f"{a.task}-splash-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"
+    with contextlib.nullcontext() if a.dry_run else Lock(inst.parent):  # planned under the lock that covers the writes
+        todo = splash_plan(a.pictures, inst)
+        if not todo:
+            print("up to date")
+            return 0
+        replaced = [rel for _, rel, old in todo if old]
+        if replaced and not a.replace:
+            raise PackError(f"the pack already holds another {', '.join(replaced)}; nothing was changed (--replace keeps the old file in the backup)")
+        if replaced and backup.exists():
+            raise PackError(f"backup folder exists, refusing to reuse it: {backup}")
+        if a.dry_run:
+            print(f"DRY-RUN: would write {len(todo)} files; {len(replaced)} old files would go to {backup}")
+            return 0
+        before = snapshot(inst)
+        for _, rel, old in todo:
+            if old:
+                atomic_copy(inst / rel, backup / rel)
+        for src, rel, _ in todo:
+            atomic_copy(src, inst / rel)
+        after = snapshot(inst)
+        written = {rel for _, rel, _ in todo}
+        bad = [f"differs after copy: {rel}" for src, rel, _ in todo if sha256(src) != sha256(inst / rel)]
+        bad += [f"changed outside the plan: {k}" for k in sorted(set(before) | set(after)) if k not in written and before.get(k) != after.get(k)]
+    for b in bad[:20]:
+        print("FAIL", b)
+    print(f"{'FAIL' if bad else 'PASS'} splash: {len(todo)} files written" + (f", old files in {backup}" if replaced else ""))
+    return 1 if bad else 0
+
+
 def cmd_mirror(a) -> int:
     problems, _ = verify(a.src, deep=False)
     if problems:
@@ -1353,6 +1433,9 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--no-base-check", action="store_true", help="apply without --base (only when the installed entries are known untouched)")
     s = add("rollback", cmd_rollback, "undo one apply or relayout"); installed(s)
     s.add_argument("backup", type=Path); s.add_argument("--dry-run", action="store_true")
+    s = add("splash", cmd_splash, "add the 16:9 start-up loading pictures to the installed pack (ARC-UI-3501)"); installed(s); write(s)
+    s.add_argument("--pictures", type=Path, required=True, help="the folder with splash1-16x9.png, splash2-16x9.png, splash3-16x9.png (any of them)")
+    s.add_argument("--replace", action="store_true", help="overwrite a different picture the pack already holds (the old one goes to the backup)")
     s = add("mirror", cmd_mirror, "copy a pack's missing files to another folder (the iCloud copy)")
     s.add_argument("--src", type=Path, default=DEFAULT_INSTALLED); s.add_argument("--dst", type=Path, default=DEFAULT_COPY, help=f"the copy folder (default: the iCloud/Obsidian hd_pack/{PACK_ID})")
     s.add_argument("--dry-run", action="store_true"); s.add_argument("--deep", action="store_true", help="hash content-named files too (reads the destination fully)")

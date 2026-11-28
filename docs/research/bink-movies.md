@@ -65,7 +65,7 @@ All calls go through one player; there is no other video path in the exe.
 | Id | Caller | What it asks for |
 | --- | --- | --- |
 | MV1 | start-up 0x401000, right after the default module has loaded and before the first menu loop | movie 8, flags 8, default track. The only condition is its table row (read in ARC-RENDER-1242, section 7); the study itself had not read it. |
-| MV2 | game-module init 0x4020F0 through 0x404810 | the two logo movies by path (Sierra, then Troika), flags 0 |
+| MV2 | game-module init 0x4020F0 through 0x404810 | the two logo movies by path (Sierra, then Troika), flags 0; the [loading picture](startup-loading-picture.md) follows them and stays until movie 8 (ARC-UI-3501) |
 | MV3 | menu "View Intro" 0x5445F0 (the single player window 10) | movie 1, then movie 7, flags 0, then the menu returns to window 5 |
 | MV4 | teleport process 0x4D3460 (the [change of place](../architecture/change-of-place.md) CP3) | the request's first movie (flag 0x1, number in the request) and second movie (flag 0x40), flags 0, default track; skipped in a network host game. The new game's request (flag word 0x45) carries movies 1 and 7. |
 | MV5 | script action 103 (`fade`, operands: seconds, sound, movie, a flag) in 0x447220 case 0x67; the whole action (fade, time advance and movie) is skipped in a network host game, like MV4 | fade-out, time advance when seconds are positive, then **movie by number** (the `sound` operand, when positive, is the audio track id; when the movie is 0 the same operand plays a sound instead), then the last operand picks how the screen is brought back (not read further) |

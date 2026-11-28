@@ -78,6 +78,17 @@ window and the other windows keep their own art. With HD interface art off, or w
 its normal 4:3 art (ARC-UI-122; retired by ARC-UI-3003 and restored by [ARC-UI-3483](https://github.com/Simarglok/arcanum-steamwoven/issues/3483)). Keep the source and the
 generated art on the player's device.
 
+### Start-up loading pictures
+
+With HD interface art on, the [start-up loading picture](../research/startup-loading-picture.md) of the original,
+`art\splash\<name>.bmp`, is drawn from the optional file `splash/<name>-16x9.png` of the active pack (the installed
+game's names are `splash1`, `splash2` and `splash3`; ARC-UI-3501). Like the main-menu picture it sits outside the
+manifest and is an opaque, non-interlaced 8-bit RGBA PNG with a 16:9 header, up to 3840 × 2160 and 40 MiB. The viewer
+draws it centred on black and fitted to the window: a 16:10 window is padded above and below, a wider one at the sides.
+A missing or refused file, a rejected pack or HD off leaves the original picture. The file is bound to the picture's
+name only, so a modification that replaces a bitmap of that name still shows the pack's picture under HD. Pack
+readiness counts the three installed names when the folder has them.
+
 ## manifest.json
 
 ```json

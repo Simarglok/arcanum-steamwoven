@@ -15,6 +15,7 @@ from unittest import mock
 import zlib
 
 from tools.hd_pack import hd_pack as hp
+from tools.steamwoven_ui import pngio
 
 
 def fake(seed: str, n: int = 40) -> bytes:
@@ -746,6 +747,72 @@ class LayoutTests(unittest.TestCase):
         rc, _, err = run("refresh", "--installed", self.inst, "--backup-root", self.backups, "--task", "ARC-TEST-378")
         self.assertEqual(rc, 2)
         self.assertIn("needs 8-bit RGBA", err)
+
+
+def solid_png(w: int, h: int, alpha: int = 255, shade: int = 0) -> bytes:
+    return pngio.encode(pngio.Image(w, h, bytearray(bytes((shade, 0, 0, alpha)) * (w * h))))
+
+
+class SplashTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        self.inst = make_pack(self.tmp / "game" / "hd-packs" / "interface-redraw-4x", [("a", "interface", "v1")])
+        self.backups = self.tmp / "game" / "hd-pack-backups"
+        self.pictures = self.tmp / "pictures"
+        self.pictures.mkdir()
+
+    def splash(self, *extra):
+        return run("splash", "--pictures", self.pictures, "--task", "ARC-UI-3501", "--installed", self.inst, "--backup-root", self.backups, *extra)
+
+    def test_adds_new_pictures_and_touches_nothing_else(self):
+        (self.pictures / "splash1-16x9.png").write_bytes(solid_png(640, 360))
+        (self.pictures / "splash3-16x9.png").write_bytes(solid_png(16, 9))
+        before = tree(self.inst)
+        rc, out, err = self.splash("--dry-run")
+        self.assertEqual(rc, 0, out + err)
+        self.assertIn("DRY-RUN", out)
+        self.assertEqual(tree(self.inst), before)
+        rc, out, err = self.splash()
+        self.assertEqual(rc, 0, out + err)
+        after = tree(self.inst)
+        self.assertEqual(sorted(set(after) - set(before)), ["splash/splash1-16x9.png", "splash/splash3-16x9.png"])
+        self.assertEqual({k: v for k, v in after.items() if k in before}, before)
+        rc, out, _ = self.splash()
+        self.assertEqual(rc, 0)
+        self.assertIn("up to date", out)
+
+    def test_a_different_picture_needs_replace_and_keeps_the_old_one(self):
+        (self.pictures / "splash2-16x9.png").write_bytes(solid_png(16, 9))
+        self.assertEqual(self.splash()[0], 0)
+        old = (self.inst / "splash" / "splash2-16x9.png").read_bytes()
+        (self.pictures / "splash2-16x9.png").write_bytes(solid_png(32, 18))
+        rc, _, err = self.splash()
+        self.assertEqual(rc, 2)
+        self.assertIn("--replace", err)
+        self.assertEqual((self.inst / "splash" / "splash2-16x9.png").read_bytes(), old)
+        rc, out, err = self.splash("--replace")
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual([p.read_bytes() for p in self.backups.rglob("splash2-16x9.png")], [old])
+        # a backup folder of the same second is never written over
+        (self.pictures / "splash2-16x9.png").write_bytes(solid_png(16, 9, shade=7))
+        with mock.patch.object(hp.time, "strftime", return_value=next(self.backups.iterdir()).name.rsplit("-", 1)[1]):
+            rc, _, err = self.splash("--replace")
+        self.assertEqual(rc, 2)
+        self.assertIn("backup folder exists", err)
+        self.assertEqual([p.read_bytes() for p in self.backups.rglob("splash2-16x9.png")], [old])
+
+    def test_wrong_pictures_are_refused(self):
+        rc, _, err = self.splash()
+        self.assertEqual(rc, 2)
+        self.assertIn("none of", err)
+        before = tree(self.inst)
+        for bad in (png(1920, 1200), png(3856, 2169), png(16, 9, ctype=2), png(16, 9, interlace=1), b"not a png",
+                    png(16, 9), solid_png(16, 9)[:-30], solid_png(16, 9, alpha=254)):
+            (self.pictures / "splash1-16x9.png").write_bytes(bad)
+            self.assertEqual(self.splash()[0], 2)
+        self.assertEqual(tree(self.inst), before)
 
 
 class PackUsersTests(unittest.TestCase):

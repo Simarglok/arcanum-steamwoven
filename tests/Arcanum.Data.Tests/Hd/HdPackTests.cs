@@ -244,6 +244,27 @@ public sealed class HdPackTests
     }
 
     [TestMethod]
+    public void A_start_up_picture_is_an_opaque_16_9_file_named_after_the_original_picture()
+    {
+        var pack = Opened(NewPack("start-up").Write());
+        Assert.AreEqual("splash/splash1-16x9.png", HdPack.StartupPictureFile("splash1"));
+        Assert.IsNull(HdPack.StartupPictureFile("../splash1"));
+        Assert.IsNull(HdPack.StartupPictureFile(""));
+        Assert.AreEqual("NoFile", pack.ReadStartupPictureReport("splash1").Status);
+        Assert.AreEqual("BadName", pack.ReadStartupPictureReport("a.b").Status);
+        Directory.CreateDirectory(Path.Combine(pack.Directory, "splash"));
+        var file = Path.Combine(pack.Directory, "splash", "splash1-16x9.png");
+        var pixels = new byte[16 * 9 * 4];
+        for (var alpha = 3; alpha < pixels.Length; alpha += 4) pixels[alpha] = 255;
+        File.WriteAllBytes(file, HdPng.EncodeRgba(16, 9, pixels));
+        Assert.AreEqual(("Used", 16, 9), (pack.ReadStartupPictureReport("splash1") is var read ? (read.Status, read.Width, read.Height) : default));
+        File.WriteAllBytes(file, HdPng.EncodeRgba(16, 10, new byte[16 * 10 * 4]));
+        Assert.AreEqual("WrongSize", pack.ReadStartupPictureReport("splash1").Status);
+        File.WriteAllBytes(file, HdPng.EncodeRgba(16, 9, new byte[16 * 9 * 4]));
+        Assert.AreEqual("NotOpaque", pack.ReadStartupPictureReport("splash1").Status);
+    }
+
+    [TestMethod]
     public void A_symbolic_link_inside_the_pack_is_refused()
     {
         if (OperatingSystem.IsWindows()) Assert.Inconclusive("Creating symbolic links needs privileges on Windows.");

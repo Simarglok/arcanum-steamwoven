@@ -25,7 +25,8 @@ Terminal uses the same user folder (saves, settings, logs): its start line names
 runs, the [launch queue](toolchain.md#launch-queue-arc-dev-033) holds the agents' window and solo runs. An agent's
 measurement is queued with `./arcanum run --kind solo`, so nothing else runs beside it ([solo runs](toolchain.md#solo-runs-arc-dev-3443)).
 
-A game from the package plays its three start-up movies before the main menu. For a measurement skip them with the user
+A game from the package plays its three start-up movies before the main menu (and shows the loading picture for 3
+seconds, which no argument skips, ARC-UI-3501). For a measurement skip them with the user
 argument `--skip-startup-movies`, after `--` ([ARC-UI-3453](../rendering/terrain-viewer.md)): the commands below pass it.
 An automated run (`--native-smoke`, every smoke) never plays the installed start-up movies and needs no argument.
 
