@@ -52,6 +52,8 @@ class PackageTests(unittest.TestCase):
         self.calls.append((command, environment))
         if command[1:2] == ["restore"]:
             self.source_files = sorted(path.name for path in cwd.rglob("*") if path.is_file())
+            icon = cwd / package.PROJECT / package.PROJECT_ICON  # at the first step: the import and the export find it
+            self.project_icon = icon.read_bytes() if icon.is_file() else None
         text = ""
         if "--export-release" in command and command[-2] == "Windows package":
             self.write_windows_export(Path(command[-1]))
@@ -62,8 +64,6 @@ class PackageTests(unittest.TestCase):
             executable = product / platform.executable
             self.project = (cwd / package.PROJECT / "project.godot")
             self.project_text = self.project.read_text() if self.project.is_file() else ""
-            icon = cwd / package.PROJECT / package.PROJECT_ICON
-            self.project_icon = icon.read_bytes() if icon.is_file() else None
             executable.parent.mkdir(parents=True)
             executable.write_text("#!/bin/sh\n"); executable.chmod(0o755)
             text = self.export_text
@@ -225,11 +225,10 @@ class PackageTests(unittest.TestCase):
     def test_every_package_export_gets_the_committed_app_icon_where_the_project_names_it(self) -> None:
         self.commit_viewer_files()
         (self.repo / package.APP_ICON).write_bytes(b"uncommitted icon")
-        for build in (self.run_package, self.run_profiling):
+        for build in (self.run_package, self.run_profiling, lambda: self.run_package(platform="win")):
             self.project_icon = None
             build()
             self.assertEqual(self.project_icon, b"synthetic icon")  # the commit's picture, not the working tree's
-            self.assertIn(package.ICON_SETTING + "\n", self.project_text)
         self.assertFalse((self.repo / package.PROJECT / package.PROJECT_ICON).exists())  # only the extracted copy has it
 
     def test_a_commit_that_names_the_app_icon_without_the_file_is_refused(self) -> None:
@@ -240,9 +239,10 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
     def test_a_commit_from_before_the_app_icon_still_builds_without_one(self) -> None:
-        self.commit_viewer_files(project='[application]\n', icon=None)
-        self.run_package()
-        self.assertIsNone(self.project_icon)
+        for picture in (None, b"synthetic icon"):  # without the file, and with the file that no setting names yet
+            self.commit_viewer_files(project='[application]\n', icon=picture)
+            self.run_package()
+            self.assertIsNone(self.project_icon)
 
     def test_the_repository_names_its_own_app_icon_for_every_package_preset(self) -> None:
         project = (package.ROOT / package.PROJECT / "project.godot").read_text()

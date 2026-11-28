@@ -190,9 +190,12 @@ Nothing else under `artifacts/packages` is written by `daily` itself, so the bug
   copies `assets/app-icon/steamwoven-icon-1024.png` of the packaged commit to that name inside the extracted project
   only (the checkout gets no second copy), and fails if the commit sets the icon but lacks the picture; a commit from
   before the icon sets none and keeps Godot's. Godot converts it itself: `icon.icns` of the macOS bundles, the icon
-  resources of the Windows `.exe` (16 to 256 px). The same setting is the one Godot reads at start for the running
-  program's window, Dock and taskbar icon. The presets leave `application/icon` empty, since a preset's icon would win. macOS 26 and later draw their own grey
-  rounded tile behind an icon with a transparent ground ([#3468](https://github.com/Simarglok/arcanum-steamwoven/issues/3468)).
+  resources of the Windows `.exe` (16 to 256 px); both were read back from the built player packages. The same setting
+  is the one Godot reads at start for the running program's window, Dock and taskbar icon (not yet seen on screen,
+  [#3469](https://github.com/Simarglok/arcanum-steamwoven/issues/3469)). The presets leave `application/icon` empty,
+  since a preset's icon would win. The icon macOS 27 reports for the `.app` (the one Finder shows) has a grey rounded
+  tile, drawn by the system behind the transparent ground (other versions not checked;
+  [#3468](https://github.com/Simarglok/arcanum-steamwoven/issues/3468)).
   Source runs, the endpoint exports and the start-up splash keep Godot's logo
   ([#3467](https://github.com/Simarglok/arcanum-steamwoven/issues/3467)).
 - **Build line**: the package step sets the MSBuild properties `ArcanumPackageCommit` and `ArcanumPackageDate` (as
@@ -213,6 +216,6 @@ Nothing else under `artifacts/packages` is written by `daily` itself, so the bug
   only); the Windows build is not signed (a free signature would need a free certificate route, none chosen).
 - Bundling `innoextract` into the package, so the player needs no separate install (the "A+" option of the GOG installer research, ARC-RES-087), is not built.
 - The icon on a Windows 11 PC (Explorer, taskbar) and in the Dock of a running macOS package, still to be confirmed by
-  the owner; notarization (needs a paid Apple Developer ID), automatic updates.
+  the owner ([#3469](https://github.com/Simarglok/arcanum-steamwoven/issues/3469)); notarization (needs a paid Apple Developer ID), automatic updates.
 - Starting a downloaded (quarantined) copy was not tried: the instruction's "Open Anyway" steps follow Apple's
   documentation.
