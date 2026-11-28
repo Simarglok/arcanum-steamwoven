@@ -85,7 +85,7 @@ public partial class TerrainViewerApp
             var playedBefore = _moviesPlayed;
             // ARC-UI-3501: the loading picture is the third entry; synthetic 80 x 40 bitmaps, the saved number 4 of two files picks the first.
             var drawn = SyntheticStartupBitmap(80, 40);
-            _startupPictureForSelfTest = (["art/splash/a.bmp", "art/splash/b.bmp"], _ => drawn, 4);
+            _startupPictureForSelfTest = new StartupPictureCheck(["art/splash/a.bmp", "art/splash/b.bmp"], _ => drawn, 4);
             PlayStartupMovies();
             Require(MovieCovering && _movieQueue.Count == 4 && _movieQueue.Select(item => item.ToString()).SequenceEqual(["movies/SierraLogo.bik", "movies/TroikaLogo.bik", "picture", "8"]),
                 "the start-up queue is the two logos by path, the loading picture and then movie 8");
@@ -221,7 +221,7 @@ public partial class TerrainViewerApp
                     _originalCompositionForced = !hd;
                     for (var index = 0; index < paths.Count; index++)
                     {
-                        _startupPictureForSelfTest = (paths, path => AreaStartupPicture.Read(stack, path), (uint)index);
+                        _startupPictureForSelfTest = new StartupPictureCheck(paths, path => AreaStartupPicture.Read(stack, path), (uint)index);
                         SyncInterfaceHd();
                         for (var frame = 0; frame < 30; frame++) { SyncInterfaceHd(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
                         _moviesForSelfTest = true;

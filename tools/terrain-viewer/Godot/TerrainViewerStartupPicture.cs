@@ -15,8 +15,11 @@ public partial class TerrainViewerApp
     private int? _startupPictureNext;
     // The time the shown picture still has; null while none shows.
     private double? _pictureLeft;
-    private (IReadOnlyList<string> Paths, Func<string, byte[]?> Read, uint Counter)? _startupPictureForSelfTest;
+    private StartupPictureCheck? _startupPictureForSelfTest;
     private string? _startupPictureShown;
+
+    /// <summary>The pictures and the saved number a check supplies instead of the game's.</summary>
+    private sealed record StartupPictureCheck(IReadOnlyList<string> Paths, Func<string, byte[]?> Read, uint Counter);
 
     private StartupPictureStore StartupPictures => _startupPictureStore ??= new(AutomatedVisualRun);
 
