@@ -476,8 +476,11 @@ public partial class TerrainViewerApp
                 Require(result is { Failure: GameSessionFailure.None, Attack.Resolution: not null }, $"the click threw the dagger at the location ({result?.Failure} {result?.Disposition})");
                 var shot = result!.Shots.Count == 1 ? result.Shots[0] : (SessionShot?)null;
                 // ARC-COMBAT-018: a miss that scatters back onto the hero's own cell has no line to fly and lands at once.
-                Require(shot is { } flying && session.QueryThrownShot(flying) is { Item: var item } && item == wielded.Entity || result.Destination == heroCell,
-                    $"the dagger is thrown ({result.Failure} {result.Attack?.Resolution?.Outcome}, shots {result.Shots.Count}, destination {result.Destination})");
+                // ARC-COMBAT-3481: a flight may also end before the click helper returns (a wall at the hero's own tile on the first crossing): the shot is gone, its end and the dagger's landing are recorded.
+                var endedAtOnce = shot is { } gone && _projectileEndsForSelfTest.Any(e => e.Shot == gone && e.Strike != ProjectileStrikeKind.None)
+                    && _thrownLandingsForSelfTest.Any(l => l.Item == wielded.Entity);
+                Require(shot is { } flying && session.QueryThrownShot(flying) is { Item: var item } && item == wielded.Entity || endedAtOnce || result.Destination == heroCell,
+                    $"the dagger is thrown ({result.Failure} {result.Attack?.Resolution?.Outcome}, shots {result.Shots.Count}, destination {result.Destination}, ends {string.Join(",", _projectileEndsForSelfTest.Select(e => e.Strike))})");
                 Require(result.Attack!.Resolution!.Difficulty is not null && !session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon),
                     "the dagger left the hand at the shot");
                 if (_projectiles.Count == 1)
