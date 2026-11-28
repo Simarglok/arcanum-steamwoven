@@ -10,4 +10,8 @@ Arcanum Steamwoven plays the original's Bink movies by running a separate `ffmpe
 
 ## Godot Engine 4.7.2
 
-Arcanum.Godot is built with Godot Engine 4.7.2 .NET. Godot is MIT licensed: https://github.com/godotengine/godot/blob/4.7.2-stable/LICENSE.txt. The Godot editor and matching export templates are local shared tools, not repository contents or runtime dependencies of Arcanum.Data. No Godot binaries, export templates, game assets, or third-party archives are committed.
+Arcanum.Godot is built with Godot Engine 4.7.2 .NET. Godot is MIT licensed: https://github.com/godotengine/godot/blob/4.7.2-stable/LICENSE.txt. The Godot editor and matching export templates are local shared tools, not repository contents or runtime dependencies of Arcanum.Data. No Godot binaries, export templates, game assets (apart from the app icon below), or third-party archives are committed.
+
+## App icon
+
+[`assets/app-icon/steamwoven-icon-1024.png`](assets/app-icon/README.md) is derived from the emblem of *Arcanum: Of Steamworks and Magick Obscura*. It is not covered by the project's MIT licence; the game and its marks belong to their owners.

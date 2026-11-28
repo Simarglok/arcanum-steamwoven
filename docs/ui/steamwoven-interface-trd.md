@@ -495,7 +495,8 @@ Owner decision 2026-11-24 (option A, [#3098](https://github.com/Simarglok/arcanu
   Codex as input, so every generated image, master and baked set is derived from the original: it stays under the ignored
   `local/steamwoven-ui/`, is never committed and never packaged, and follows the
   [HD pack workflow](../workflow/hd-pack.md) for backup. In git: tools, the manifest (identifiers only), the prompt
-  library (text) and notes with numbers.
+  library (text) and notes with numbers. (This rule is about the interface kit; the project's one exception is the
+  [app icon](../../assets/app-icon/README.md), owner decision 2026-11-28.)
 - **SWI-PRV-2** The kit therefore exists only on the owner's devices (and those of a player who builds it from their own
   installation), like the HD pack; it is not shipped with the game. Reopening this needs a new owner decision.
 - **SWI-PRV-3** Composites for the owner are posted in the thread and never committed (owner rule 2026-11-11); before posting, each is saved under SWI-PRV-5.

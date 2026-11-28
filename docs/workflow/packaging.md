@@ -201,7 +201,7 @@ Nothing else under `artifacts/packages` is written by `daily` itself, so the bug
   save and load are still to be confirmed by the owner (map files are read on Windows since ARC-DEV-049, tested on macOS
   only); the Windows build is not signed (a free signature would need a free certificate route, none chosen).
 - Bundling `innoextract` into the package, so the player needs no separate install (the "A+" option of the GOG installer research, ARC-RES-087), is not built.
-- An app icon of the project's own (Godot's default icon is used), notarization (needs a paid Apple Developer ID),
+- An app icon of the project's own (Godot's default icon is used; the picture is in [`assets/app-icon/`](../../assets/app-icon/README.md), putting it into the packages is [#3457](https://github.com/Simarglok/arcanum-steamwoven/issues/3457)), notarization (needs a paid Apple Developer ID),
   automatic updates.
 - Starting a downloaded (quarantined) copy was not tried: the instruction's "Open Anyway" steps follow Apple's
   documentation.

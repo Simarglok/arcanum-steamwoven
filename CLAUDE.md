@@ -162,7 +162,11 @@ yet. Current state: the component catalogue
   packs and frames, screenshots, model weights), toolkit archives, secrets or
   personal paths in git (`toolkit/`, `artifacts/`, `local/`, `research-private/`
   are ignored); synthetic fixtures only; no source reconstruction is used or
-  copied; record provenance.
+  copied; record provenance. One exception (owner decision 2026-11-28,
+  [#3456](https://github.com/Simarglok/arcanum-steamwoven/issues/3456)): the app
+  icon [`assets/app-icon/steamwoven-icon-1024.png`](assets/app-icon/README.md),
+  derived from the game's emblem, and the resized or converted copies of it that
+  packaging needs may be in git and ship in packages; it covers no other picture.
 - Style: dense, defensive, immutable records; explicit limits/options objects;
   typed failure results instead of exceptions at runtime boundaries; docs state
   scope and "NOT READY" boundaries precisely.
