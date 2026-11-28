@@ -292,8 +292,8 @@ internal static class AreaKitStandIns
 
     /// <summary>
     /// ARC-UI-3038: the save and load screen (art 745 and the strip 335, census M05, M06): the preview's black field (the window's (281, 55) 468 × 300, on the 800 × 600 screen at y 96), which the original's background leaves as a hole over the
-    /// screen's black and the info texts, the portrait and the picture stand on, and the message box in the middle of the bottom strip (the screen's black below the strip art's 47 rows: the save's details and the overwrite and delete
-    /// questions are written on it). The list's black is drawn by the screen itself (MW13), the lens and the cover are their own arts, the scroll bar is not read (F0). In the view's units (the screen's 800 × 600).
+    /// screen's black and the info texts, the portrait and the picture stand on, and the message box in the middle of the bottom strip (the screen's black below the strip art's 47 rows: the original's message window stands
+    /// on it, ARC-UI-3503). The list's black is drawn by the screen itself (MW13), the lens and the cover are their own arts, the scroll bar is not read (F0). In the view's units (the screen's 800 × 600).
     /// </summary>
     internal static void SaveLoad(CanvasItem canvas)
     {

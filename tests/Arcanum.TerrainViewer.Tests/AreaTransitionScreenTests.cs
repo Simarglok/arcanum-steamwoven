@@ -169,4 +169,49 @@ public sealed class AreaTransitionScreenTests
         screen.Advance(1);
         Assert.IsTrue(screen.IsBlack, "the veil fades for the length of the death slides' fade, 2 s (PD9)");
     }
+
+    [TestMethod]
+    public void A_load_screen_is_black_unless_it_asks_for_a_picture()
+    {
+        var screen = new AreaTransitionScreen();
+        screen.BeginLoad();
+        Assert.AreEqual(AreaLoadPicture.Black, screen.Picture);
+        screen.Clear();
+        screen.BeginLoad(AreaLoadPicture.SavedGameText);
+        Assert.AreEqual(AreaLoadPicture.SavedGameText, screen.Picture);
+    }
+
+    [TestMethod]
+    [DataRow(AreaLoadPicture.SavedGameText)]
+    [DataRow(AreaLoadPicture.FrozenWindow)]
+    public void A_picture_stays_while_the_saved_map_opens_and_goes_with_the_screen(AreaLoadPicture picture)
+    {
+        var screen = new AreaTransitionScreen();
+        screen.BeginLoad(picture);
+        screen.BeginLoad();
+        Assert.AreEqual(picture, screen.Picture, "a map opening under the same load keeps it");
+        screen.EndLoad();
+        Assert.AreEqual(picture, screen.Picture, "the screen is still up");
+        screen.Release();
+        Assert.AreEqual(AreaLoadPicture.Black, screen.Picture);
+        Assert.IsFalse(screen.Covering);
+    }
+
+    [TestMethod]
+    public void A_failed_load_a_fade_and_a_later_load_leave_no_picture()
+    {
+        foreach (var end in new Action<AreaTransitionScreen>[] { s => s.Clear(), s => s.BeginFadeIn(), s => s.Release(), s => { s.EndLoad(); s.BeginLoad(); } })
+        {
+            var screen = new AreaTransitionScreen();
+            screen.BeginLoad(AreaLoadPicture.SavedGameText);
+            end(screen);
+            Assert.AreEqual(AreaLoadPicture.Black, screen.Picture);
+        }
+        var faded = new AreaTransitionScreen();
+        faded.BeginLoad(AreaLoadPicture.FrozenWindow);
+        faded.EndLoad();
+        faded.Release();
+        faded.BeginFadeOut();
+        Assert.AreEqual(AreaLoadPicture.Black, faded.Picture);
+    }
 }

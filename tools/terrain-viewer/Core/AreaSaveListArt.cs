@@ -42,8 +42,8 @@ public static class AreaSaveListArtLayout
     public static (int X, int Y, int Width, int Height) List { get; } = (42, WindowTop + 120, 145, 213);
     /// <summary>The preview's rectangle (0x5C46C0, the window's (281, 55, 468 × 300)) on the screen.</summary>
     public static (int X, int Y, int Width, int Height) Preview { get; } = (281, WindowTop + 55, 468, 300);
-    /// <summary>ARC-UI-3038: the message box in the middle of the bottom strip on the screen: the screen's black below the 47 rows the strip art draws there (the bottom strip's middle window, <see cref="BottomStripParts"/>); the panel writes the selected save's details
-    /// and the overwrite and delete questions on it (PROJECT), so over the kit's bottom strip it stands as a black field (<see cref="AreaKitStandIns"/>).</summary>
+    /// <summary>ARC-UI-3038: the message box in the middle of the bottom strip on the screen: the screen's black below the 47 rows the strip art draws there (the bottom strip's middle window, <see cref="BottomStripParts"/>); the original's message window (art 354,
+    /// MW33) stands on it, so over the kit's bottom strip it stands as a black field under that window (<see cref="AreaKitStandIns"/>).</summary>
     public static (int X, int Y, int Width, int Height) MessageBox { get; } = (200, BottomStripTop + 47, 400, BottomStripHeight - 47);
     /// <summary>The scroll bar's rectangle (0x5C4798, the window's (213, 111, 12 × 232)) and the rectangle its wheel acts on
     /// (0x64C274: the window's (34, 110, 195 × 232)) on the screen.</summary>
@@ -63,7 +63,12 @@ public static class AreaSaveListArtLayout
     /// rows' (250, 250, 250).</summary>
     public static (byte R, byte G, byte B) WarningColour { get; } = (255, 50, 50);
 
-    public static IReadOnlyList<int> ArtNumbers { get; } = [BackgroundArt, TopStripArt, BottomStripArt, ConfirmArt, BackArt, DeleteArt, FontArt, LensArt, ToggleArt, CoverArt];
+    /// <summary>ARC-UI-3503: the bottom message window's art in the window (MW33): its title font (art 27), its background and the hover's icon.</summary>
+    public static IReadOnlyList<int> MessageArtNumbers { get; } = [AreaMessageLayout.BackgroundArt, AreaMessageLayout.Icon(AreaMessageKind.Hover)];
+    public const int TitleFontArt = AreaTextFontLayout.TitleArt;
+
+    public static IReadOnlyList<int> ArtNumbers { get; } = [BackgroundArt, TopStripArt, BottomStripArt, ConfirmArt, BackArt, DeleteArt, FontArt, LensArt, ToggleArt, CoverArt,
+        TitleFontArt, .. MessageArtNumbers];
 
     /// <summary>ARC-UI-067: the toggle's top-left (table 0x5C45D8, flag 0: the screen's point; MW25) and the lens's rectangle
     /// (0x5C4780, the window's (84, 10, 89 × 89)) on the screen.</summary>

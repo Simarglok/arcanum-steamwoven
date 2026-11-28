@@ -14,12 +14,23 @@ public static class HdInterfaceKey
 {
     public const string Folder = "art/interface/";
 
-    /// <summary>The path hashed as the name: <see cref="Folder"/> + the file name, lowercase, with <c>/</c> separators.</summary>
+    /// <summary>The root of every ART path.</summary>
+    public const string ArtRoot = "art/";
+
+    /// <summary>The path hashed as the name: <see cref="Folder"/> + the file name, lowercase, with <c>/</c> separators. A name that is already a
+    /// path under <see cref="ArtRoot"/> (ARC-UI-3503: the default font <c>art/morph15font.art</c> of <c>tig.dat</c>) is that path.</summary>
     public static string Path(string fileName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
         var name = fileName.Trim().Replace('\\', '/').ToLowerInvariant();
-        return name.StartsWith(Folder, StringComparison.Ordinal) ? name : Folder + name;
+        return name.StartsWith(ArtRoot, StringComparison.Ordinal) ? name : Folder + name;
+    }
+
+    /// <summary>ARC-UI-3503: true for an ART named by a path under <see cref="ArtRoot"/> outside the interface <see cref="Folder"/>.</summary>
+    public static bool IsOutsideInterfaceFolder(string fileName)
+    {
+        var path = Path(fileName);
+        return !path.StartsWith(Folder, StringComparison.Ordinal);
     }
 
     /// <summary>SHA-256 (lowercase hex) of <see cref="Path"/> as ASCII bytes.</summary>

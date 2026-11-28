@@ -368,7 +368,7 @@ history held about 500 runs of such copies of one template).
 
   | Window | Switch | Stage and configuration | File |
   | --- | --- | --- | --- |
-  | H10 load indicator (clock art 601 on the load screen) | `ARC_AREA_LOAD_SCREEN_CAPTURE=PATH.png` | `transfer` (hero, main map); saves only while the load is still going, else prints `load screen capture skipped` | `PATH.png` |
+  | H10 load indicator (clock art 601 on the load screen) | `ARC_AREA_LOAD_SCREEN_CAPTURE=PATH.png` | `transfer` (hero, main map); saves only while the load is still going, else prints `load screen capture skipped`. In the `menu` stage the same switch saves the "Last Save" screen and the list load's standing window (ARC-UI-3503) | `PATH.png`; `menu`: `PATH.png`, `PATH-list.png` |
   | H13 cursors | `ARC_AREA_CURSOR_CAPTURE=PATH.png` | `hover` (hero, main map); the cursor art sheet composed from the game's art (the framebuffer holds no cursors): one row per art, its frames left to right, a red cross on each hot point; prints `cursor sheet NONE` without the game folder | `PATH.png` |
   | H14 hidden-interface compact UI | `ARC_AREA_LIFE_CAPTURE=PREFIX` | `life` (hero, main map); the bars off, only the compact life panel | `PREFIX-compact.png` |
   | G04 See Contents (mode 4) | `ARC_AREA_CONTENTS_CAPTURE=PATH.png` | `item-aim` (hero, `--sector 1409,1314`, the town); the Identify-container step; nothing saved, silently, when the town has no container or the window is not in the art look (run with `ARC_AREA_WINDOW_ART=legacy`) | `PATH.png` |

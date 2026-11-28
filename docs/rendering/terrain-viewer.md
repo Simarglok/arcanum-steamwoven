@@ -2083,11 +2083,10 @@ window's frame, buttons and list are the original's with the game's art (below),
   scroll top (Up/Down keep the selected row shown, the wheel over the list scrolls, a press on a row selects it; no double press),
   each the save's description, "..." when too wide, the selected one gold; the save window's first row "New" (MainMenu.mes 5055) or
   the description being typed into it (only spaces: "New"; a description wider than the row shows its start and "...", and
-  characters the font lacks are not drawn, though they are saved). PROJECT: the selected save's details, a notice and the Yes/No
-  question stand in the bottom strip's middle box (a question without the details), and while a question is open the art buttons,
-  the toggle and the rows do nothing. Not drawn yet: what the lens shows, the scroll bar and the hints. The synthetic self-tests (no game folder) keep the
+  characters the font lacks are not drawn, though they are saved). PROJECT: a notice of the viewer's stands in the bottom strip's
+  middle box, and while a question (the dialog box) is open the art buttons, the toggle and the rows do nothing. Not drawn yet: the live view in the lens ([#3510](https://github.com/Simarglok/arcanum-steamwoven/issues/3510)) and the scroll bar ([#3511](https://github.com/Simarglok/arcanum-steamwoven/issues/3511)). The synthetic self-tests (no game folder) keep the
   diagnostic window. The menu stage (`ARC-UI-062 native-smoke save window art PASS`, Load Game from the single-player window with
-  the F7 auto-save listed and its details in the box, a press on its row selecting it, Previous Screen clicked back to the menu) and the scene stage (the in-play Save Game window, row "New") check it:
+  the F7 auto-save listed and its hints in the message window, a press on its row selecting it, Previous Screen clicked back to the menu) and the scene stage (the in-play Save Game window, row "New") check it:
   the art read, the rows as drawn, the selected row shown, the pointer lighting the confirm button; `ARC_AREA_SAVE_CAPTURE=PATH`
   saves each window's picture to an ignored path (`-load` / `-save` added to the name).
 - **Picture and info (ARC-UI-067,** [ledger MW22–MW25](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): the selected
@@ -2098,10 +2097,22 @@ window's frame, buttons and list are the original's with the game's art (below),
   cover 748 over the preview, whatever it shows. No save selected (or the save window's new-save row): black. A save without
   readable details: black with 5005 in red. The toggle 747 at the screen's (499, 82) is a toggle button: a press turns it on (down,
   3000) and hides the info, the next turns it off (3001) and shows it; the display's state outlives the window while the button opens
-  up, as the original. The lens 746 at the screen's (84, 51) is drawn without what the original puts in it (the hero's location,
-  not a portrait; F0). The menu stage checks it after the row press (`ARC-UI-067 native-smoke save info PASS`: the texts at their
+  up, as the original. The lens 746 at the screen's (84, 51) is black when the window opens with no game behind it, from the main
+  menu ([MW34](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)); from play the original shows the world around the hero there,
+  which is not drawn yet ([#3510](https://github.com/Simarglok/arcanum-steamwoven/issues/3510)). The menu stage checks it after the row press (`ARC-UI-067 native-smoke save info PASS`: the texts at their
   places, the portrait drawn, the toggle hiding and showing them; `-info` capture); the scene stage's save window checks the black
   preview of the new-save row.
+- **Message window and hints (ARC-UI-3503,** [ledger MW33](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): the original's
+  bottom message window (art 354 at the screen's (196, 492)) stands on the bottom strip. The pointer over Load or Save, Previous Screen,
+  Delete or the info toggle writes `MainMenu.mes` 6999 ("Action:") and the button's hint there with the hover icon, and leaving blanks
+  it; the window opens blank. The viewer's own details line is gone (the preview shows them, as the original's); a refusal of the
+  viewer's is written in the same box and takes it from the hint until the pointer moves to another button or away (PROJECT), and a question is the dialog box. With no game text no hint is
+  written. The menu stage checks the confirm button's and the toggle's hints (`ARC_AREA_SAVE_CAPTURE` adds `-Load-hint` or
+  `-Save-hint`).
+- **While a load runs (ARC-UI-3503,** [ledger LS5, LS6](../research/ledger/world.md#load-screen-and-transition-presentation-arc-dev-204)):
+  a load chosen in the load window, from the main menu or from play, keeps the window's last frame on screen, the hint of a pressed
+  button included, with the clock over it until the load ends (the viewer keeps a picture of that frame; headless runs have none and
+  show black). The line of "Last Save" is described with the [main menu](#main-menu-arc-ui-011).
 
 Self-test `ARC-UI-010 self-test PASS synthetic save list` (the production app over the synthetic area owner, on a
 temporary folder): a new save closing the window, an overwrite asked (a row activation leaves the question open,
@@ -2237,8 +2248,14 @@ and layout (below), the other windows the project's.
   runtime number, through the game's map list) and that map loads as the scene the load runs on (the saved cell as the arrival tile, a map
   too large to load whole opening its window around it; no hero, default data rules), then the save loads into it as a load on a published scene
   does (`SceneFlowKind.LoadSave`, `ARC-DEV-387 save chosen before any scene`, one map load instead of the start map's and then the save's). While it
-  loads the screen is black with the original's clock in the top-right corner (ARC-UI-1362, the change of place's load screen), the menu under it
-  takes no input and has no wait note; it goes when the save is in, and the menu comes back with the reason when the save does not load. A save chosen while the start map is already loading replaces that load. The start map loads when a new game's
+  loads the screen shows what the original shows with the clock in the top-right corner (ARC-UI-1362, the change of place's load screen;
+  ARC-UI-3503): for **Last Save** a black screen with the line "Loading Save Game..." (`MainMenu.mes` 5, the font
+  `art/morph15font.art` of `tig.dat`, white with its dark shadow, at (340, 210) of the 800 × 600 screen fitted into the window;
+  [ledger LS5](../research/ledger/world.md#load-screen-and-transition-presentation-arc-dev-204)), for a save chosen in the load window
+  that window's last frame (LS6). The menu under it takes no input and has no wait note; it goes when the save is in, and the menu comes
+  back with the reason when the save does not load. With HD on the line is the pack's, when the pack carries the font
+  ([HD pack](../formats/hd-pack.md)); `ARC_AREA_LOAD_SCREEN_CAPTURE=PATH.png` in the `menu` stage saves both pictures (`PATH` and
+  `PATH-list`). A save chosen while the start map is already loading replaces that load. The start map loads when a new game's
   way begins; a choice that needs it is held as above. **The save folder follows the launch map (ARC-DEV-407):** the load window and Last Save read
   `saves/map` from the start, not only once a scene stands (`AreaSaveFolder`; the lazy start used to read the Crash Site folder `saves`, so the Load Game list was
   empty until the start map had loaded, bug reports 2026-11-11). Not changed: the exterior mode (no `--area-map`) loads the start scene at once and

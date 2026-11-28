@@ -3,6 +3,7 @@ using Arcanum.Presentation.Audio;
 using Arcanum.Session;
 using Arcanum.Simulation.ChangeOfPlace;
 using Arcanum.Simulation.Sound;
+using Arcanum.World;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
@@ -19,6 +20,7 @@ public partial class TerrainViewerApp
     private readonly AreaTransitionScreen _transitionScreen = new();
     private AreaTransitionPanel? _transitionPanel;
     private bool _transitionClockRead;
+    private bool _saveLoadingTextRead;
     // A hero change that waits for its fade-out: runs when the screen is black.
     private Func<bool>? _fadingChange;
     private GameSessionOwner? _fadingOwner;
@@ -88,12 +90,35 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-DEV-204 load indicator {load.Name} {load.Frames.Count} frames at {load.FramesPerSecond}/s");
     }
 
+    /// <summary>ARC-UI-3503: reads the loading line's font (the default font of <c>tig.dat</c>) and text (<c>MainMenu.mes</c> 5) once a module, as
+    /// the clock; without the font the screen stays black with the clock alone.</summary>
+    private void EnsureSaveLoadingText()
+    {
+        if (_saveLoadingTextRead) return;
+        if ((_arguments ?? _launchArguments) is not { ModulePath: { } module } arguments) return;
+        _saveLoadingTextRead = true;
+        if (SoundCatalogFor(module) is null || _soundContent?.Stack is not { } stack) { GD.Print("ARC-UI-3503 save loading text: no content stack"); return; }
+        var load = AreaInterfaceArt.LoadNamed(stack, AreaSaveLoadingText.FontPath, new AreaInterfaceArtLimits(MaxFrames: 256));
+        if (load.Status != AreaInterfaceArtStatus.Ready) { GD.Print($"ARC-UI-3503 save loading font {AreaSaveLoadingText.FontPath}: {load.Status} {load.Detail}"); return; }
+        var text = MainMenuTexts(arguments).Text(AreaMainMenuTexts.LoadingSaveGame);
+        TransitionPanel().SetLoadingText(new AreaArtFontFace(load.Frames), text);
+        GD.Print($"ARC-UI-3503 save loading text '{text}' font {load.Name} {load.Frames.Count} frames");
+    }
+
     /// <summary>A map is loading (a change of place, a load of a save): black with the clock until it is there.</summary>
-    private void BeginTransitionLoad()
+    /// <param name="picture">ARC-UI-3503: what shows behind the clock: the loading line of "Last Save", or the load window's frame as it stands.</param>
+    private void BeginTransitionLoad(AreaLoadPicture picture = AreaLoadPicture.Black)
     {
         EnsureTransitionClock();
+        if (picture == AreaLoadPicture.SavedGameText) EnsureSaveLoadingText();
+        // The frame is read before the screen goes up, so it holds the window the load was chosen in.
+        if (picture == AreaLoadPicture.FrozenWindow)
+        {
+            using var frame = DisplayServer.GetName() == "headless" ? null : GetViewport().GetTexture()?.GetImage();
+            TransitionPanel().SetStill(frame);
+        }
         _transitionLoads++;
-        _transitionScreen.BeginLoad();
+        _transitionScreen.BeginLoad(picture);
         DrawTransitionScreen();
     }
 
