@@ -1,8 +1,9 @@
 # App icon
 
 `steamwoven-icon-1024.png` (1024 x 1024, RGBA, transparent ground) is the icon of Arcanum Steamwoven, picked by the
-owner (ARC-UI-3456, [#3456](https://github.com/Simarglok/arcanum-steamwoven/issues/3456)). The packages do not use it
-yet ([#3457](https://github.com/Simarglok/arcanum-steamwoven/issues/3457)).
+owner (ARC-UI-3456, [#3456](https://github.com/Simarglok/arcanum-steamwoven/issues/3456)). The packaged builds take it
+as their icon (ARC-DEV-3457, [packaging](../../docs/workflow/packaging.md#what-makes-the-package-different-from-a-developer-build)):
+Godot makes the converted copies during the export, so none is committed.
 
 ## Status
 

@@ -35,7 +35,9 @@ every line, stdout keeps PASS or FAIL). The builder is `tools/local_dev/package.
 
 1. `git fetch origin main` in the main checkout, then the commit of `--ref` and its commit date.
 2. `git archive` of that commit into a fresh temporary folder: only the commit's tracked files, never the working
-   tree, so uncommitted or untracked files cannot enter a package and the checkout is not touched.
+   tree, so uncommitted or untracked files cannot enter a package and the checkout is not touched. The commit's
+   [app icon](../../assets/app-icon/README.md) is then copied into the extracted viewer project (the
+   [icon](#what-makes-the-package-different-from-a-developer-build) below).
 3. `restore` (the viewer solution, `--locked-mode`), `build`, `import` (Godot `--headless --import`), `export`
    (`--export-release "macOS package"` or `"Windows package"`), with the canonical toolchain of [toolchain.md](toolchain.md) (the pinned SDK first
    on `PATH`, the Godot shell sentinel). The export log must show the pinned SDK, as for the export endpoints.
@@ -184,6 +186,15 @@ Nothing else under `artifacts/packages` is written by `daily` itself, so the bug
   It is not the developer launcher's home `~/Library/Application Support/Arcanum Steamwoven`
   ([launcher research](../project/status/session.md)), and source runs and the endpoint exports keep Godot's
   default `app_userdata/Arcanum Terrain Viewer`.
+- **App icon** (ARC-DEV-3457): `project.godot` sets `config/icon.steamwoven_package="res://app-icon.png"`. The build
+  copies `assets/app-icon/steamwoven-icon-1024.png` of the packaged commit to that name inside the extracted project
+  only (the checkout gets no second copy), and fails if the commit sets the icon but lacks the picture; a commit from
+  before the icon sets none and keeps Godot's. Godot converts it itself: `icon.icns` of the macOS bundles, the icon
+  resources of the Windows `.exe` (16 to 256 px). The same setting is the one Godot reads at start for the running
+  program's window, Dock and taskbar icon. The presets leave `application/icon` empty, since a preset's icon would win. macOS 26 and later draw their own grey
+  rounded tile behind an icon with a transparent ground ([#3468](https://github.com/Simarglok/arcanum-steamwoven/issues/3468)).
+  Source runs, the endpoint exports and the start-up splash keep Godot's logo
+  ([#3467](https://github.com/Simarglok/arcanum-steamwoven/issues/3467)).
 - **Build line**: the package step sets the MSBuild properties `ArcanumPackageCommit` and `ArcanumPackageDate` (as
   environment variables); the viewer project turns them into assembly metadata, and `ViewerBuildInfo` shows
   `Arcanum Steamwoven alpha · main <first 10 digits> · <date>` in the bottom right corner of the launcher and the main
@@ -201,7 +212,7 @@ Nothing else under `artifacts/packages` is written by `daily` itself, so the bug
   save and load are still to be confirmed by the owner (map files are read on Windows since ARC-DEV-049, tested on macOS
   only); the Windows build is not signed (a free signature would need a free certificate route, none chosen).
 - Bundling `innoextract` into the package, so the player needs no separate install (the "A+" option of the GOG installer research, ARC-RES-087), is not built.
-- An app icon of the project's own (Godot's default icon is used; the picture is in [`assets/app-icon/`](../../assets/app-icon/README.md), putting it into the packages is [#3457](https://github.com/Simarglok/arcanum-steamwoven/issues/3457)), notarization (needs a paid Apple Developer ID),
-  automatic updates.
+- The icon on a Windows 11 PC (Explorer, taskbar) and in the Dock of a running macOS package, still to be confirmed by
+  the owner; notarization (needs a paid Apple Developer ID), automatic updates.
 - Starting a downloaded (quarantined) copy was not tried: the instruction's "Open Anyway" steps follow Apple's
   documentation.

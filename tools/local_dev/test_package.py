@@ -62,6 +62,8 @@ class PackageTests(unittest.TestCase):
             executable = product / platform.executable
             self.project = (cwd / package.PROJECT / "project.godot")
             self.project_text = self.project.read_text() if self.project.is_file() else ""
+            icon = cwd / package.PROJECT / package.PROJECT_ICON
+            self.project_icon = icon.read_bytes() if icon.is_file() else None
             executable.parent.mkdir(parents=True)
             executable.write_text("#!/bin/sh\n"); executable.chmod(0o755)
             text = self.export_text
@@ -168,8 +170,10 @@ class PackageTests(unittest.TestCase):
             with self.assertRaisesRegex(package.PackageError, error):
                 self.run_package(smoke_folder=self.root)
 
-    def commit_viewer_files(self, presets: str | None = None, project: str | None = None) -> None:
-        """The repository's own export presets and project.godot (or the given text) committed into the synthetic one."""
+    def commit_viewer_files(self, presets: str | None = None, project: str | None = None,
+                            icon: bytes | None = b"synthetic icon") -> None:
+        """The repository's own export presets and project.godot (or the given text) committed into the synthetic one, with a
+        synthetic app icon (None: a commit without the icon file)."""
         folder = self.repo / package.PROJECT
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "export_presets.cfg").write_text(presets if presets is not None else
@@ -178,6 +182,10 @@ class PackageTests(unittest.TestCase):
                                               (package.ROOT / package.PROJECT / "project.godot").read_text())
         (self.repo / package.PROFILING_INSTRUCTION).parent.mkdir(parents=True, exist_ok=True)
         (self.repo / package.PROFILING_INSTRUCTION).write_text("profiling page\n")
+        (self.repo / package.APP_ICON).unlink(missing_ok=True)
+        if icon is not None:
+            (self.repo / package.APP_ICON).parent.mkdir(parents=True, exist_ok=True)
+            (self.repo / package.APP_ICON).write_bytes(icon)
         for arguments in (["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "viewer", "--allow-empty"]):
             subprocess.run(["git", *arguments], cwd=self.repo, check=True, capture_output=True)
 
@@ -213,6 +221,36 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(marker.read_text(), "player")  # the player package is neither replaced nor rotated
         self.assertEqual((self.root / "out" / "macos" / "BUILD.txt").read_text(), player_build)
         self.assertFalse((self.root / "out" / "macos" / "previous").exists())
+
+    def test_every_package_export_gets_the_committed_app_icon_where_the_project_names_it(self) -> None:
+        self.commit_viewer_files()
+        (self.repo / package.APP_ICON).write_bytes(b"uncommitted icon")
+        for build in (self.run_package, self.run_profiling):
+            self.project_icon = None
+            build()
+            self.assertEqual(self.project_icon, b"synthetic icon")  # the commit's picture, not the working tree's
+            self.assertIn(package.ICON_SETTING + "\n", self.project_text)
+        self.assertFalse((self.repo / package.PROJECT / package.PROJECT_ICON).exists())  # only the extracted copy has it
+
+    def test_a_commit_that_names_the_app_icon_without_the_file_is_refused(self) -> None:
+        self.commit_viewer_files(icon=None)
+        for platform in ("mac", "win"):
+            with self.assertRaisesRegex(package.PackageError, "no assets/app-icon/steamwoven-icon-1024.png"):
+                self.run_package(platform=platform)
+        self.assertEqual(self.calls, [])
+
+    def test_a_commit_from_before_the_app_icon_still_builds_without_one(self) -> None:
+        self.commit_viewer_files(project='[application]\n', icon=None)
+        self.run_package()
+        self.assertIsNone(self.project_icon)
+
+    def test_the_repository_names_its_own_app_icon_for_every_package_preset(self) -> None:
+        project = (package.ROOT / package.PROJECT / "project.godot").read_text()
+        self.assertEqual(project.splitlines().count(package.ICON_SETTING), 1)
+        self.assertEqual((package.ROOT / package.APP_ICON).read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+        presets = (package.ROOT / package.PROJECT / "export_presets.cfg").read_text()
+        # A preset's own icon would override the project's setting.
+        self.assertNotRegex(presets, r'application/(icon|liquid_glass_icon)="[^"]')
 
     def test_the_callers_shell_cannot_turn_a_player_build_into_a_profiling_one(self) -> None:
         self.base["ArcanumProfiling"] = "true"
