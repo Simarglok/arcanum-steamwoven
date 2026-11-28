@@ -21,6 +21,7 @@ Every command that writes takes --dry-run, which prints the same plan and change
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -34,8 +35,11 @@ import time
 
 try:
     from tools.hd_pack import layout
+    from tools.steamwoven_ui import pngio
 except ImportError:  # run as a script: python3 tools/hd_pack/hd_pack.py
     import layout  # type: ignore[no-redef]
+    sys.path.append(str(Path(__file__).resolve().parents[2]))
+    from tools.steamwoven_ui import pngio
 
 GAME_SUPPORT = Path.home() / "Library" / "Application Support" / "Arcanum Steamwoven Game"
 PACK_ID = "interface-redraw-4x"
@@ -914,8 +918,8 @@ STARTUP_STEMS = ("splash1", "splash2", "splash3")
 
 
 def startup_picture(path: Path) -> None:
-    """The shape of a start-up picture the game takes: a 16:9 8-bit RGBA PNG, not interlaced, up to 3840 x 2160 and 40 MiB.
-    The game also refuses transparent pixels (it logs the status)."""
+    """One start-up picture the game takes: an opaque 16:9 8-bit RGBA PNG, not interlaced, up to 3840 x 2160 and 40 MiB,
+    whose pixels all decode (a few seconds at full size)."""
     if path.is_symlink() or not path.is_file():
         raise PackError(f"{path} is not a plain file")
     if path.stat().st_size > 40 * 1024 * 1024:
@@ -925,37 +929,51 @@ def startup_picture(path: Path) -> None:
         raise PackError(f"{path} is not a non-interlaced 8-bit RGBA PNG")
     if w > 3840 or w * 9 != h * 16:
         raise PackError(f"{path} is {w} x {h}; it must be 16:9 and at most 3840 wide")
+    try:
+        image = pngio.read(path)
+    except (pngio.PngError, struct.error) as e:
+        raise PackError(f"{path} does not decode: {e}") from e
+    if image.data[3::4].count(255) != w * h:
+        raise PackError(f"{path} has transparent pixels")
 
 
-def cmd_splash(a) -> int:
-    guard_installed(a.installed, a.allow_symlink)
-    guard_backup(a.backup_root, a.installed)
-    found = [(stem, a.pictures / f"{stem}-16x9.png") for stem in STARTUP_STEMS]
+def splash_plan(pictures: Path, installed: Path) -> list[tuple[Path, str, bool]]:
+    """(source, pack path, the pack already holds another file) for every picture the pack does not hold yet."""
+    found = [(stem, pictures / f"{stem}-16x9.png") for stem in STARTUP_STEMS]
     found = [(stem, src) for stem, src in found if src.exists()]
     if not found:
-        raise PackError(f"{a.pictures}: none of " + ", ".join(f"{s}-16x9.png" for s in STARTUP_STEMS))
+        raise PackError(f"{pictures}: none of " + ", ".join(f"{s}-16x9.png" for s in STARTUP_STEMS))
     todo = []
     for stem, src in found:
         startup_picture(src)
         rel = f"splash/{stem}-16x9.png"
-        dst = a.installed / rel
+        dst = installed / rel
         if dst.is_file() and sha256(dst) == sha256(src):
             print(f"  same {rel}")
             continue
         todo.append((src, rel, dst.is_file()))
         print(f"  {'replace' if dst.is_file() else 'add'} {rel} sha256={sha256(src)[:12]}")
-    if not todo:
-        print("up to date")
-        return 0
-    replaced = [rel for _, rel, old in todo if old]
-    if replaced and not a.replace:
-        raise PackError(f"the pack already holds another {', '.join(replaced)}; nothing was changed (--replace keeps the old file in the backup)")
-    backup = a.backup_root / f"{a.task}-splash-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"
-    if a.dry_run:
-        print(f"DRY-RUN: would write {len(todo)} files; {len(replaced)} old files would go to {backup}")
-        return 0
+    return todo
+
+
+def cmd_splash(a) -> int:
+    guard_installed(a.installed, a.allow_symlink)
+    guard_backup(a.backup_root, a.installed)
     inst = a.installed
-    with Lock(inst.parent):
+    backup = a.backup_root / f"{a.task}-splash-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"
+    with contextlib.nullcontext() if a.dry_run else Lock(inst.parent):  # planned under the lock that covers the writes
+        todo = splash_plan(a.pictures, inst)
+        if not todo:
+            print("up to date")
+            return 0
+        replaced = [rel for _, rel, old in todo if old]
+        if replaced and not a.replace:
+            raise PackError(f"the pack already holds another {', '.join(replaced)}; nothing was changed (--replace keeps the old file in the backup)")
+        if replaced and backup.exists():
+            raise PackError(f"backup folder exists, refusing to reuse it: {backup}")
+        if a.dry_run:
+            print(f"DRY-RUN: would write {len(todo)} files; {len(replaced)} old files would go to {backup}")
+            return 0
         before = snapshot(inst)
         for _, rel, old in todo:
             if old:

@@ -51,6 +51,21 @@ public sealed class HdPackSourceTests
     private static IHdFileProbe Disk() => new HdFileProbe(_ => null);
 
     [TestMethod]
+    public void The_start_up_pictures_count_towards_a_whole_pack_only_when_the_folder_has_them()
+    {
+        var folder = PackDirectory(Collection("pictures", "with-pictures"), "with-pictures");
+        var pack = HdPack.Open(folder).Pack!;
+        var without = HdPackAvailability.Check(pack, Disk());
+        Directory.CreateDirectory(Path.Combine(folder, "splash"));
+        File.WriteAllBytes(Path.Combine(folder, "splash", "splash1-16x9.png"), [1]);
+        File.WriteAllBytes(Path.Combine(folder, "splash", "splash3-16x9.png"), [1]);
+        var local = HdPackAvailability.Check(pack, Disk());
+        Assert.AreEqual((without.Files + 2, true), (local.Files, local.Ready));
+        var evicted = HdPackAvailability.Check(pack, Cloud(Path.Combine(folder, "splash")));
+        Assert.AreEqual((2, false), (evicted.OnlineOnly, evicted.Ready));
+    }
+
+    [TestMethod]
     public void Auto_takes_the_default_folder_when_its_pack_is_whole_and_says_nothing_was_skipped()
     {
         var icloud = Collection("icloud", "interface-redraw-4x");

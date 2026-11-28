@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Arcanum.Presentation.Movies;
+using Arcanum.Session.Settings;
 using Arcanum.World;
 using Godot;
 
@@ -98,11 +99,12 @@ public partial class TerrainViewerApp
             Require(Pump(() => !MovieCovering, 30) && _moviesPlayed == playedBefore + 3, $"the picture ended by itself and movie 8 played (played {_moviesPlayed - playedBefore} of 3)");
             PlayStartupMovies();
             Require(!MovieCovering, "the start-up movies play once a run");
-            // ARC-UI-3453: with the skip option the start-up queue never starts, and other movies still play.
+            // ARC-UI-3453: with the skip option no start-up movie plays, the loading picture still shows (ARC-UI-3501), and other movies still play.
             (_startupMoviesDone, playedBefore) = (false, _moviesPlayed);
             SkipStartupMovies("smoke");
             PlayStartupMovies();
-            Require(!MovieCovering && _startupMoviesDone && _moviesPlayed == playedBefore, "the skipped start-up movies and picture never start");
+            Require(MovieCovering && _startupMoviesDone && Pump(() => _pictureLeft is not null, 5) && _movieQueue.Count == 0 && Pump(() => !MovieCovering, 20)
+                && _moviesPlayed == playedBefore, "with the start-up movies skipped the loading picture shows alone and ends");
             Require(PlayMovies([7], 0, () => continued++, "smoke") && Pump(() => !MovieCovering, 20) && continued == 2, "another movie still plays with the start-up ones skipped");
             (_startupMoviesSkip, continued) = (skipBefore, 1);
             // Outside the game build and this stage nothing plays: the dev viewer and every other smoke (ARC-RENDER-1242).
@@ -142,6 +144,7 @@ public partial class TerrainViewerApp
             Require(installed.Count > 0 && installed.All(path => AreaStartupPicture.Read(stack, path) is { } bytes && AreaStartupPicture.Compose(bytes) is not null),
                 $"every installed start-up picture can be drawn ({string.Join(",", installed)})");
             GD.Print($"ARC-UI-3501 installed start-up pictures={string.Join(",", installed)}");
+            CheckStartupPictureRotation(folder, installed);
             await CaptureInstalledMovieAsync();
             await CaptureStartupPicturesAsync();
             GD.Print($"ARC-RENDER-1170 native-smoke movies PASS played={_moviesPlayed} skipped={_moviesSkipped} failed={_moviesFailed} frame={size}");
@@ -153,6 +156,35 @@ public partial class TerrainViewerApp
             (_startupPictureForSelfTest, _startupPictureNext) = (pictureFor, null);
             try { Directory.Delete(folder, recursive: true); } catch (IOException) { }
         }
+    }
+
+    // ARC-UI-3501: the splash line from file to picture and back: the next start reads what this one saved, and the other settings lines stay.
+    private void CheckStartupPictureRotation(string folder, IReadOnlyList<string> installed)
+    {
+        var file = System.IO.Path.Combine(folder, "arcanum.cfg");
+        System.IO.File.WriteAllText(file, "hd=0\nsplash=1\n");
+        var storeBefore = _startupPictureStore;
+        try
+        {
+            _startupPictureStore = new StartupPictureStore(file, true);
+            _moviesForSelfTest = true; _startupPictureForSelfTest = null;
+            for (var start = 1; start <= 2; start++)
+            {
+                if (!PlayMovieItems([new MovieItem(0, null, Picture: true)], 0, null, "rotation")) throw new InvalidOperationException("AREA_MOVIES_SMOKE_FAILED");
+                TickMovies(0);
+                var shown = _startupPictureShown;
+                AbortMovies();
+                SaveStartupPictureCounter();
+                var saved = ArcanumConfig.Read(file);
+                if (shown != installed[start % installed.Count] || saved.Get("splash") != (start % installed.Count + 1).ToString(System.Globalization.CultureInfo.InvariantCulture) || saved.Get("hd") != "0")
+                {
+                    GD.Print($"{MoviesCode} movies smoke FAIL: splash rotation start {start} shown {shown} saved {saved.Get("splash")} hd {saved.Get("hd")}");
+                    throw new InvalidOperationException("AREA_MOVIES_SMOKE_FAILED");
+                }
+            }
+            GD.Print("ARC-UI-3501 splash rotation read, shown and saved");
+        }
+        finally { AbortMovies(); (_startupPictureStore, _startupPictureNext) = (storeBefore, null); }
     }
 
     /// <summary>A plain uncompressed 24-bit bottom-up bitmap of one colour, made for the check.</summary>

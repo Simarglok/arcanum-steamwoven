@@ -26,10 +26,12 @@ second logo and movie 8 ([terrain viewer](../rendering/terrain-viewer.md)) and w
 `arcanum.cfg` when it closes (SL4). Differences:
 
 - **Time (SL6).** This build has loaded before the first logo, so the picture stays a fixed 3 seconds
-  (`ViewerStartupMovies.PictureMilliseconds`) instead of the loading time; keys do not end it.
+  (`ViewerStartupMovies.PictureMilliseconds`) instead of the loading time; keys do not end it. The owner chose to move
+  the real loading under the picture as its own task
+  ([#3507](https://github.com/Simarglok/arcanum-steamwoven/issues/3507), 2026-11-28).
 - **Skipping.** The project's own option that skips the start-up movies
-  ([ARC-UI-3453](https://github.com/Simarglok/arcanum-steamwoven/issues/3453)) skips the picture too, and `splash` then
-  stays.
+  ([ARC-UI-3453](https://github.com/Simarglok/arcanum-steamwoven/issues/3453)) does not skip the picture (owner decision
+  2026-11-28).
 - **HD.** With HD interface art on, the pack's 16:9 redraw of the same picture is drawn instead
   ([HD pack](../formats/hd-pack.md#start-up-loading-pictures)).
 

@@ -160,7 +160,7 @@ public partial class LauncherPanel : CanvasLayer
         _showAtStart = new CheckBox { Name = "ShowAtStart", Text = "Show this screen at every start", FocusMode = Control.FocusModeEnum.None, Modulate = dark };
         _showAtStart.Toggled += on => { if (!_rendering) ShowAtStartRequested?.Invoke(on); };
         // ARC-UI-3453 (owner request 2026-11-27): the original always plays them, so off by default.
-        _skipStartupMovies = new CheckBox { Name = "SkipStartupMovies", Text = "Skip the start-up movies and loading picture", FocusMode = Control.FocusModeEnum.None, Modulate = dark };
+        _skipStartupMovies = new CheckBox { Name = "SkipStartupMovies", Text = "Skip the three start-up movies before the main menu", FocusMode = Control.FocusModeEnum.None, Modulate = dark };
         _skipStartupMovies.Toggled += on => { if (!_rendering) SkipStartupMoviesRequested?.Invoke(on); };
         // ARC-DEV-2270: a close request (Cmd+Q, Alt+F4, the window's close button) asks the original's quit question; holding the key quits at once.
         _holdToQuit = new CheckBox { Name = "HoldToQuit", Text = "Hold Cmd+Q (Alt+F4) to quit without the question", FocusMode = Control.FocusModeEnum.None, Modulate = dark };

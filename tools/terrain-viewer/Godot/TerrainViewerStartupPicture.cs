@@ -21,8 +21,18 @@ public partial class TerrainViewerApp
     private StartupPictureStore StartupPictures => _startupPictureStore ??= new(AutomatedVisualRun);
 
     /// <summary>Picks this start's picture and puts it on the movie screen; false, and nothing shows, without game content or a picture the
-    /// original could draw.</summary>
+    /// original could draw. Whatever goes wrong with the picture, the movie behind it still plays.</summary>
     private bool ShowStartupPicture()
+    {
+        try { return TryShowStartupPicture(); }
+        catch (Exception error)
+        {
+            GD.Print($"ARC-UI-3501 start-up picture failed: {error.GetType().Name} {error.Message}");
+            return false;
+        }
+    }
+
+    private bool TryShowStartupPicture()
     {
         IReadOnlyList<string> paths; Func<string, byte[]?> read; uint counter;
         if (_startupPictureForSelfTest is { } synthetic) (paths, read, counter) = synthetic;
@@ -85,6 +95,9 @@ public sealed class StartupPictureStore
     private readonly string? _path;
 
     public StartupPictureStore(bool automated) => _path = ViewerSettingsFile.Choose(TestVariable, automated);
+
+    /// <summary>A store over a named settings file, for the smoke.</summary>
+    internal StartupPictureStore(string path, bool _) => _path = path;
 
     public bool Persistent => _path is not null;
 

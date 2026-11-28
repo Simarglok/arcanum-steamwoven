@@ -115,25 +115,24 @@ public partial class TerrainViewerApp
         return true;
     }
 
-    /// <summary>ARC-UI-3453: the start-up movies are not to play in this run (the first caller's source is the one named).</summary>
+    /// <summary>ARC-UI-3453: the start-up movies are not to play in this run (the first caller's source is the one named); the loading
+    /// picture still shows (ARC-UI-3501).</summary>
     private void SkipStartupMovies(string source) => _startupMoviesSkip ??= source;
 
     /// <summary>The start-up sequence, once a run, before the first menu is used: the logos, the loading picture and movie 8 (the game build
-    /// only); where movies cannot play the picture still shows. The menu opened under them is served at once when they end, cannot play or
-    /// are skipped (ARC-UI-3453).</summary>
+    /// only); where the movies are skipped (ARC-UI-3453) or cannot play, the picture still shows. The menu opened under them is served at
+    /// once when they end.</summary>
     private void PlayStartupMovies()
     {
         if (_startupMoviesDone) return;
         _startupMoviesDone = true;
-        if (_startupMoviesSkip is { } source)
-        {
-            GD.Print($"ARC-UI-3453 start-up movies skipped ({source})");
-            return;
-        }
         var items = StartupMovieItems();
-        if (MoviesEnabled && MovieRefusal() is { } refusal)
+        string? without = null;
+        if (_startupMoviesSkip is { } source) without = $"ARC-UI-3453 start-up movies skipped ({source})";
+        else if (MoviesEnabled && MovieRefusal() is { } refusal) without = $"ARC-UI-3501 start-up movies not played: {refusal}";
+        if (without is not null)
         {
-            GD.Print($"ARC-UI-3501 start-up movies not played: {refusal}");
+            GD.Print(without);
             items = [.. items.Where(item => item.Picture)];
         }
         PlayMovieItems(items, 0, null, "start-up");
