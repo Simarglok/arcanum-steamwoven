@@ -155,16 +155,16 @@ public partial class TerrainViewerApp
             Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
             Color AtUnit(double x, double y) { var (dx, dy) = plan.ToDevice(x, y); return Pixel((int)Math.Round(dx), (int)Math.Round(dy)); }
             var (top, body, bottom) = (AtUnit(400, 20), AtUnit(250, 41 + 30), AtUnit(400, 465));
-            require(Near(top, KitSaveTop), $"[{tag}] the top strip row is the kit's top strip (got {top})");
-            require(Near(body, KitSaveBody), $"[{tag}] the body between the lens and the preview is the kit's body (got {body})");
-            require(Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
+            require(KitLookCapture || Near(top, KitSaveTop), $"[{tag}] the top strip row is the kit's top strip (got {top})");
+            require(KitLookCapture || Near(body, KitSaveBody), $"[{tag}] the body between the lens and the preview is the kit's body (got {body})");
+            require(KitLookCapture || Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
             // The seams: two device rows either side of the body's top and bottom edges, clear of the buttons, the lens and the list.
             var x = (int)Math.Round(plan.ToDevice(250, 0).X);
             var xTop = (int)Math.Round(plan.ToDevice(400, 0).X);   // ARC-UI-3260: the top strip's iron sections stand over its two ends, so the row above the seam is read in the middle, between them
             var (aboveTop, belowTop) = (Pixel(xTop, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
             var (aboveBottom, belowBottom) = (Pixel(x, composed.Body.Rect.Bottom - 3), Pixel(x, composed.Bottom.Rect.Y + 2));
-            require(Near(aboveTop, KitSaveTop) && Near(belowTop, KitSaveBody), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
-            require(Near(aboveBottom, KitSaveBody) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
+            require(KitLookCapture || Near(aboveTop, KitSaveTop) && Near(belowTop, KitSaveBody), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
+            require(KitLookCapture || Near(aboveBottom, KitSaveBody) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
             var preview = AtUnit(AreaSaveListArtLayout.Preview.X + 4, AreaSaveListArtLayout.Preview.Y + 4);
             require(!Near(preview, KitSaveBody), $"[{tag}] the preview's field is not the kit's body (got {preview})");
             // The message box of the bottom strip's middle is a black stand-in (the details and the questions are written on it), clear of the kit's bottom strip colour.
@@ -252,15 +252,15 @@ public partial class TerrainViewerApp
             Color AtUnit(double x, double y) { var (dx, dy) = plan.ToDevice(x, y); return Pixel((int)Math.Round(dx), (int)Math.Round(dy)); }
             // Clear of every field and button: the left margin of the body, the right margin below the story, the top strip row, the bottom strip row at its right end.
             var (top, body, bodyRight, bottom) = (AtUnit(400, 20), AtUnit(20, 60), AtUnit(775, 420), AtUnit(790, 465));
-            require(Near(top, KitSaveTop), $"[{tag}] the top strip row is the kit's top strip (got {top})");
-            require(Near(body, art.BodyColor) && Near(bodyRight, art.BodyColor), $"[{tag}] the body's margins are the kit's {art.Name} body (got {body} and {bodyRight})");
-            require(Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
+            require(KitLookCapture || Near(top, KitSaveTop), $"[{tag}] the top strip row is the kit's top strip (got {top})");
+            require(KitLookCapture || Near(body, art.BodyColor) && Near(bodyRight, art.BodyColor), $"[{tag}] the body's margins are the kit's {art.Name} body (got {body} and {bodyRight})");
+            require(KitLookCapture || Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
             var x = (int)Math.Round(plan.ToDevice(20, 0).X);
             var xTop = (int)Math.Round(plan.ToDevice(400, 0).X);   // ARC-UI-3260: the top strip's iron sections stand over its two ends, so the row above the seam is read in the middle, between them
             var (aboveTop, belowTop) = (Pixel(xTop, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
             var (aboveBottom, belowBottom) = (Pixel(x, composed.Body.Rect.Bottom - 3), Pixel(x, composed.Bottom.Rect.Y + 2));
-            require(Near(aboveTop, KitSaveTop) && Near(belowTop, art.BodyColor), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
-            require(Near(aboveBottom, art.BodyColor) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
+            require(KitLookCapture || Near(aboveTop, KitSaveTop) && Near(belowTop, art.BodyColor), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
+            require(KitLookCapture || Near(aboveBottom, art.BodyColor) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
             // The character draw fills its fields black itself, so nothing of the kit's body shows in the story's field.
             var story = AtUnit(AreaPremadeBrowserArtLayout.Description.X + AreaPremadeBrowserArtLayout.Description.Width - 6, AreaPremadeBrowserArtLayout.Description.Y + AreaPremadeBrowserArtLayout.Description.Height - 6);
             require(story.R8 + story.G8 + story.B8 < 12, $"[{tag}] the story's field is black (got {story})");
@@ -348,28 +348,28 @@ public partial class TerrainViewerApp
             Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
             Color AtUnit(double x, double y) { var (dx, dy) = plan.ToDevice(x, y); return Pixel((int)Math.Round(dx), (int)Math.Round(dy)); }
             var (top, bottom) = (AtUnit(400, 20), AtUnit(400, 465));
-            require(Near(top, KitSaveTop), $"[{tag}] the top strip row is the kit's top strip (got {top})");
-            require(Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
+            require(KitLookCapture || Near(top, KitSaveTop), $"[{tag}] the top strip row is the kit's top strip (got {top})");
+            require(KitLookCapture || Near(bottom, KitSaveBottom), $"[{tag}] the bottom strip row is the kit's bottom strip (got {bottom})");
             var colours = art.BodyColors();
             for (var i = 0; i < art.BodyPoints.Count; i++)
             {
                 var point = AtUnit(art.BodyPoints[i].X, art.BodyPoints[i].Y);
-                require(Near(point, colours[Math.Min(i, colours.Count - 1)]), $"[{tag}] the body's margin at {art.BodyPoints[i]} is the kit's {art.Name} body (got {point})");
+                require(KitLookCapture || Near(point, colours[Math.Min(i, colours.Count - 1)]), $"[{tag}] the body's margin at {art.BodyPoints[i]} is the kit's {art.Name} body (got {point})");
             }
             // The seams of the strips with the body: two device rows either side of its top and bottom edges, at the body's left margin.
             var x = (int)Math.Round(plan.ToDevice(art.BodyPoints[0].X, 0).X);
             var xTop = (int)Math.Round(plan.ToDevice(400, 0).X);   // ARC-UI-3260: the top strip's iron sections stand over its two ends, so the row above the seam is read in the middle, between them
             var (aboveTop, belowTop) = (Pixel(xTop, composed.Body.Rect.Y - 2), Pixel(x, composed.Body.Rect.Y + 2));
             var (aboveBottom, belowBottom) = (Pixel(x, composed.Body.Rect.Bottom - 3), Pixel(x, composed.Bottom.Rect.Y + 2));
-            require(Near(aboveTop, KitSaveTop) && Near(belowTop, colours[0]), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
-            require(Near(aboveBottom, colours[0]) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
+            require(KitLookCapture || Near(aboveTop, KitSaveTop) && Near(belowTop, colours[0]), $"[{tag}] the top strip meets the body with no gap (above {aboveTop}, below {belowTop})");
+            require(KitLookCapture || Near(aboveBottom, colours[0]) && Near(belowBottom, KitSaveBottom), $"[{tag}] the body meets the bottom strip with no gap (above {aboveBottom}, below {belowBottom})");
             if (composed.BodyPieces.Count > 1)
             {
                 // The barter window's two pieces meet at their joint: the pixel row just below the strip's seam, one device pixel either side.
                 var joint = composed.BodyPieces[0].Rect.Right;
                 var y = composed.Body.Rect.Y + 3;
                 var (leftOfJoint, rightOfJoint) = (Pixel(joint - 2, y), Pixel(joint + 1, y));
-                require(Near(leftOfJoint, colours[0]) && Near(rightOfJoint, colours[1]), $"[{tag}] the merchant's side meets the inventory's piece with no gap (left {leftOfJoint}, right {rightOfJoint})");
+                require(KitLookCapture || Near(leftOfJoint, colours[0]) && Near(rightOfJoint, colours[1]), $"[{tag}] the merchant's side meets the inventory's piece with no gap (left {leftOfJoint}, right {rightOfJoint})");
             }
         }
         if (!firstSize) return;
@@ -426,7 +426,7 @@ public partial class TerrainViewerApp
         var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
         Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
         var (topLeft, bottomRight) = (Pixel(layout.Zone.X + 8, layout.Zone.Y + 8), Pixel(layout.Zone.Right - 8, layout.Zone.Bottom - 8));
-        require(Near(topLeft, colour) && Near(bottomRight, colour), $"[{tag}] the plate's corners are the kit plate's colour (got {topLeft} and {bottomRight})");
+        require(KitLookCapture || Near(topLeft, colour) && Near(bottomRight, colour), $"[{tag}] the plate's corners are the kit plate's colour (got {topLeft} and {bottomRight})");
     }
 
     /// <summary>
@@ -457,7 +457,7 @@ public partial class TerrainViewerApp
             var frame = Pixel(view.WindowPointForSelfTest(12, 215));
             var inView = Pixel(view.WindowPointForSelfTest(AreaWorldMapArtLayout.View.X + AreaWorldMapArtLayout.View.Width / 2.0, AreaWorldMapArtLayout.View.Y + AreaWorldMapArtLayout.View.Height / 2.0));
             var inLens = Pixel(view.WindowPointForSelfTest(AreaWorldMapArtLayout.Lens.X + AreaWorldMapArtLayout.Lens.Side / 2.0, AreaWorldMapArtLayout.Lens.Y + AreaWorldMapArtLayout.Lens.Side / 2.0));
-            require(Near(frame, KitMap), $"[{tag}] the {name}'s frame is the kit's colour (got {frame})");
+            require(KitLookCapture || Near(frame, KitMap), $"[{tag}] the {name}'s frame is the kit's colour (got {frame})");
             require(!Near(inView, KitMap), $"[{tag}] the {name}'s hole is clear of the kit's colour (got {inView})");
             require(!Near(inLens, KitMap), $"[{tag}] the lens's hole is clear of the kit's colour (got {inLens})");
             // The kit's frame has no compass letters: the window writes N E S W in the art's dark red at the places of the original's.
@@ -493,6 +493,9 @@ public partial class TerrainViewerApp
     }
 
     private static bool Near(Color a, Color b) => Math.Abs(a.R - b.R) < 0.02f && Math.Abs(a.G - b.G) < 0.02f && Math.Abs(a.B - b.B) < 0.02f;
+
+    /// <summary>ARC-DEV-3300: a look capture (ARC_STEAMWOVEN_KIT_LOOK) may put a real master in place of any part's flat colour, so under it no check asks a pixel for a synthetic kit colour; the draws, places, residency and black fields are still asked.</summary>
+    private static bool KitLookCapture => System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_LOOK") is { Length: > 0 };
 
     /// <summary>
     /// ARC-UI-3032 (AC2): the real loot window over the kit background: a junk pile of the hero's dropped coin is opened in the loot window and the window draws neither of its background arts (234 and 221) and takes both doll covers
@@ -615,7 +618,7 @@ public partial class TerrainViewerApp
             var ratio = new Vector2(shot.GetWidth(), shot.GetHeight()) / GetViewport().GetVisibleRect().Size;
             Color PixelAt(Vector2 point) => shot.GetPixel(Math.Clamp((int)(point.X * ratio.X), 0, shot.GetWidth() - 1), Math.Clamp((int)(point.Y * ratio.Y), 0, shot.GetHeight() - 1));
             var probe = PixelAt(page.Point(3, 321));
-            require(Near(probe, page.Colour) == kitSheets, $"[{tag}] the {page.Name} page's pixels are {(kitSheets ? "" : "not ")}its kit sheet's colour (got {probe})");
+            require(KitLookCapture || Near(probe, page.Colour) == kitSheets, $"[{tag}] the {page.Name} page's pixels are {(kitSheets ? "" : "not ")}its kit sheet's colour (got {probe})");
             // ARC-UI-3320: over the kit's sheet and the kit's plates the middle of a round button is its plate's colour (the selected one, the first of its row, is its pressed face), a corner of its art's rectangle is cut away (not the plate's colour);
             // otherwise (no kit sheet, or a set without the plates) it is the art's own frame, never the flat colour.
             const int selected = 0;
@@ -627,7 +630,7 @@ public partial class TerrainViewerApp
                 _ => [],
             };
             // A look capture (ARC_STEAMWOVEN_KIT_LOOK) puts the real plates in place of the flat colours, so the colour reads are skipped.
-            if (tabs.Count > 0 && System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_LOOK") is not { Length: > 0 })
+            if (tabs.Count > 0 && !KitLookCapture)
             {
                 Vector2 Middle(int index) { var part = AreaKitRoundParts.Of(tabs[index].Art)!.Value; return page.Point(tabs[index].Place.X + part.Cx, tabs[index].Place.Y + part.Cy); }
                 var drawsKit = kitSheets && kitRounds;
@@ -702,10 +705,10 @@ public partial class TerrainViewerApp
                     }
                 var share = total == 0 ? 0 : (double)hits / total;
                 // Every piece of the window's background shows (a window that still drew only one of its two old arts would hide the other piece).
-                var lookCapture = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_LOOK") is { Length: > 0 };      // ARC-UI-3165: a look capture puts a real surface in place of the flat colours, so the colour shares are not asked
-                require(!kitHere || lookCapture || perColour.All(count => total > 0 && (double)count / total > 0.02), $"[{tag}] every piece of the {name} window's kit background shows (shares {string.Join(", ", perColour.Select(count => ((double)count / Math.Max(1, total)).ToString("F3")))})");
+                // ARC-UI-3165: a look capture puts a real surface in place of the flat colours, so the colour shares are not asked.
+                require(!kitHere || KitLookCapture || perColour.All(count => total > 0 && (double)count / total > 0.02), $"[{tag}] every piece of the {name} window's kit background shows (shares {string.Join(", ", perColour.Select(count => ((double)count / Math.Max(1, total)).ToString("F3")))})");
                 GD.Print($"ARC-UI-3037 {tag} {name} kit-colour share {share:F3}");
-                require(lookCapture || (kitHere ? share > 0.10 : share < 0.01), $"[{tag}] the {name} window's pixels are {(kitHere ? "mostly" : "not")} the kit's colours (share {share:F3}): its own background art is {(kitHere ? "not drawn" : "drawn")}");
+                require(KitLookCapture || (kitHere ? share > 0.10 : share < 0.01), $"[{tag}] the {name} window's pixels are {(kitHere ? "mostly" : "not")} the kit's colours (share {share:F3}): its own background art is {(kitHere ? "not drawn" : "drawn")}");
                 // ARC-UI-3165 (method A condition 1): the words and numbers art 22 had baked in are the sheet's own text over the kit's background (the eight stat names, the dial's E and G, the ruler's seven divisions), none with the art's own background.
                 if (name == "sheet" && _sheetPanel?.ArtViewForSelfTest is { } labelView)
                 {
@@ -726,7 +729,7 @@ public partial class TerrainViewerApp
                     {
                         var at = sheetView.GetGlobalTransform() * new Vector2(wx, wy);
                         var probe = shot.GetPixel(Math.Clamp((int)(at.X * ratio.X), 0, shot.GetWidth() - 1), Math.Clamp((int)(at.Y * ratio.Y), 0, shot.GetHeight() - 1));
-                        require(Math.Abs(probe.R - kitColour.R) < .12f && Math.Abs(probe.G - kitColour.G) < .12f && Math.Abs(probe.B - kitColour.B) < .12f, $"[{tag}] the sheet's {what} is drawn from the kit part at ({wx}, {wy}) (got {probe})");
+                        require(KitLookCapture || Math.Abs(probe.R - kitColour.R) < .12f && Math.Abs(probe.G - kitColour.G) < .12f && Math.Abs(probe.B - kitColour.B) < .12f, $"[{tag}] the sheet's {what} is drawn from the kit part at ({wx}, {wy}) (got {probe})");
                     }
             }
             await CaptureHudAsync("steamwoven-" + tag + "-" + name + (kit ? (fixtures ? (sheetComplete ? "-kit" : "-kit-incomplete") : "-kit-standin") : "-own"), frames);
@@ -775,7 +778,7 @@ public partial class TerrainViewerApp
             var at = pane.GetGlobalTransformWithCanvas() * new Vector2(all.X + 11.5f, all.Y - AreaGameBarLayout.BottomTop + 11.5f);
             var ratio = new Vector2(image.GetWidth(), image.GetHeight()) / GetViewport().GetVisibleRect().Size;
             var colour = image.GetPixel(Math.Clamp((int)(at.X * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(at.Y * ratio.Y), 0, image.GetHeight() - 1));
-            require(Near(colour, expected), $"[{tag}] the All button's middle is the kit's {state} face (got {colour})");
+            require(KitLookCapture || Near(colour, expected), $"[{tag}] the All button's middle is the kit's {state} face (got {colour})");
         }
         try
         {
@@ -832,7 +835,6 @@ public partial class TerrainViewerApp
     /// </summary>
     private async Task CheckKitWindowFacesAsync(string tag, Func<int, Task> frames, Action<bool, string> require, bool kitFaces)
     {
-        var look = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_LOOK") is { Length: > 0 };
         var variant = kitFaces ? "-kit" : "-own";
         async Task Pointer(Vector2 at) { GetViewport().PushInput(new InputEventMouseMotion { Position = at, GlobalPosition = at }); await frames(3); }
         async Task Press(Vector2 at, bool pressed)
@@ -846,7 +848,7 @@ public partial class TerrainViewerApp
             var item = shown.Where(face => face.Art == art).ToList();
             require(kitFaces ? item.Count == 1 && ReferenceEquals(item[0].Texture, AreaKitSheets.Face(art, frame)) && !own.Contains(art) : item.Count == 0 && own.Contains(art),
                 $"[{tag}] {what} {(kitFaces ? "draws the kit's face of frame " + frame : "draws the art's own frame")}");
-            if (look) return;
+            if (KitLookCapture) return;
             using var shot = GetViewport().GetTexture().GetImage();
             var ratio = new Vector2(shot.GetWidth(), shot.GetHeight()) / GetViewport().GetVisibleRect().Size;
             var pixel = shot.GetPixel(Math.Clamp((int)(middle.X * ratio.X), 0, shot.GetWidth() - 1), Math.Clamp((int)(middle.Y * ratio.Y), 0, shot.GetHeight() - 1));
@@ -962,11 +964,10 @@ public partial class TerrainViewerApp
                     // and the hardware's colour where a layer is (the top plate's body, the bottom strip's wires: the bar's own bars and slots draw over the vial and the rest). A look capture puts real masters in place of the flat colours and asks no colour.
                     Color AtMaster(Godot.Rect2 strip, int masterX, int masterY, int stripMasterHeight) => Pixel((int)(strip.Position.X + strip.Size.X * masterX / 2880.0), (int)(strip.Position.Y + strip.Size.Y * masterY / stripMasterHeight));
                     var (tRect, bRect) = (new Godot.Rect2(t.X, t.Y, t.Width, t.Height), new Godot.Rect2(b.X, b.Y, b.Width, b.Height));
-                    var lookStrips = System.Environment.GetEnvironmentVariable("ARC_STEAMWOVEN_KIT_LOOK") is { Length: > 0 };
-                    require(lookStrips || Near(AtMaster(tRect, 1000, 75, 150), KitTop), $"[{tag}] the top strip's pixels between the plates are the kit art's colour (got {AtMaster(tRect, 1000, 75, 150)})");
-                    require(lookStrips || Near(AtMaster(bRect, 2600, 560, 570), KitBottom), $"[{tag}] the bottom strip's pixels below the right ring are the kit art's colour (got {AtMaster(bRect, 2600, 560, 570)})");
-                    require(lookStrips || Near(AtMaster(tRect, 850, 75, 150), KitHardware), $"[{tag}] the top strip's plate is the hardware layer's colour (got {AtMaster(tRect, 850, 75, 150)})");
-                    require(lookStrips || Near(AtMaster(bRect, 1440, 3, 570), KitHardware), $"[{tag}] the bottom strip's wires are the hardware layer's colour (got {AtMaster(bRect, 1440, 3, 570)})");
+                    require(KitLookCapture || Near(AtMaster(tRect, 1000, 75, 150), KitTop), $"[{tag}] the top strip's pixels between the plates are the kit art's colour (got {AtMaster(tRect, 1000, 75, 150)})");
+                    require(KitLookCapture || Near(AtMaster(bRect, 2600, 560, 570), KitBottom), $"[{tag}] the bottom strip's pixels below the right ring are the kit art's colour (got {AtMaster(bRect, 2600, 560, 570)})");
+                    require(KitLookCapture || Near(AtMaster(tRect, 850, 75, 150), KitHardware), $"[{tag}] the top strip's plate is the hardware layer's colour (got {AtMaster(tRect, 850, 75, 150)})");
+                    require(KitLookCapture || Near(AtMaster(bRect, 1440, 3, 570), KitHardware), $"[{tag}] the bottom strip's wires are the hardware layer's colour (got {AtMaster(bRect, 1440, 3, 570)})");
                     require(top!.Layers.Count == SteamwovenKitTable.Strips[AreaBarStrip.Top].Layers.Count && bottom!.Layers.Count == SteamwovenKitTable.Strips[AreaBarStrip.Bottom].Layers.Count, $"[{tag}] every hardware layer of the table is composed ({top!.Layers.Count} on the top strip, {bottom!.Layers.Count} on the bottom)");
                     // The caps stand beside the strips on the world; at 4:3 there is no side and they are clipped away (SWI-LAY-3).
                     foreach (var draw in caps.DrawsForSelfTest)
@@ -975,7 +976,7 @@ public partial class TerrainViewerApp
                         var left = draw.PartId.EndsWith("_left", StringComparison.Ordinal);
                         if (clipped) { require(column.Column.X <= 0 && column.Column.Right >= size.X, $"[{tag}] {draw.PartId} is clipped away only where the composition has no side"); continue; }
                         var probe = Pixel(left ? draw.Clip.Right - 1 : draw.Clip.X, draw.Clip.Y + draw.Clip.Height / 2);
-                        require(lookStrips || Near(probe, left ? KitCapLeft : KitCapRight), $"[{tag}] {draw.PartId}'s pixels are the kit cap's colour (got {probe})");
+                        require(KitLookCapture || Near(probe, left ? KitCapLeft : KitCapRight), $"[{tag}] {draw.PartId}'s pixels are the kit cap's colour (got {probe})");
                     }
                 }
                 // The bar button: the Character button is the kit's plate with its glyph over it (the buttons' look overlays need a look the smoke does not press).
@@ -986,8 +987,8 @@ public partial class TerrainViewerApp
                 using (var image = GetViewport().GetTexture().GetImage())
                 {
                     Color Pixel(Vector2 point) => image.GetPixel(Math.Clamp((int)point.X, 0, image.GetWidth() - 1), Math.Clamp((int)point.Y, 0, image.GetHeight() - 1));
-                    require(Near(Pixel(glyphProbe), KitGlyph), $"[{tag}] the Character button's middle is the kit glyph's colour (got {Pixel(glyphProbe)} at {glyphProbe})");
-                    require(Near(Pixel(plateProbe), KitPlate), $"[{tag}] the Character button's corner is the kit plate's colour (got {Pixel(plateProbe)} at {plateProbe})");
+                    require(KitLookCapture || Near(Pixel(glyphProbe), KitGlyph), $"[{tag}] the Character button's middle is the kit glyph's colour (got {Pixel(glyphProbe)} at {glyphProbe})");
+                    require(KitLookCapture || Near(Pixel(plateProbe), KitPlate), $"[{tag}] the Character button's corner is the kit plate's colour (got {Pixel(plateProbe)} at {plateProbe})");
                 }
                 // AC: the covered window's background, with no window over it: the pieces tile the zone and meet at the 1290 px split; the world beside is dimmed by the layer as with a window.
                 _smokeKitBackdrop = (SteamwovenBackdropFamily.Inventory, SteamwovenKitWindow.Inventory);
@@ -1007,9 +1008,9 @@ public partial class TerrainViewerApp
                 {
                     Color Pixel(int x, int y) => image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1));
                     var y0 = zone.Y + zone.Height / 2;
-                    require(Near(Pixel(zone.X + 16, y0), KitDoll), $"[{tag}] the zone's left is the paper-doll piece (got {Pixel(zone.X + 16, y0)})");
-                    require(Near(Pixel(zone.Right - 16, y0), KitInventory), $"[{tag}] the zone's right is the inventory piece (got {Pixel(zone.Right - 16, y0)})");
-                    require(Near(Pixel(background[1].Rect.X - 1, y0), KitDoll) && Near(Pixel(background[1].Rect.X, y0), KitInventory), $"[{tag}] the pieces meet at the split with no gap");
+                    require(KitLookCapture || Near(Pixel(zone.X + 16, y0), KitDoll), $"[{tag}] the zone's left is the paper-doll piece (got {Pixel(zone.X + 16, y0)})");
+                    require(KitLookCapture || Near(Pixel(zone.Right - 16, y0), KitInventory), $"[{tag}] the zone's right is the inventory piece (got {Pixel(zone.Right - 16, y0)})");
+                    require(KitLookCapture || Near(Pixel(background[1].Rect.X - 1, y0), KitDoll) && Near(Pixel(background[1].Rect.X, y0), KitInventory), $"[{tag}] the pieces meet at the split with no gap");
                 }
                 // SWI-RUN-5: only the open window's background and only the step in use are in memory.
                 require(SteamwovenKitStore.ResidentForSelfTest.All(path => path.StartsWith(System.IO.Path.Combine(root, SteamwovenKitSet.FolderName(step)) + System.IO.Path.DirectorySeparatorChar, StringComparison.Ordinal)), $"[{tag}] only the {SteamwovenKitSet.FolderName(step)} set is resident");
@@ -1028,7 +1029,7 @@ public partial class TerrainViewerApp
                 {
                     Color Pixel(int x, int y) => image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1));
                     var y0 = zone.Y + zone.Height / 2;
-                    require(Near(Pixel(zone.X + 16, y0), KitLoot) && Near(Pixel(zone.Right - 16, y0), KitInventory), $"[{tag}] the loot zone's left is the loot piece and its right the inventory piece (got {Pixel(zone.X + 16, y0)} and {Pixel(zone.Right - 16, y0)})");
+                    require(KitLookCapture || Near(Pixel(zone.X + 16, y0), KitLoot) && Near(Pixel(zone.Right - 16, y0), KitInventory), $"[{tag}] the loot zone's left is the loot piece and its right the inventory piece (got {Pixel(zone.X + 16, y0)} and {Pixel(zone.Right - 16, y0)})");
                 }
                 require(AreaGameBarPanel.KitBackgroundWindow == SteamwovenKitWindow.Loot && AreaGameBarPanel.KitCover(349) is not null && AreaGameBarPanel.KitCover(341) is not null,
                     $"[{tag}] the loot window's kit background and both doll covers are published for the window over it");
@@ -1077,7 +1078,7 @@ public partial class TerrainViewerApp
                         using var image = GetViewport().GetTexture().GetImage();
                         Color Pixel(int x, int y) => image.GetPixel(Math.Clamp(x, 0, image.GetWidth() - 1), Math.Clamp(y, 0, image.GetHeight() - 1));
                         var yMid = zone.Y + zone.Height / 2;
-                        require(Near(Pixel(zone.X + 16, yMid), leftColour) && Near(Pixel(zone.Right - 16, yMid), KitInventory), $"[{tag}] the {name} window's zone is the merchant piece on the left (got {Pixel(zone.X + 16, yMid)}) and the inventory piece on the right (got {Pixel(zone.Right - 16, yMid)})");
+                        require(KitLookCapture || Near(Pixel(zone.X + 16, yMid), leftColour) && Near(Pixel(zone.Right - 16, yMid), KitInventory), $"[{tag}] the {name} window's zone is the merchant piece on the left (got {Pixel(zone.X + 16, yMid)}) and the inventory piece on the right (got {Pixel(zone.Right - 16, yMid)})");
                     }
                 }
                 _smokeKitBackdrop = null;
