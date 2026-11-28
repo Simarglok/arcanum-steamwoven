@@ -154,7 +154,7 @@ public static class InterfaceHd
             var entry = new DirectFrameEntry(pack, scale);
             entries.Add(entry);
             Interlocked.Increment(ref _directPending);
-            Task.Run(() => ResampleDirectAsync(entries, entry, frame, query));
+            ViewerEngineTeardown.Work.Track(Task.Run(() => ResampleDirectAsync(entries, entry, frame, query)));
             return entry;
         }
     }
@@ -165,6 +165,8 @@ public static class InterfaceHd
         await DirectGate.WaitAsync();
         try
         {
+            // ARC-DEV-3304: an app that is leaving drops what is still queued.
+            if (ViewerEngineTeardown.Work.Closing) { entry.Failed = true; return; }
             lock (DirectFrames) if (!entries.Contains(entry)) { entry.Failed = true; return; }
             var clock = Stopwatch.StartNew();
             var pack = entry.Pack;
@@ -190,7 +192,7 @@ public static class InterfaceHd
         {
             DirectGate.Release();
             Interlocked.Decrement(ref _directPending);
-            Callable.From(() => FrameReady(frame)).CallDeferred();
+            if (!ViewerEngineTeardown.Work.Closing) Callable.From(() => FrameReady(frame)).CallDeferred();
         }
     }
 
@@ -295,6 +297,7 @@ public static class InterfaceHd
         Parallel.ForEach(work, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, parallelism) }, entry =>
         {
             var (frame, premultiplied) = entry;
+            if (ViewerEngineTeardown.Work.Closing) return; // ARC-DEV-3304: the app is leaving, nothing will draw it
             if (Prepared.TryGetValue(frame, out var known) && ReferenceEquals(known.Pack, pack) && known.Premultiplied == premultiplied) return;
             Image? image = null;
             try

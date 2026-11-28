@@ -79,7 +79,7 @@ public partial class TerrainViewerApp
                 _warmKey = (pack, enabled);
                 (_warmBuilt, _warmBuildMilliseconds, _warmSlices, _warmSliceMilliseconds, _warmSliceWorstMilliseconds) = (false, 0, 0, 0, 0);
                 var (slots, step) = (_windowArtSlots!, _warmStep);
-                _warmTask = Task.Run(() => WarmWorker(slots, step, enabled ? pack : null));
+                _warmTask = ViewerEngineTeardown.Work.Track(Task.Run(() => WarmWorker(slots, step, enabled ? pack : null)));
                 return;
             }
             if (!_warmTask.IsCompleted) return;
@@ -123,7 +123,7 @@ public partial class TerrainViewerApp
             // The warm-up is an optimization: whatever it could not do the window does on demand.
             GD.Print($"ARC-DEV-369 window art warm stopped at {(_warmStep < WarmStepNames.Length ? WarmStepNames[_warmStep] : "end")}: {error.GetType().Name} {error.Message}");
             InterfaceHd.CollectForWarm = false;
-            if (_warmTask is { } running) _ = running.ContinueWith(task => { if (task.IsCompletedSuccessfully) InterfaceHd.DropPrepared(task.Result.Frames); }, TaskScheduler.Default);
+            if (_warmTask is { } running) ViewerEngineTeardown.Work.Track(running.ContinueWith(task => { if (task.IsCompletedSuccessfully) InterfaceHd.DropPrepared(task.Result.Frames); }, TaskScheduler.Default));
             _warmTask = null; _warmStep = WarmStepNames.Length;
         }
     }
@@ -186,7 +186,7 @@ public partial class TerrainViewerApp
     private void StartWindowArtWarm(string module)
     {
         // A worker of another module's slots still running only drops what it prepared once it ends.
-        if (_warmTask is { } old) _ = old.ContinueWith(task => { if (task.IsCompletedSuccessfully) InterfaceHd.DropPrepared(task.Result.Frames); }, TaskScheduler.Default);
+        if (_warmTask is { } old) ViewerEngineTeardown.Work.Track(old.ContinueWith(task => { if (task.IsCompletedSuccessfully) InterfaceHd.DropPrepared(task.Result.Frames); }, TaskScheduler.Default));
         _windowArtSlots = new(module,
             new(() => AreaInventoryArtContent.Load(module), LazyThreadSafetyMode.ExecutionAndPublication),
             new(() => AreaCharacterSheetArtContent.Load(module), LazyThreadSafetyMode.ExecutionAndPublication),
