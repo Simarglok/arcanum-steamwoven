@@ -1527,7 +1527,7 @@ Moved here from the owner test checklist of 2026-11-14 (item A5). The docs now n
 | # | Step | Expected | Status |
 | --- | --- | --- | --- |
 | 1 | In a terminal that can read the pack folders run `python3 -B tools/hd_pack/hd_pack.py mirror --dry-run`. | It shows what it would copy and nothing is changed. | open |
-| 2 | Start the game with "HD interface" on. | Moot since ARC-UI-3003 (the game no longer reads `main-menu-16x9.png` and logs no such line). | cannot-test (moot) |
+| 2 | Start the game with "HD interface" on. | Moot since ARC-UI-3003 (the game no longer reads `main-menu-16x9.png` and logs no such line); ARC-UI-3483 restored both on 2026-11-28. | cannot-test (moot) |
 
 ## ARC-UI-1574 — Reload after death (optional, PR #1645, 2026-11-13)
 

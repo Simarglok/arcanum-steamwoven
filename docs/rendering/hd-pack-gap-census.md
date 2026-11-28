@@ -71,7 +71,7 @@ Every one goes through the HD frame path, so a delivered frame is used without a
 | 204 | `MM_Cross` | 2 / 2 (only frame 0, 11x11, is drawn) | 11x11, 13x13 | World map and town map: the party marker | P2 |
 | 627 | `Saltys_Map` | 1 / 1 | 668x400 | Reading window: picture of the written object that names it | P3 |
 | 803 | `MazzerinsMystery` | 1 / 1 | 668x400 | Reading window: same | P3 |
-| 329 | `MainMenuBack` | 1 / 1 | 800x600 | Main menus. Legacy in HD when the generated interface is off (the whole-factor plate; the pack's `main-menu-16x9.png` is no longer read, ARC-UI-3003); with a Steamwoven full-screen plan the plate is the layout zone's backdrop | P3 |
+| 329 | `MainMenuBack` | 1 / 1 | 800x600 | Main menus. Legacy in HD when the generated interface is off (the whole-factor plate; with HD on the pack's `main-menu-16x9.png` covers these menus, ARC-UI-3483); with a Steamwoven full-screen plan the plate is the layout zone's backdrop | P3 |
 | 61 arts | schematic record pictures, [appendix](#appendix-schematic-record-pictures-without-a-pack-frame) | 61 / 61 | 295x225 | Schematic window: the picture of the selected record; 72 of 133 pictures are in the pack | P2 |
 
 ## Drawn by code under the HD option

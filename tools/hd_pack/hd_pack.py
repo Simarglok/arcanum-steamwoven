@@ -603,7 +603,7 @@ def cmd_rollback(a) -> int:
     if receipt.get("kind") == "refresh":
         raise PackError("a refresh cannot be rolled back: the edited PNGs are the only copy of your edits. Put an older PNG back from your own copy and run refresh again")
     if receipt.get("kind") == "menu":
-        raise PackError("a menu-art receipt cannot be rolled back: the game no longer reads main-menu-16x9.png (ARC-UI-3003) and hd_pack.py no longer installs it. Delete or restore that file by hand if you want it back")
+        raise PackError("a menu-art receipt cannot be rolled back: hd_pack.py no longer installs main-menu-16x9.png (ARC-DEV-3030). The game reads that file (ARC-UI-3483): restore it by hand if you want the older one back")
     if receipt.get("status") not in ("applied", "failed", "started", "rolling-back", "rolled-back") or receipt.get("kind") not in ("update", "relayout"):
         raise PackError("receipt has an unknown kind or status")
     if receipt["kind"] == "relayout":
