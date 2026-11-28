@@ -229,7 +229,7 @@ public partial class AreaReadingArtView : Control
         if (HasNext && Texture(AreaReadingArtLayout.NextArt, PageFrame(1, AreaReadingArtLayout.NextArt)) is { } next)
             DrawTextureRect(next, new Rect2(AreaReadingArtLayout.NextCorner.X, AreaReadingArtLayout.NextCorner.Y, next.GetWidth(), next.GetHeight()), false);
         var colour = AreaReadingArtLayout.Colour(document.Subtype);
-        foreach (var line in Lines()) AreaArtTextDraw.Glyphs(this, Face(line.Font), line.Glyphs, line.X, line.Y, colour);
+        foreach (var line in Lines()) AreaArtTextDraw.Glyphs(this, Face(line.Font), line.Glyphs, line.X, line.Y, colour, scale: line.Scale);
     }
 
     // The frame art; with the round view under it the lens's square is left out.
