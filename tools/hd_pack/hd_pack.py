@@ -910,6 +910,68 @@ def png_header(path: Path) -> tuple[int, int, int, int, int]:
     return w, h, depth, ctype, interlace
 
 
+STARTUP_STEMS = ("splash1", "splash2", "splash3")
+
+
+def startup_picture(path: Path) -> None:
+    """The shape of a start-up picture the game takes: a 16:9 8-bit RGBA PNG, not interlaced, up to 3840 x 2160 and 40 MiB.
+    The game also refuses transparent pixels (it logs the status)."""
+    if path.is_symlink() or not path.is_file():
+        raise PackError(f"{path} is not a plain file")
+    if path.stat().st_size > 40 * 1024 * 1024:
+        raise PackError(f"{path} is larger than 40 MiB")
+    w, h, depth, ctype, interlace = png_header(path)
+    if (depth, ctype, interlace) != (8, 6, 0):
+        raise PackError(f"{path} is not a non-interlaced 8-bit RGBA PNG")
+    if w > 3840 or w * 9 != h * 16:
+        raise PackError(f"{path} is {w} x {h}; it must be 16:9 and at most 3840 wide")
+
+
+def cmd_splash(a) -> int:
+    guard_installed(a.installed, a.allow_symlink)
+    guard_backup(a.backup_root, a.installed)
+    found = [(stem, a.pictures / f"{stem}-16x9.png") for stem in STARTUP_STEMS]
+    found = [(stem, src) for stem, src in found if src.exists()]
+    if not found:
+        raise PackError(f"{a.pictures}: none of " + ", ".join(f"{s}-16x9.png" for s in STARTUP_STEMS))
+    todo = []
+    for stem, src in found:
+        startup_picture(src)
+        rel = f"splash/{stem}-16x9.png"
+        dst = a.installed / rel
+        if dst.is_file() and sha256(dst) == sha256(src):
+            print(f"  same {rel}")
+            continue
+        todo.append((src, rel, dst.is_file()))
+        print(f"  {'replace' if dst.is_file() else 'add'} {rel} sha256={sha256(src)[:12]}")
+    if not todo:
+        print("up to date")
+        return 0
+    replaced = [rel for _, rel, old in todo if old]
+    if replaced and not a.replace:
+        raise PackError(f"the pack already holds another {', '.join(replaced)}; nothing was changed (--replace keeps the old file in the backup)")
+    backup = a.backup_root / f"{a.task}-splash-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"
+    if a.dry_run:
+        print(f"DRY-RUN: would write {len(todo)} files; {len(replaced)} old files would go to {backup}")
+        return 0
+    inst = a.installed
+    with Lock(inst.parent):
+        before = snapshot(inst)
+        for _, rel, old in todo:
+            if old:
+                atomic_copy(inst / rel, backup / rel)
+        for src, rel, _ in todo:
+            atomic_copy(src, inst / rel)
+        after = snapshot(inst)
+        written = {rel for _, rel, _ in todo}
+        bad = [f"differs after copy: {rel}" for src, rel, _ in todo if sha256(src) != sha256(inst / rel)]
+        bad += [f"changed outside the plan: {k}" for k in sorted(set(before) | set(after)) if k not in written and before.get(k) != after.get(k)]
+    for b in bad[:20]:
+        print("FAIL", b)
+    print(f"{'FAIL' if bad else 'PASS'} splash: {len(todo)} files written" + (f", old files in {backup}" if replaced else ""))
+    return 1 if bad else 0
+
+
 def cmd_mirror(a) -> int:
     problems, _ = verify(a.src, deep=False)
     if problems:
@@ -1351,6 +1413,9 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--no-base-check", action="store_true", help="apply without --base (only when the installed entries are known untouched)")
     s = add("rollback", cmd_rollback, "undo one apply or relayout"); installed(s)
     s.add_argument("backup", type=Path); s.add_argument("--dry-run", action="store_true")
+    s = add("splash", cmd_splash, "add the 16:9 start-up loading pictures to the installed pack (ARC-UI-3501)"); installed(s); write(s)
+    s.add_argument("--pictures", type=Path, required=True, help="the folder with splash1-16x9.png, splash2-16x9.png, splash3-16x9.png (any of them)")
+    s.add_argument("--replace", action="store_true", help="overwrite a different picture the pack already holds (the old one goes to the backup)")
     s = add("mirror", cmd_mirror, "copy a pack's missing files to another folder (the iCloud copy)")
     s.add_argument("--src", type=Path, default=DEFAULT_INSTALLED); s.add_argument("--dst", type=Path, default=DEFAULT_COPY, help=f"the copy folder (default: the iCloud/Obsidian hd_pack/{PACK_ID})")
     s.add_argument("--dry-run", action="store_true"); s.add_argument("--deep", action="store_true", help="hash content-named files too (reads the destination fully)")

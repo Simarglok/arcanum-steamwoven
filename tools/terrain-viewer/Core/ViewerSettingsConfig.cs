@@ -43,6 +43,8 @@ public static class ViewerSettingsConfig
     public const string VoiceVolume = "voice volume";
     public const string MusicVolume = "music volume";
     public const string Hd = "hd";
+    /// <summary>ARC-UI-3501: the original's own line: where the rotation of the start-up loading picture stands.</summary>
+    public const string StartupPicture = Arcanum.World.AreaStartupPicture.CounterName;
     /// <summary>The line the HD setting had before ARC-UI-2174; read only when <see cref="Hd"/> is absent, never written.</summary>
     public const string HdInterface = "hd interface";
     /// <summary>The line of the removed generated-interface choice (ARC-UI-140, removed by ARC-UI-3142: HD On is the Steamwoven interface): no longer read or written; an old file keeps it.</summary>

@@ -26,16 +26,18 @@ public partial class TerrainViewerApp
     // ARC-UI-3453: why the start-up movies are skipped (the command line or the launcher settings), null to play them.
     private string? _startupMoviesSkip;
 
-    /// <summary>One entry of a movie queue: a number of the movie table (0x40DE70) or a movie by its path (0x40DEE0, the two logos).</summary>
-    private readonly record struct MovieItem(int Number, string? VirtualPath)
+    /// <summary>One entry of a movie queue: a number of the movie table (0x40DE70), a movie by its path (0x40DEE0, the two logos) or the
+    /// start-up loading picture (ARC-UI-3501).</summary>
+    private readonly record struct MovieItem(int Number, string? VirtualPath, bool Picture = false)
     {
-        public override string ToString() => VirtualPath ?? Number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        public override string ToString() => Picture ? "picture" : VirtualPath ?? Number.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    /// <summary>The start-up sequence of the original (docs/research/bink-movies.md MV1, MV2): the two logos by path (the game only, no
-    /// condition), then movie 8 (after the modules loaded and before the first menu; its only condition is its table row).</summary>
+    /// <summary>The start-up sequence of the original (docs/research/bink-movies.md MV1, MV2, docs/research/startup-loading-picture.md):
+    /// the two logos by path (the game only, no condition), the loading picture, then movie 8 (after the modules loaded and before the
+    /// first menu; its only condition is its table row).</summary>
     private static IReadOnlyList<MovieItem> StartupMovieItems() =>
-        [.. AreaMovieTable.LogoPaths().Select(path => new MovieItem(0, path)), new MovieItem(AreaMovieTable.StartupMovie, null)];
+        [.. AreaMovieTable.LogoPaths().Select(path => new MovieItem(0, path)), new MovieItem(0, null, Picture: true), new MovieItem(AreaMovieTable.StartupMovie, null)];
     private bool _movieActive;
     // ARC-INPUT-2647: the key whose press skipped a movie; its release is taken by the movie cover too.
     private Key _movieSkipKey;
@@ -96,7 +98,8 @@ public partial class TerrainViewerApp
 
     private bool PlayMovieItems(IReadOnlyList<MovieItem> numbers, int track, Action? done, string reason)
     {
-        if (_movieActive || !MoviesEnabled || MovieRefusal() is { } refusal)
+        // ARC-UI-3501: the loading picture needs no decoder and no movie table, so a queue of it alone is not refused for them.
+        if (_movieActive || !MoviesEnabled || (numbers.Any(item => !item.Picture) && MovieRefusal() is not null))
         {
             if (MoviesEnabled && !_movieActive) GD.Print($"ARC-RENDER-1170 movies {string.Join(",", numbers)} not played ({reason}): {MovieRefusal()}");
             return false;
@@ -115,8 +118,9 @@ public partial class TerrainViewerApp
     /// <summary>ARC-UI-3453: the start-up movies are not to play in this run (the first caller's source is the one named).</summary>
     private void SkipStartupMovies(string source) => _startupMoviesSkip ??= source;
 
-    /// <summary>The start-up movies, once a run, before the first menu is used: the logos and movie 8 (the game build only). The menu opened
-    /// under them is served at once when they end, cannot play or are skipped (ARC-UI-3453).</summary>
+    /// <summary>The start-up sequence, once a run, before the first menu is used: the logos, the loading picture and movie 8 (the game build
+    /// only); where movies cannot play the picture still shows. The menu opened under them is served at once when they end, cannot play or
+    /// are skipped (ARC-UI-3453).</summary>
     private void PlayStartupMovies()
     {
         if (_startupMoviesDone) return;
@@ -126,7 +130,13 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-3453 start-up movies skipped ({source})");
             return;
         }
-        PlayMovieItems(StartupMovieItems(), 0, null, "start-up");
+        var items = StartupMovieItems();
+        if (MoviesEnabled && MovieRefusal() is { } refusal)
+        {
+            GD.Print($"ARC-UI-3501 start-up movies not played: {refusal}");
+            items = [.. items.Where(item => item.Picture)];
+        }
+        PlayMovieItems(items, 0, null, "start-up");
     }
 
     private AreaMoviePanel NewMoviePanel()
@@ -143,6 +153,13 @@ public partial class TerrainViewerApp
         try
         {
             // The movie's own time is real time; a frame that took long (a hiccup) drops frames, it does not stretch the movie.
+            if (_pictureLeft is { } left)
+            {
+                left -= Math.Min(milliseconds, ViewerStartupMovies.PictureFrameCapMilliseconds);
+                if (left > 0) { _pictureLeft = left; return; }
+                _pictureLeft = null; _moviePanel?.ClearStill();
+                GD.Print("ARC-UI-3501 start-up picture done");
+            }
             if (_moviePlayback is null && !OpenNextMovie()) { EndMovies(); return; }
             if (_moviePlayback is not { } playback) return;
             playback.Advance(milliseconds);
@@ -168,6 +185,7 @@ public partial class TerrainViewerApp
         while (_movieQueue.Count > 0)
         {
             var item = _movieQueue.Dequeue();
+            if (item.Picture) { if (ShowStartupPicture()) return true; continue; }
             var number = item.ToString();
             var cache = _movieCache ??= System.IO.Path.Combine(System.IO.Path.GetTempPath(), "arcanum-steamwoven-movies-" + System.Environment.UserName);
             // A movie by path (the logos) does not need the table, only the content stack; a movie by number needs the table (0x40DE70).
@@ -188,6 +206,7 @@ public partial class TerrainViewerApp
     private void EndMovies()
     {
         _movieActive = false;
+        _pictureLeft = null;
         _moviePlayback?.Dispose(); _moviePlayback = null;
         _movieQueue.Clear();
         _moviePanel?.Close();
@@ -252,6 +271,8 @@ public partial class TerrainViewerApp
         if (input is InputEventKey { Pressed: true, Echo: false } skip)
         {
             _movieSkipKey = skip.Keycode != Key.None ? skip.Keycode : skip.PhysicalKeycode;
+            // ARC-UI-3501: no key ends the loading picture (in the original it stays as long as the loading takes) or drops movie 8 behind it.
+            if (_pictureLeft is not null) return true;
             GD.Print("ARC-RENDER-1170 movie key skip");
             // Between two movies (none open yet) a key drops the rest of the queue.
             if (_moviePlayback is { } playback) playback.Skip(); else _movieQueue.Clear();

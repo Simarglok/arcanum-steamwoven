@@ -120,9 +120,10 @@ folder and rules. The launcher also has the **HD** (Off/On: the HD interface art
 rows for an HD pack you have built or copied yourself, and with HD On a **World zoom** row (they are not in the
 Options window); each choice is saved at once, and the pack source applies from the next start.
 
-**Skip the three start-up movies before the main menu** is off by default, so the two company logos and the movie after
-them play as in the original (a key ends each one). Tick it and press **Play** to go to the main menu without them. The
-other movies still play.
+**Skip the start-up movies and loading picture** is off by default, so the two company logos, the "Loading Arcanum..."
+picture and the movie after it show as in the original (a key ends each movie; the picture stays 3 seconds, and each
+start shows the next of its three pictures). Tick it and press **Play** to go to the main menu without them. The other
+movies still play.
 
 **Separate rendering thread (experimental)** is off by default. Turned on, it gives more frames per second when the hero walks or
 the view scrolls, but the engine warns that it may crash. After **Play** the game then closes and starts once more by itself (a

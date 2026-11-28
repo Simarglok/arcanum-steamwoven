@@ -57,10 +57,28 @@ public sealed class HdPack
     public HdPngImage? ReadMainMenuBackdrop() => ReadMainMenuBackdropReport().Image;
 
     /// <summary>ARC-DEV-343: the same read with the outcome named, so a log can say which file of which pack was used (no path).</summary>
-    public HdMainMenuBackdropRead ReadMainMenuBackdropReport()
+    public HdWidePlateRead ReadMainMenuBackdropReport() => ReadWidePlate(MainMenuBackdropFile);
+
+    public const string MainMenuBackdropFile = "main-menu-16x9.png";
+
+    /// <summary>ARC-UI-3501: the pack's optional 16:9 redraw of one start-up loading picture, <c>splash/&lt;stem&gt;-16x9.png</c> for the
+    /// original's <c>art\splash\&lt;stem&gt;.bmp</c>; null for a stem the pack format does not name.</summary>
+    public static string? StartupPictureFile(string stem)
+    {
+        ArgumentNullException.ThrowIfNull(stem);
+        return stem.Length is > 0 and <= 32 && stem.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c is '_' or '-')
+            ? $"splash/{stem}-16x9.png" : null;
+    }
+
+    /// <summary>ARC-UI-3501: reads <see cref="StartupPictureFile"/> under the rules of the main-menu plate.</summary>
+    public HdWidePlateRead ReadStartupPictureReport(string stem)
+        => StartupPictureFile(stem) is { } file ? ReadWidePlate(file) : new(null, "BadName", null, 0, 0);
+
+    /// <summary>An unlisted 16:9 picture of the pack: opaque, at most 3840 pixels wide and 40 MiB.</summary>
+    private HdWidePlateRead ReadWidePlate(string file)
     {
         if (Review == HdReviewStatus.Rejected) return new(null, "PackRejected", null, 0, 0);
-        var bytes = ReadFile(Directory, "main-menu-16x9.png", 40 * 1024 * 1024, out _);
+        var bytes = ReadFile(Directory, file, 40 * 1024 * 1024, out _);
         if (bytes is null) return new(null, "NoFile", null, 0, 0);
         var sha12 = HdPackPath.Sha256(bytes)[..12];
         if (HdPng.ReadHeader(bytes).Header is not { } header) return new(null, "BadHeader", sha12, 0, 0);

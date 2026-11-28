@@ -748,6 +748,60 @@ class LayoutTests(unittest.TestCase):
         self.assertIn("needs 8-bit RGBA", err)
 
 
+class SplashTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        self.inst = make_pack(self.tmp / "game" / "hd-packs" / "interface-redraw-4x", [("a", "interface", "v1")])
+        self.backups = self.tmp / "game" / "hd-pack-backups"
+        self.pictures = self.tmp / "pictures"
+        self.pictures.mkdir()
+
+    def splash(self, *extra):
+        return run("splash", "--pictures", self.pictures, "--task", "ARC-UI-3501", "--installed", self.inst, "--backup-root", self.backups, *extra)
+
+    def test_adds_new_pictures_and_touches_nothing_else(self):
+        (self.pictures / "splash1-16x9.png").write_bytes(png(3840, 2160))
+        (self.pictures / "splash3-16x9.png").write_bytes(png(16, 9))
+        before = tree(self.inst)
+        rc, out, err = self.splash("--dry-run")
+        self.assertEqual(rc, 0, out + err)
+        self.assertIn("DRY-RUN", out)
+        self.assertEqual(tree(self.inst), before)
+        rc, out, err = self.splash()
+        self.assertEqual(rc, 0, out + err)
+        after = tree(self.inst)
+        self.assertEqual(sorted(set(after) - set(before)), ["splash/splash1-16x9.png", "splash/splash3-16x9.png"])
+        self.assertEqual({k: v for k, v in after.items() if k in before}, before)
+        rc, out, _ = self.splash()
+        self.assertEqual(rc, 0)
+        self.assertIn("up to date", out)
+
+    def test_a_different_picture_needs_replace_and_keeps_the_old_one(self):
+        (self.pictures / "splash2-16x9.png").write_bytes(png(16, 9))
+        self.assertEqual(self.splash()[0], 0)
+        old = (self.inst / "splash" / "splash2-16x9.png").read_bytes()
+        (self.pictures / "splash2-16x9.png").write_bytes(png(32, 18))
+        rc, _, err = self.splash()
+        self.assertEqual(rc, 2)
+        self.assertIn("--replace", err)
+        self.assertEqual((self.inst / "splash" / "splash2-16x9.png").read_bytes(), old)
+        rc, out, err = self.splash("--replace")
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual([p.read_bytes() for p in self.backups.rglob("splash2-16x9.png")], [old])
+
+    def test_wrong_pictures_are_refused(self):
+        rc, _, err = self.splash()
+        self.assertEqual(rc, 2)
+        self.assertIn("none of", err)
+        before = tree(self.inst)
+        for bad in (png(1920, 1200), png(3856, 2169), png(16, 9, ctype=2), png(16, 9, interlace=1), b"not a png"):
+            (self.pictures / "splash1-16x9.png").write_bytes(bad)
+            self.assertEqual(self.splash()[0], 2)
+        self.assertEqual(tree(self.inst), before)
+
+
 class PackUsersTests(unittest.TestCase):
     def test_both_packaged_apps_count_as_readers_of_a_pack(self):
         """ARC-DEV-3379: a running player or profiling package reads the pack, so a relayout refuses."""

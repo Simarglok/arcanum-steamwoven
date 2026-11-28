@@ -17,6 +17,8 @@ public partial class AreaMoviePanel : CanvasLayer, IMovieOutput
     private AudioStreamPlayer _player = null!;
     private Image? _image;
     private ImageTexture? _texture;
+    // ARC-UI-3501: the still picture on the screen; the panel frees it when it goes.
+    private Texture2D? _still;
 
     public bool IsOpen => Visible;
 
@@ -53,20 +55,39 @@ public partial class AreaMoviePanel : CanvasLayer, IMovieOutput
     public void Open()
     {
         FramesDrawn = 0;
-        _picture.Texture = null; _texture = null; _image = null;
+        ClearStill();
         Visible = true;
     }
+
+    /// <summary>ARC-UI-3501: a still picture on the black screen, centred and scaled to fit like a movie's frame. The panel owns it.</summary>
+    public void ShowStill(Texture2D picture, CanvasItem.TextureFilterEnum filter)
+    {
+        ClearStill();
+        _picture.TextureFilter = filter;
+        _picture.Texture = _still = picture;
+    }
+
+    /// <summary>Takes the picture off; the screen stays black.</summary>
+    public void ClearStill()
+    {
+        _picture.Texture = null; _texture = null; _image = null;
+        _still?.Dispose(); _still = null;
+    }
+
+    /// <summary>The still or frame on the screen, for the smoke.</summary>
+    public Texture2D? Shown => _picture.Texture;
 
     /// <summary>Closes the screen and stops the audio.</summary>
     public void Close()
     {
         StopAudio();
         Visible = false;
-        _picture.Texture = null; _texture = null; _image = null;
+        ClearStill();
     }
 
     public void ShowFrame(byte[] rgba, int width, int height)
     {
+        _picture.TextureFilter = CanvasItem.TextureFilterEnum.Linear;
         if (_image is null || _texture is null || _image.GetWidth() != width || _image.GetHeight() != height)
         {
             _image = Image.CreateFromData(width, height, false, Image.Format.Rgba8, rgba);

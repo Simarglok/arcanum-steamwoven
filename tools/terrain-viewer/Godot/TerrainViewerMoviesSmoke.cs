@@ -28,6 +28,7 @@ public partial class TerrainViewerApp
         }
         var folder = Directory.CreateTempSubdirectory("arc-movies-smoke-").FullName;
         var (forTest, pathFor, tableFor, sourceFor) = (_moviesForSelfTest, _moviePathForSelfTest, _movieTableForSelfTest, _movieSourceForSelfTest);
+        var pictureFor = _startupPictureForSelfTest;
         try
         {
             string Make(string name, string size, int seconds, int hertz)
@@ -81,17 +82,27 @@ public partial class TerrainViewerApp
             var skipBefore = _startupMoviesSkip;
             (_startupMoviesDone, _startupMoviesSkip) = (false, null);
             var playedBefore = _moviesPlayed;
+            // ARC-UI-3501: the loading picture is the third entry; synthetic 80 x 40 bitmaps, the saved number 4 of two files picks the first.
+            var drawn = SyntheticStartupBitmap(80, 40);
+            _startupPictureForSelfTest = (["art/splash/a.bmp", "art/splash/b.bmp"], _ => drawn, 4);
             PlayStartupMovies();
-            Require(MovieCovering && _movieQueue.Count == 3 && _movieQueue.Select(item => item.ToString()).SequenceEqual(["movies/SierraLogo.bik", "movies/TroikaLogo.bik", "8"]),
-                "the start-up queue is the two logos by path and then movie 8");
-            Require(Pump(() => !MovieCovering, 30) && _moviesPlayed == playedBefore + 3, $"the start-up movies played in full (played {_moviesPlayed - playedBefore} of 3)");
+            Require(MovieCovering && _movieQueue.Count == 4 && _movieQueue.Select(item => item.ToString()).SequenceEqual(["movies/SierraLogo.bik", "movies/TroikaLogo.bik", "picture", "8"]),
+                "the start-up queue is the two logos by path, the loading picture and then movie 8");
+            Require(Pump(() => _pictureLeft is not null, 30), "the loading picture came after the logos");
+            Require(_moviesPlayed == playedBefore + 2 && _movieQueue.Count == 1 && _startupPictureShown == "art/splash/a.bmp" && _startupPictureNext == 1,
+                $"the picture stands between the second logo and movie 8 (played {_moviesPlayed - playedBefore}, left {_movieQueue.Count}, picture {_startupPictureShown}, next {_startupPictureNext})");
+            Require(_moviePanel!.IsOpen && _moviePanel.Shown is { } still && still.GetSize() == new Vector2(800, 600) && WorldFrozenFrame, "the original 800 x 600 screen with the picture covers the game");
+            Require(HandleMovieInput(new InputEventKey { Pressed = true, Keycode = Key.Space }) && HandleMovieInput(new InputEventKey { Pressed = false, Keycode = Key.Space }), "a key is taken under the picture");
+            TickMovies(60_000);
+            Require(_pictureLeft is { } leftNow && leftNow > 0 && _movieQueue.Count == 1, "neither a key nor one long frame ends the picture or drops movie 8");
+            Require(Pump(() => !MovieCovering, 30) && _moviesPlayed == playedBefore + 3, $"the picture ended by itself and movie 8 played (played {_moviesPlayed - playedBefore} of 3)");
             PlayStartupMovies();
             Require(!MovieCovering, "the start-up movies play once a run");
             // ARC-UI-3453: with the skip option the start-up queue never starts, and other movies still play.
             (_startupMoviesDone, playedBefore) = (false, _moviesPlayed);
             SkipStartupMovies("smoke");
             PlayStartupMovies();
-            Require(!MovieCovering && _startupMoviesDone && _moviesPlayed == playedBefore, "the skipped start-up movies never start");
+            Require(!MovieCovering && _startupMoviesDone && _moviesPlayed == playedBefore, "the skipped start-up movies and picture never start");
             Require(PlayMovies([7], 0, () => continued++, "smoke") && Pump(() => !MovieCovering, 20) && continued == 2, "another movie still plays with the start-up ones skipped");
             (_startupMoviesSkip, continued) = (skipBefore, 1);
             // Outside the game build and this stage nothing plays: the dev viewer and every other smoke (ARC-RENDER-1242).
@@ -117,14 +128,87 @@ public partial class TerrainViewerApp
             _movieSourceForSelfTest = new FfmpegMovieSource(null);
             Require(MovieRefusal() is { } refusal && refusal.Contains("ffmpeg", StringComparison.Ordinal) && !PlayMovies([1], 0, () => continued++, "smoke") && !MovieCovering && continued == 2,
                 "without a decoder nothing plays and nothing waits");
+            // ARC-UI-3501: without a decoder the start-up still shows the loading picture, alone.
+            var skipNow = _startupMoviesSkip;
+            (_startupMoviesDone, _startupMoviesSkip) = (false, null);
+            PlayStartupMovies();
+            Require(Pump(() => _pictureLeft is not null, 5) && _movieQueue.Count == 0 && Pump(() => !MovieCovering, 20), "without a decoder the picture shows alone and ends");
+            _startupMoviesSkip = skipNow;
+            _startupPictureForSelfTest = pictureFor;
+            // ARC-UI-3501: the installed game's three pictures are found and each can be drawn.
+            Require(AreaSoundCatalog() is not null && _soundContent?.Stack is not null, "the installed content stack opened");
+            var stack = _soundContent!.Value.Stack!;
+            var installed = AreaStartupPicture.Paths(stack);
+            Require(installed.Count > 0 && installed.All(path => AreaStartupPicture.Read(stack, path) is { } bytes && AreaStartupPicture.Compose(bytes) is not null),
+                $"every installed start-up picture can be drawn ({string.Join(",", installed)})");
+            GD.Print($"ARC-UI-3501 installed start-up pictures={string.Join(",", installed)}");
             await CaptureInstalledMovieAsync();
+            await CaptureStartupPicturesAsync();
             GD.Print($"ARC-RENDER-1170 native-smoke movies PASS played={_moviesPlayed} skipped={_moviesSkipped} failed={_moviesFailed} frame={size}");
         }
         finally
         {
             AbortMovies();
             (_moviesForSelfTest, _moviePathForSelfTest, _movieTableForSelfTest, _movieSourceForSelfTest) = (forTest, pathFor, tableFor, sourceFor);
+            (_startupPictureForSelfTest, _startupPictureNext) = (pictureFor, null);
             try { Directory.Delete(folder, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    /// <summary>A plain uncompressed 24-bit bottom-up bitmap of one colour, made for the check.</summary>
+    private static byte[] SyntheticStartupBitmap(int width, int height)
+    {
+        var stride = (width * 3 + 3) / 4 * 4;
+        var file = new byte[54 + stride * height];
+        using var writer = new BinaryWriter(new MemoryStream(file));
+        writer.Write((byte)'B'); writer.Write((byte)'M'); writer.Write(file.Length); writer.Write(0); writer.Write(54);
+        writer.Write(40); writer.Write(width); writer.Write(height); writer.Write((short)1); writer.Write((short)24);
+        for (var i = 54; i < file.Length; i += 3) if (i + 2 < file.Length) file[i + 1] = 160;
+        return file;
+    }
+
+    // ARC-UI-3501: when ARC_AREA_STARTUP_PICTURE_CAPTURE names a folder, each installed start-up picture is saved there as the window draws it, in the
+    // original look and with HD interface art on (the ARC_HD_PACK pack's 16:9 redraw), at 16:9 and 16:10 window sizes, for the graphics report.
+    private async Task CaptureStartupPicturesAsync()
+    {
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_STARTUP_PICTURE_CAPTURE") is not { Length: > 0 } folder) return;
+        Directory.CreateDirectory(folder);
+        var window = GetWindow();
+        var (sizeBefore, settingsBefore, nextBefore, composedBefore) = (window.Size, _gameSettings, _startupPictureNext, _originalCompositionForced);
+        try
+        {
+            var stack = _soundContent!.Value.Stack!;
+            var paths = AreaStartupPicture.Paths(stack);
+            foreach (var (width, height) in new[] { (1920, 1080), (1920, 1200) })
+            {
+                window.Size = new Vector2I(width, height);
+                foreach (var hd in new[] { false, true })
+                {
+                    _gameSettings = _gameSettings with { HdInterface = hd };
+                    // The original look's whole-factor composition, which a smoke run otherwise leaves off.
+                    _originalCompositionForced = !hd;
+                    for (var index = 0; index < paths.Count; index++)
+                    {
+                        _startupPictureForSelfTest = (paths, path => AreaStartupPicture.Read(stack, path), (uint)index);
+                        SyncInterfaceHd();
+                        for (var frame = 0; frame < 30; frame++) { SyncInterfaceHd(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+                        _moviesForSelfTest = true;
+                        if (!PlayMovieItems([new MovieItem(0, null, Picture: true)], 0, null, "capture")) { GD.Print($"{MoviesCode} start-up picture capture not started"); continue; }
+                        for (var frame = 0; frame < 10; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                        var name = $"{System.IO.Path.GetFileNameWithoutExtension(paths[index])}-{(hd ? "hd" : "original")}-{width}x{height}.png";
+                        var shot = GetViewport().GetTexture().GetImage();
+                        shot.SavePng(System.IO.Path.Combine(folder, name));
+                        GD.Print($"{MoviesCode} start-up picture capture {name} viewport={shot.GetWidth()}x{shot.GetHeight()} window={window.Size.X}x{window.Size.Y}");
+                        AbortMovies();
+                    }
+                }
+            }
+        }
+        finally
+        {
+            (window.Size, _gameSettings, _startupPictureForSelfTest, _startupPictureNext, _originalCompositionForced) = (sizeBefore, settingsBefore, null, nextBefore, composedBefore);
+            SyncInterfaceHd();
         }
     }
 
