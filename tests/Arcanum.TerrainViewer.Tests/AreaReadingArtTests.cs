@@ -244,9 +244,40 @@ public sealed class AreaReadingArtTests
         foreach (var (text, count) in new[] { ("Dear X,\nbody body body\nYours, Y", 3), ("X-\nbody body body\nY", 3), ("one line only", 1), (string.Join(' ', Enumerable.Repeat("word", 1000)), 30) })
         {
             var lines = AreaReadingFlow.Single(Note(text), OnlyNoteFont);
-            Assert.AreEqual(count, lines.Count, "the whole text, and no more than the rectangle's 300 / 10 lines");
+            Assert.AreEqual(count, lines.Count, "the whole text; a text no size holds stops at the rectangle's 300 / 10 lines");
             Assert.IsTrue(lines.All(line => line.Font == AreaReadingArtLayout.NoteFont), text.Split('\n')[0]);
         }
+    }
+
+    /// <summary>ARC-UI-3494: a note too long for its rectangle is drawn whole at the largest size that holds it; one that fits, or ends in empty lines only past the rectangle, keeps its size.</summary>
+    [TestMethod]
+    public void A_note_too_long_for_its_rectangle_is_drawn_smaller()
+    {
+        var font = Font(10);
+        var rect = new AreaReadingRect(10, 20, 100, 100);
+        string Lines(int count) => string.Concat(Enumerable.Repeat("ab\n", count));
+
+        var fits = AreaReadingFlow.Note(font, 497, Lines(10), rect);
+        Assert.AreEqual(10, fits.Count);
+        Assert.IsTrue(fits.All(line => line.Scale == 1f), "ten lines of 10 fit 100");
+        Assert.IsTrue(AreaReadingFlow.Note(font, 497, Lines(10) + "\n\n \n", rect).All(line => line.Scale == 1f), "empty lines at the end do not shrink a note");
+
+        // Twelve lines need 120: 84 % gives 100 * 100 / 84 = 119, 82 % gives 121.
+        var small = AreaReadingFlow.Note(font, 497, Lines(12), rect);
+        Assert.AreEqual(12, small.Count);
+        Assert.IsTrue(small.All(line => line.Scale == 0.82f));
+        Assert.AreEqual((10, 20), (small[0].X, small[0].Y));
+        Assert.AreEqual((10, 20 + 90), (small[11].X, small[11].Y), "the line pitch shrinks with the text: 11 * 10 * 82 % rounded");
+        Assert.IsTrue(small[11].Y + font.LineHeight * small[11].Scale <= rect.Y + rect.Height);
+
+        // The last character before a line feed is measured by its advance (6), not its width (5): the draw wraps "bb" at 41, so one row is not enough, though "aaaa bb" alone would be.
+        var wrapped = AreaReadingFlow.Note(font, 497, "aaaa bb\n", new(0, 0, 41, 10));
+        Assert.AreEqual((1, 0.96f), (wrapped.Count, wrapped[0].Scale));
+        Assert.AreEqual(7, wrapped[0].Glyphs.Count, "the whole of it");
+
+        var never = AreaReadingFlow.Note(font, 497, Lines(100), rect);
+        Assert.AreEqual(10, never.Count, "no size down to 50 % holds a hundred lines: the original's cut");
+        Assert.IsTrue(never.All(line => line.Scale == 1f));
     }
 
     [TestMethod]
