@@ -24,14 +24,16 @@ overrides it); a worktree has its own empty `local/`, so give `--out` the main c
 python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out --dry-run     # sources, fonts, planned files
 python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out               # arts 27, 229, 171, 327, 840 (under a minute)
 python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out --art 27,229  # other interface ART numbers: any font in interface.mes
+python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out --art tig     # ARC-UI-3503: the default font art/morph15font.art of tig.dat
 python3 -B tools/hd_font/hd_font.py trace --out local/hd-font/out-x --alpha-max 0.3 --level-cap 0.45   # a variant to compare (ARC-UI-145), below
 python3 -B tools/hd_font/hd_font.py self-test                                   # synthetic-fixture tests, inside the locked venv
 ```
 
 The game folder is `$ARCANUM_GAME_DIR` or `/Applications/Arcanum` (`--game-dir`); `--module` names the module whose archive and patches are
 mounted (default `Arcanum`). The sources are searched in the original's order ([content precedence](../research/content-precedence.md)):
-module folder, patches, module archive, `data/`, `arcanum*.dat` last to first, game folder. An interface ART number becomes a file
-through `art/interface/interface.mes`, as the viewer does.
+module folder, patches, module archive, `data/`, `arcanum*.dat` last to first, game folder, and `tig.dat` last. An interface ART number
+becomes a file through `art/interface/interface.mes`, as the viewer does; `tig` names `art/morph15font.art` (the text of "Last Save",
+ledger LS5), written to `<out>/tig-<name>/`.
 
 ## What is written
 

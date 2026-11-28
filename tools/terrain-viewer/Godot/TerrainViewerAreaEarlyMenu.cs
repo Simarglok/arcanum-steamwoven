@@ -164,7 +164,7 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-387: a save chosen in the menu (Last Save, a row of the load window) while no scene stands: the save is read for
     /// its map and that map loads as the scene the load runs on (<see cref="AreaSaveLaunch"/>); the menu stays, saying so, and takes no
     /// input (<see cref="_menuLoadingSave"/>) until <see cref="FinishSaveSceneFlow"/>. Null when it began, else why nothing changed.</summary>
-    private string? BeginSaveSceneFlow(string saveName, string prefix)
+    private string? BeginSaveSceneFlow(string saveName, string prefix, AreaLoadPicture picture)
     {
         if (_sceneFlow is not null) return "a scene is loading";
         if (_launchArguments is not { } launch) return "the launch arguments are not known";
@@ -176,12 +176,13 @@ public partial class TerrainViewerApp
         _generation = _coordinator.BeginGeneration();
         GD.Print($"ARC-DEV-387 save chosen before any scene: its own map loads, not the start map save={saveName} startLoadInFlight={!_startLoadPending} (ms since start {Time.GetTicksMsec()})");
         // ARC-UI-1362: the original closes the map and opens the saved one with the clock turning: black with the clock from the choice until the save is in.
-        BeginTransitionLoad();
+        // ARC-UI-3503: "Last Save" says a save is loading; the load window's save loads behind the window as it stands.
+        BeginTransitionLoad(picture);
         _lastLoad = LoadSaveSceneFlowAsync(flow, launch, SaveLibrary.Slot(saveName));
         return null;
     }
 
-    /// <summary>The menu's windows as they stand while the save's map loads under the load screen (ARC-UI-1362: no wait note, the screen is black with the clock).</summary>
+    /// <summary>The menu's windows as they stand while the save's map loads under the load screen (ARC-UI-1362: no wait note, the screen shows the clock).</summary>
     private void ShowSaveLoadingMenu()
     {
         if (_mainMenu is null) return;
@@ -307,6 +308,55 @@ public partial class TerrainViewerApp
             OpenedMsec = _earlyMenuRecord!.OpenedMsec, AttachedMsec = _earlyMenuRecord.AttachedMsec }));
     }
 
+    /// <summary>ARC-UI-3503: the load screen shows the saved game's loading line with its font.</summary>
+    private bool SaveLoadingTextShown() => _transitionScreen.Picture == AreaLoadPicture.SavedGameText && _transitionPanel is { Visible: true, LoadingText: { Visible: true, HasFont: true } line }
+        && line.Text == MainMenuTexts((_arguments ?? _launchArguments)!).Text(AreaMainMenuTexts.LoadingSaveGame);
+
+    /// <summary>ARC-UI-3503 (the <c>menu</c> stage): a save chosen in the load window of the main menu, with a scene standing, loads while the window's
+    /// frame stands on screen with the clock and no loading line; the frame goes with the screen once the save is in.</summary>
+    private async Task ListLoadFromMenuForSmoke(Action<bool, string> require, Action<int> choose, AreaMainMenuTexts texts)
+    {
+        OpenMainMenu(texts);
+        var before = _areaSession;
+        _loadScreenDeferForSelfTest = true;
+        try
+        {
+            choose(10); choose(51);
+            require(SaveListOpen, "the load window opened over the main menu: " + _saveListStatus);
+            InventoryKey(Key.Down);
+            async Task Frames()
+            {
+                for (var i = 0; i < 2; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw); }
+            }
+            await Frames();
+            // The pointer rests on the confirm button, as a press leaves it: its hint stays on the frame that stands.
+            var (_, confirmX, confirmY) = AreaSaveListArtLayout.Button(AreaSaveListArtButton.Confirm);
+            var over = _saveListPanel!.ArtForSelfTest.ScreenPointForSelfTest(confirmX + 30, confirmY + 30);
+            GetViewport().PushInput(new InputEventMouseMotion { Position = over, GlobalPosition = over });
+            await Frames();
+            var hint = _saveListPanel.HintForSelfTest;
+            require(hint.Length > 0, "ARC-UI-3503: the load button's hint shows before the load");
+            InventoryKey(Key.Enter);
+            require(_saveListPanel.HintForSelfTest == hint, "ARC-UI-3503: the hint stays while the save loads (LS6)");
+            require(_pendingLoad is not null && ReferenceEquals(before, _areaSession) && _transitionScreen is { Loading: true, Picture: AreaLoadPicture.FrozenWindow }
+                && _transitionPanel is { Visible: true, StillShown: true, LoadingText.Visible: false },
+                $"the load window's frame stands while its save loads: pending {_pendingLoad is not null} picture {_transitionScreen.Picture} still {_transitionPanel?.StillShown} status {_quickSaveStatus}");
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_LOAD_SCREEN_CAPTURE") is { Length: > 0 } capture)
+            {
+                // One drawn frame leaves the load waiting (it runs on the second tick).
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var image = GetViewport().GetTexture().GetImage();
+                var path = System.IO.Path.ChangeExtension(capture, null) + "-list" + System.IO.Path.GetExtension(capture);
+                GD.Print($"ARC-UI-3503 list load capture {(image.SavePng(path) == Error.Ok ? "saved" : "FAILED")} loading={_transitionScreen.Loading}");
+            }
+            TickTransitionScreen(100); TickTransitionScreen(100);
+            require(_pendingLoad is null && !SaveListOpen && !MainMenuOpen && !ReferenceEquals(before, _areaSession) && !_transitionScreen.Covering
+                && _transitionPanel is { Visible: false, StillShown: false }, "the save is in and the frame went with the screen: " + _quickSaveStatus);
+        }
+        finally { _loadScreenDeferForSelfTest = false; }
+        GD.Print("ARC-UI-3503 native-smoke menu-list-load PASS");
+    }
+
     /// <summary>ARC-DEV-387 (the <c>menu</c> stage, after a game was saved on the start map): Last Save pressed while no scene stands loads the
     /// save's own map and the save into it: the menu stays saying so and takes no input, the map is found by the save's runtime number, the scene
     /// is published and the save's session is the running one, with the menu gone. The "no scene" is the real one: the load clears the shown scene.</summary>
@@ -323,6 +373,9 @@ public partial class TerrainViewerApp
         // ARC-UI-1362: the screen is black with the clock from the choice (no wait note on the menu).
         require(_menuLoadingSave && _sceneFlow is { Kind: SceneFlowKind.LoadSave } && MainMenuOpen && _transitionScreen.Loading && _transitionScreen.Alpha >= 1 && string.IsNullOrEmpty(_mainMenu!.Notice),
             $"Last Save is loading the save's own map under the load screen: loading {_menuLoadingSave} flow {_sceneFlow?.Kind} screen {_transitionScreen.Loading} {_transitionScreen.Alpha} note {_mainMenu?.Notice}");
+        // ARC-UI-3503: the black screen says a save is loading, in the default font.
+        require(SaveLoadingTextShown(), $"the load screen says a save is loading: {_transitionScreen.Picture} font {_transitionPanel?.LoadingText.HasFont} text {_transitionPanel?.LoadingText.Text}");
+        await CaptureLoadScreenAsync();
         choose(50);
         require(_menuLoadingSave && _mainMenu!.Window == AreaMenuWindow.SinglePlayer, "the loading menu takes no other input");
         for (var i = 0; i < 6000 && (_menuLoadingSave || _sceneFlow is not null || MainMenuOpen); i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -330,6 +383,8 @@ public partial class TerrainViewerApp
             $"the save's load ended and the menu went: open {MainMenuOpen} loading {_menuLoadingSave} flow {_sceneFlow?.Kind} status {_quickSaveStatus}");
         require(_transitionLoads == loadScreens + 1 && !_transitionScreen.Covering && _transitionPanel is { Visible: false },
             $"the load screen showed once and went with the save's load: loads {_transitionLoads - loadScreens} covering {_transitionScreen.Covering}");
+        require(_transitionScreen.Picture == AreaLoadPicture.Black && _transitionPanel is { LoadingText: { Visible: false, DrawnLines: 1 } },
+            $"the loading line was drawn and went with the screen: {_transitionScreen.Picture} lines {_transitionPanel?.LoadingText.DrawnLines}");
         require(_areaSession is { } loaded && !ReferenceEquals(loaded, before) && loaded.QueryHero()?.Prototype == hero && CurrentAreaMap == map && QuickKeysActive,
             $"the save's session is the running one on its own map: {_quickSaveStatus} map {CurrentAreaMap} (was {map})");
         GD.Print("ARC-DEV-387 native-smoke last-save-before-scene PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = map, Status = _quickSaveStatus }));

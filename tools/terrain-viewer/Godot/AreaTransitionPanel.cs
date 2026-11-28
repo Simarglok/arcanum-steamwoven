@@ -13,6 +13,8 @@ public partial class AreaTransitionPanel : CanvasLayer
 {
     private ColorRect _veil = null!;
     private TextureRect _clock = null!;
+    private AreaSaveLoadingTextView _loadingText = null!;
+    private TextureRect _still = null!;
     private Texture2D[] _frames = [];
     private int _framesPerSecond;
 
@@ -25,6 +27,12 @@ public partial class AreaTransitionPanel : CanvasLayer
     /// <summary>True when the clock art was read (its frames are drawn).</summary>
     public bool HasClockArt => _frames.Length > 0;
 
+    /// <summary>ARC-UI-3503: the saved game's loading line (for the self-test).</summary>
+    public AreaSaveLoadingTextView LoadingText => _loadingText;
+
+    /// <summary>ARC-UI-3503: true while the standing frame of a load window shows (for the self-test).</summary>
+    public bool StillShown => _still.Visible;
+
     public override void _Ready()
     {
         Layer = 8;
@@ -32,13 +40,28 @@ public partial class AreaTransitionPanel : CanvasLayer
         _veil = new ColorRect { Name = "TransitionVeil", Color = new Color(0, 0, 0, 0), MouseFilter = Control.MouseFilterEnum.Stop };
         _veil.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_veil);
+        _still = new TextureRect
+        {
+            Name = "LoadWindowStill", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false, TextureFilter = CanvasItem.TextureFilterEnum.Linear,
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+        };
+        _still.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        AddChild(_still);
         _clock = new TextureRect
         {
             Name = "LoadIndicator", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false, TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
             StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
         };
         AddChild(_clock);
+        _loadingText = new AreaSaveLoadingTextView { Name = "SaveLoadingText", Visible = false };
+        AddChild(_loadingText);
     }
+
+    /// <summary>ARC-UI-3503: the frame that stands while a load window's save loads; null (a headless run) leaves the screen black.</summary>
+    public void SetStill(Image? frame) => _still.Texture = frame is null || frame.IsEmpty() ? null : ImageTexture.CreateFromImage(frame);
+
+    /// <summary>ARC-UI-3503: gives the panel the saved game's loading line and its font (null: no line is drawn).</summary>
+    public void SetLoadingText(AreaArtFontFace? face, string text) => _loadingText.SetContent(face, text);
 
     /// <summary>Gives the panel the clock's frames (art 601) and their rate; none draws a black screen without the clock.</summary>
     public void SetClock(IReadOnlyList<AreaInterfaceFrame> frames, int framesPerSecond)
@@ -53,6 +76,14 @@ public partial class AreaTransitionPanel : CanvasLayer
     {
         Visible = screen.Covering;
         _veil.Color = new Color(0, 0, 0, (float)screen.Alpha);
+        var still = screen.Picture == AreaLoadPicture.FrozenWindow && _still.Texture is not null;
+        _still.Visible = still;
+        // The standing frame is let go with the load window's load.
+        if (screen.Picture != AreaLoadPicture.FrozenWindow) _still.Texture = null;
+        var text = screen.Picture == AreaLoadPicture.SavedGameText;
+        // Fitted on every draw: the window may change size while the load runs.
+        if (text) _loadingText.Fit(GetViewport().GetVisibleRect().Size);
+        _loadingText.Visible = text;
         var clockShown = screen.IndicatorShown && _frames.Length > 0;
         _clock.Visible = clockShown;
         ClockFrame = -1;

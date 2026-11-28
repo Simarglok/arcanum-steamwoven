@@ -387,7 +387,8 @@ public static class AreaInterfaceArt
             && text.Trim() is { Length: > 0 } name ? name : null;
     }
 
-    /// <summary>ARC-DEV-242: one interface ART file by its file name (<c>IntBotom.ART</c>), not through <c>interface.mes</c>; number 0 in the result.</summary>
+    /// <summary>ARC-DEV-242: one interface ART file by its file name (<c>IntBotom.ART</c>), not through <c>interface.mes</c>; number 0 in the result.
+    /// ARC-UI-3503: a name that is a path under <c>art/</c> (the default font <c>art/morph15font.art</c>) is read from that path.</summary>
     public static AreaInterfaceArtLoad LoadNamed(ContentStack stack, string fileName, AreaInterfaceArtLimits? limits = null)
     {
         ArgumentNullException.ThrowIfNull(stack); ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
@@ -403,7 +404,7 @@ public static class AreaInterfaceArt
 
     private static AreaInterfaceArtLoad ReadFile(ContentStack stack, int number, string name, AreaInterfaceArtLimits limits, long rgbaLeft)
     {
-        var path = Folder + name;
+        var path = name.StartsWith(Arcanum.Data.Hd.HdInterfaceKey.ArtRoot, StringComparison.OrdinalIgnoreCase) ? name : Folder + name;
         if (stack.Resolve(path).Winner is not { } winner) return new(number, AreaInterfaceArtStatus.MissingFile, name, [], path);
         if (winner.Length > limits.MaxFileBytes) return new(number, AreaInterfaceArtStatus.LimitExceeded, name, [], $"{path} {winner.Length} bytes");
         var read = stack.Read(winner);

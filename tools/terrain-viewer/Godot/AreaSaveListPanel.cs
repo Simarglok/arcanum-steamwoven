@@ -27,13 +27,17 @@ public partial class AreaSaveListPanel : CanvasLayer
     private Button _close = null!;
     private HBoxContainer _question = null!;
     private Label _hint = null!;
-    // ARC-UI-2968: in the original's look the selected save's details, the notice and the Yes/No question are drawn with the original's
-    // text font (art 229) and the original's dialog box, on the plate (children of the art view, so on its scale); the Labels and
-    // Buttons above only hold the state (and are the diagnostic window's).
-    private AreaArtParagraph _detailArt = null!, _noticeArt = null!;
+    // ARC-UI-2968: in the original's look the notice and the Yes/No question are drawn with the original's text font (art 229) and the
+    // original's dialog box, on the plate (children of the art view, so on its scale); the Labels and Buttons above only hold the state
+    // (and are the diagnostic window's). ARC-UI-3503: the box is the original's bottom message window, which shows a button's hint
+    // (MW32); the selected save's details show in the preview, as the original's.
+    private AreaArtParagraph _noticeArt = null!;
+    private Control _messageHost = null!;
+    private AreaMessageLogView _messageView = null!;
+    private readonly AreaMessageLog _messageLog = new();
     private AreaDialogBoxView _dialog = null!;
     private AreaTextFonts? _fonts;
-    private static readonly (byte R, byte G, byte B) DetailColour = (219, 204, 173), NoticeColour = (255, 153, 102);
+    private static readonly (byte R, byte G, byte B) NoticeColour = (255, 153, 102);
     private const int BoxLeft = 208, BoxTop = AreaSaveListArtLayout.BottomStripTop + 49, BoxWidth = 384, BoxHeight = AreaSaveListArtLayout.ScreenHeight - BoxTop - 3;
     private HBoxContainer _buttons = null!;
     private Control _body = null!;
@@ -63,11 +67,11 @@ public partial class AreaSaveListPanel : CanvasLayer
     internal AreaSaveListArtView ArtForSelfTest => _art;
     /// <summary>ARC-UI-2891: for the self-test: the column's surroundings of the list.</summary>
     internal SteamwovenColumnSidesView ColumnSidesForSelfTest => _sides;
-    internal string ArtDetailForSelfTest => _art.Visible ? _detailArt.Text : "";
+    /// <summary>ARC-UI-3503: the button's hint the message window shows now ("" none).</summary>
+    internal string HintForSelfTest => _art.Visible ? _messageView.HoverTextForSelfTest : "";
     /// <summary>ARC-UI-2968: the notice as the original's look shows it (the dialog box's text while a question is open).</summary>
     internal string ArtNoticeForSelfTest => !_art.Visible ? "" : _dialog.Visible ? _dialog.TextForSelfTest : _noticeArt.Text;
     internal AreaDialogBoxView DialogForSelfTest => _dialog;
-    internal AreaArtParagraph DetailArtForSelfTest => _detailArt;
     internal AreaArtParagraph NoticeArtForSelfTest => _noticeArt;
     /// <summary>True while the description field has the keyboard (typed keys go to it, not to the list).</summary>
     public bool TypingDescription => IsOpen && _description.Visible && _description.HasFocus();
@@ -101,11 +105,16 @@ public partial class AreaSaveListPanel : CanvasLayer
             }
         };
         _art.SoundRequested += id => SoundRequested?.Invoke(id);
-        _detailArt = new AreaArtParagraph { Name = "SaveDetailArt", Position = new(BoxLeft, BoxTop), WrapWidth = BoxWidth, Room = BoxHeight };
+        _art.HintChanged += message => HintRequested?.Invoke(message);
+        // ARC-UI-3503 (MW33): the bottom message window at the strip's origin of the 800 × 600 screen, as the creation windows' (ARC-UI-3120).
+        _messageHost = new Control { Name = "SaveListMessageHost", Position = new Vector2(0, AreaGameBarLayout.BottomTop), MouseFilter = Control.MouseFilterEnum.Ignore };
+        _messageView = new AreaMessageLogView();
+        _messageView.Bind(_messageLog, new Dictionary<int, Texture2D[]>());
+        _messageHost.AddChild(_messageView);
         _noticeArt = new AreaArtParagraph { Name = "SaveNoticeArt", Position = new(BoxLeft, BoxTop), WrapWidth = BoxWidth, Room = BoxHeight };
         _dialog = new AreaDialogBoxView();
         _dialog.AnswerRequested += yes => AnswerRequested?.Invoke(yes);
-        _art.AddChild(_detailArt); _art.AddChild(_noticeArt); _art.AddChild(_dialog);
+        _art.AddChild(_messageHost); _art.AddChild(_noticeArt); _art.AddChild(_dialog);
         AddChild(_art);
         AddChild(_panel);
         var contents = new VBoxContainer(); _panel.AddChild(contents);
@@ -156,8 +165,26 @@ public partial class AreaSaveListPanel : CanvasLayer
         ResizePanel(); Hide();
     }
 
+    /// <summary>ARC-UI-3503: the pointer came over a button or the toggle (its hint's number) or left it (null).</summary>
+    public event Action<int?>? HintRequested;
+
+    /// <summary>ARC-UI-3503: writes a button's hint to the message window; null: the pointer left, the window is blank again. A notice gives way to the hint.</summary>
+    public void ShowHint(AreaMessageEntry? hint, long now)
+    {
+        if (hint is null) _messageLog.ClearHover(); else _messageLog.Post(hint, now);
+        _noticeArt.Visible = hint is null;
+        _messageView.Render();
+    }
+
+    /// <summary>ARC-UI-3503 (MW34): true when the window opens with no game behind it, so its lens is black.</summary>
+    public void SetLensBlack(bool black) => _art.LensBlack = black;
+
+    /// <summary>ARC-UI-3503: the message window's background and icon art.</summary>
+    public void SetMessageArt(IReadOnlyDictionary<int, Texture2D[]> art) => _messageView.Bind(_messageLog, art);
+
     public void Open(AreaSaveList list, byte[]? preview)
     {
+        _messageLog.Clear(); _noticeArt.Visible = true;
         Show();
         _binding = true; _description.Text = list.Description; _binding = false;
         Render(list, preview);
@@ -167,11 +194,11 @@ public partial class AreaSaveListPanel : CanvasLayer
     /// <summary>ARC-UI-062: the save window's art (frames by number), its font and the new-save row's label; ARC-UI-067: the info
     /// display's texts, the date's order and the story texts.</summary>
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFontFace font, string newSaveLabel, AreaSaveInfoMessages messages,
-        AreaSaveDateOrder dateOrder, IReadOnlyDictionary<int, string> storyTexts)
+        AreaSaveDateOrder dateOrder, IReadOnlyDictionary<int, string> storyTexts, AreaArtFontFace? title = null)
     {
         _art.SetArt(art, font, messages, dateOrder);
-        _fonts = new AreaTextFonts(font, font);
-        _detailArt.SetFonts(_fonts); _noticeArt.SetFonts(_fonts);
+        _fonts = new AreaTextFonts(title ?? font, font);
+        _noticeArt.SetFonts(_fonts); _messageView.SetFonts(_fonts);
         _newSaveLabel = newSaveLabel ?? throw new ArgumentNullException(nameof(newSaveLabel));
         _storyTexts = storyTexts ?? throw new ArgumentNullException(nameof(storyTexts));
     }
@@ -182,6 +209,7 @@ public partial class AreaSaveListPanel : CanvasLayer
     public void CloseView()
     {
         Hide(); _preview.Texture = null; _previewOf = null; _art.CloseView(); _sides.Clear(); _dialog.Close();
+        _messageLog.Clear(); _messageView.Render();
         GetViewport().GuiReleaseFocus();
     }
 
@@ -224,21 +252,18 @@ public partial class AreaSaveListPanel : CanvasLayer
                 info is { Portrait: > 0 } ? PortraitSource?.Invoke(info.Portrait) : null, unread: entry is not null && info is null);
             ShowArtTexts(asking);
         }
-        else { _dialog.Close(); _detailArt.SetText("", DetailColour); _noticeArt.SetText("", NoticeColour); }
+        else { _dialog.Close(); _noticeArt.SetText("", NoticeColour); }
         ResizePanel();
     }
 
-    /// <summary>The box's texts in the original's font: the details, then the notice under them; a question is the dialog box (the box is small, so the details wait).</summary>
+    /// <summary>The box's texts in the original's font: the notice (a refusal of the viewer's) while no hint shows; a question is the dialog box.</summary>
     private void ShowArtTexts(bool asking)
     {
         var notice = _notice.Text;
         var boxed = asking && _dialog.HasArt;
         if (boxed) _dialog.Show(notice, AreaDialogBoxKind.YesNo, AreaDialogBoxLayout.QuitPoint); else _dialog.Close();
-        _detailArt.SetText(asking ? "" : _detail.Text, DetailColour);
         _noticeArt.SetText(boxed ? "" : notice, NoticeColour);
-        var used = _fonts is { } fonts ? _detailArt.LineCount * fonts.TextLineHeight : 0;
-        _noticeArt.Position = new(BoxLeft, BoxTop + used);
-        _noticeArt.Room = Math.Max(1, BoxHeight - used);
+        _messageView.Render();
     }
 
     private void ShowPreview((string, DateTime)? of, byte[]? png)

@@ -87,6 +87,7 @@ public partial class TerrainViewerApp
                 if (_saveListPanel.ArtMode) _saveListPanel.Render(_saveList, SelectedPreview());
             };
             _saveListPanel.SoundRequested += id => PlayBarSound(id, "save window button");
+            _saveListPanel.HintRequested += ShowSaveListHint;
         }
         AttachSaveListArt(_saveListPanel);
         // ARC-UI-2968: the overwrite and delete questions are the original's dialog box.
@@ -94,6 +95,8 @@ public partial class TerrainViewerApp
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         StopWorldRoute("SAVE_LIST");
+        // ARC-UI-3503 (MW34): from the main menu there is no game behind the window: its lens is black.
+        _saveListPanel.SetLensBlack(_mainMenu is { Root: AreaMenuWindow.Main } || _menuAwaitsScene);
         _saveList = new AreaSaveList(mode, list.Entries);
         // Same layer as the windows: the last child draws on top, so the list is above a window under the menu.
         if (_saveListPanel.GetParent() == this) MoveChild(_saveListPanel, GetChildCount() - 1);
@@ -135,15 +138,16 @@ public partial class TerrainViewerApp
                 // under the window, saying so.
                 if (_menuAwaitsScene && _mainMenu is { Root: AreaMenuWindow.Main })
                 {
-                    if (BeginSaveSceneFlow(command.Name!, "Load ") is { } sceneRefused) { RefreshSaveList(command.Name, sceneRefused); return; }
+                    if (BeginSaveSceneFlow(command.Name!, "Load ", AreaLoadPicture.FrozenWindow) is { } sceneRefused) { RefreshSaveList(command.Name, sceneRefused); return; }
                     EndSaveList(finished: false);
                     ShowSaveLoadingMenu();
                     return;
                 }
                 // ARC-UI-1504: the load shows the load screen first; the window closes with a load that began and stays, with the reason, when it was refused.
                 var loadName = command.Name;
+                // ARC-UI-3503 (LS6): the original's load window stands on screen while its save loads, from the main menu and from play alike.
                 LoadGameShown(slot, "Load ", _mainMenu is { Root: AreaMenuWindow.Main } ? MainMenuTables() : null, AreaLoadMessageRoute.Result,
-                    ok => { if (ok) EndSaveList(finished: true); else RefreshSaveList(loadName, _quickSaveStatus); });
+                    ok => { if (ok) EndSaveList(finished: true); else RefreshSaveList(loadName, _quickSaveStatus); }, AreaLoadPicture.FrozenWindow);
                 return;
             case AreaSaveCommandKind.Delete:
                 var deleted = SaveLibrary.Delete(command.Name!);
@@ -228,6 +232,17 @@ public partial class TerrainViewerApp
     private AreaSaveListArtContent? _saveListArtContent;
     private string? _saveListArtModule;
 
+    /// <summary>ARC-UI-3503 (MW33): a button's hint in the window's message window: <c>MainMenu.mes</c> 6999 as the title and the hint under it; leaving
+    /// the button blanks the window. With no game text nothing is posted.</summary>
+    private void ShowSaveListHint(int? message)
+    {
+        if (_saveListPanel is null) return;
+        var texts = SaveMessageTexts();
+        var entry = message is { } number && texts.Original(AreaMainMenuTexts.ButtonHintTitle) is { } title && texts.Original(number) is { } hint
+            ? AreaMessageEntry.Text(AreaMessageKind.Hover, title + "\n" + hint) : null;
+        _saveListPanel.ShowHint(entry, MessageLogNow);
+    }
+
     /// <summary>ARC-UI-062: gives the window the current module's art, read on first use; nothing when it did not read.</summary>
     private void AttachSaveListArt(AreaSaveListPanel panel)
     {
@@ -242,11 +257,16 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-062 save window art not ready: {_saveListArtContent.Detail}");
             return;
         }
-        var art = AreaSaveListArtLayout.ArtNumbers.Where(number => number != AreaSaveListArtLayout.FontArt)
+        var art = AreaSaveListArtLayout.ArtNumbers.Where(number => number is not (AreaSaveListArtLayout.FontArt or AreaSaveListArtLayout.TitleFontArt)
+                && !AreaSaveListArtLayout.MessageArtNumbers.Contains(number))
             .ToDictionary(number => number, number => _saveListArtContent.Art[number].Frames.Select(frame => InterfaceHd.Texture(frame, premultipliedAlpha: true)).ToArray());
         var font = new AreaArtFontFace(_saveListArtContent.Art[AreaSaveListArtLayout.FontArt].Frames);
+        // The message window draws its art without the premultiplied text material.
+        panel.SetMessageArt(AreaSaveListArtLayout.MessageArtNumbers.ToDictionary(number => number,
+            number => _saveListArtContent.Art[number].Frames.Select(frame => InterfaceHd.Texture(frame)).ToArray()));
         panel.SetArt(art, font, _saveListArtContent.NewSaveLabel, _saveListArtContent.Messages,
-            AreaSaveListArtLayout.DateOrder(System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortDatePattern), _saveListArtContent.StoryTexts);
+            AreaSaveListArtLayout.DateOrder(System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortDatePattern), _saveListArtContent.StoryTexts,
+            new AreaArtFontFace(_saveListArtContent.Art[AreaSaveListArtLayout.TitleFontArt].Frames));
         panel.PortraitSource = SavePortrait;
         GD.Print($"ARC-UI-062 save window art ready {_saveListArtContent.Detail}; glyphs={font.Frames.Count}; ms={Time.GetTicksMsec() - started}");
     }
@@ -284,16 +304,14 @@ public partial class TerrainViewerApp
         }
     }
 
-    /// <summary>ARC-UI-2968: the details, the notice and the question of an open save or load window are the original's text font and dialog box, not Godot's
-    /// font or buttons: the details are an art paragraph, a refusal's notice is one under them, and a question is the dialog box with its text and no Godot button;
+    /// <summary>ARC-UI-2968: the notice and the question of an open save or load window are the original's text font and dialog box, not Godot's
+    /// font or buttons: a refusal's notice is an art paragraph, and a question is the dialog box with its text and no Godot button;
     /// the selection is put back at the end.</summary>
     private async Task SaveListArtTextsForSmoke(Action<bool, string> require, Func<int, Task> frames)
     {
         var panel = _saveListPanel!;
         var list = _saveList!;
         var kept = list.Selected;
-        require(panel.DetailArtForSelfTest.Items.Count > 0 == (panel.DetailArtForSelfTest.Text.Length > 0),
-            "the details are drawn as art text in the original's font: " + panel.DetailArtForSelfTest.Items.Count);
         var rows = list.Rows();
         var auto = rows.ToList().FindIndex(row => row.Entry is { IsAuto: true });
         if (auto >= 0)
@@ -302,7 +320,7 @@ public partial class TerrainViewerApp
             SaveListCommand(() => list.RequestDelete());
             await frames(2);
             require(panel.ArtNoticeForSelfTest == "the auto-save cannot be deleted" && panel.NoticeArtForSelfTest.Items.Count > 0 && !panel.DialogForSelfTest.Visible,
-                "a refusal's notice is art text under the details: " + panel.ArtNoticeForSelfTest);
+                "a refusal's notice is art text in the message box: " + panel.ArtNoticeForSelfTest);
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } capture)
             {
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
@@ -323,8 +341,8 @@ public partial class TerrainViewerApp
             var asked = panel.DialogForSelfTest.TextForSelfTest;
             require(list.Prompt == prompt && (panel.DialogForSelfTest.HasArt
                 ? panel.DialogForSelfTest.Visible && asked.StartsWith(word, StringComparison.Ordinal) && panel.NoticeArtForSelfTest.Text.Length == 0
-                : panel.NoticeArtForSelfTest.Text.StartsWith(word, StringComparison.Ordinal)) && panel.ArtDetailForSelfTest.Length == 0,
-                "the question is the original's dialog box, the details wait: " + asked);
+                : panel.NoticeArtForSelfTest.Text.StartsWith(word, StringComparison.Ordinal)),
+                "the question is the original's dialog box: " + asked);
             SaveListCommand(() => list.Answer(false));
             await frames(2);
             require(list.Prompt == AreaSavePrompt.None && !panel.DialogForSelfTest.Visible && panel.NoticeArtForSelfTest.Text.Length == 0, "No closes the question box");
@@ -352,7 +370,7 @@ public partial class TerrainViewerApp
         var expected = list.Rows().Skip(art.TopForSelfTest).Take(AreaSaveListArtLayout.ShownRows)
             .Select(row => AreaSaveListArtLayout.Fit(font, row.Entry?.DisplayDescription ?? panel.NewSaveRow(list.Description), AreaSaveListArtLayout.Row(0).Width)).ToArray();
         require(shown.Count > 0 && shown.SequenceEqual(expected), $"the rows show the descriptions: {string.Join(" | ", shown)}");
-        require(list.SelectedEntry is null || panel.ArtDetailForSelfTest == AreaSaveList.Detail(list.SelectedEntry), "the box shows the selected save's details: " + panel.ArtDetailForSelfTest);
+        require(panel.HintForSelfTest.Length == 0, "ARC-UI-3503: the message box is blank with nothing under the pointer: " + panel.HintForSelfTest);
         require(list.Selected < 0 || (list.Selected >= art.TopForSelfTest && list.Selected < art.TopForSelfTest + AreaSaveListArtLayout.ShownRows), "the selected row is shown");
         await SaveListArtTextsForSmoke(require, Frames);
         require(list.SelectedEntry is not null || art.InfoTextsForSelfTest.Count == 0, "ARC-UI-067: with no save selected the preview shows no info");
@@ -371,6 +389,22 @@ public partial class TerrainViewerApp
         await Frames(1);
         require(art.FrameForSelfTest(AreaSaveListArtButton.Confirm) == 2 && art.FrameForSelfTest(AreaSaveListArtButton.Back) == 0,
             "the pointer over the confirm button lights it: " + art.FrameForSelfTest(AreaSaveListArtButton.Confirm));
+        // ARC-UI-3503 (MW33): and posts its hint under the title; the toggle's hint too.
+        var hintTexts = SaveMessageTexts();
+        require(panel.HintForSelfTest == hintTexts.Original(AreaMainMenuTexts.ButtonHintTitle) + "\n" + hintTexts.Original(AreaSaveListArtLayout.Hint(AreaSaveListArtButton.Confirm, list.Mode)),
+            "ARC-UI-3503: the confirm button's hint: " + panel.HintForSelfTest.Replace('\n', '|'));
+        var toggleAt = art.ScreenPointForSelfTest(AreaSaveListArtLayout.Toggle.X + 16, AreaSaveListArtLayout.Toggle.Y + 16);
+        GetViewport().PushInput(new InputEventMouseMotion { Position = toggleAt, GlobalPosition = toggleAt });
+        await Frames(1);
+        require(panel.HintForSelfTest.EndsWith("\n" + hintTexts.Original(AreaSaveListArtLayout.ToggleHint), StringComparison.Ordinal),
+            "ARC-UI-3503: the info toggle's hint: " + panel.HintForSelfTest.Replace('\n', '|'));
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } hintCapture)
+        {
+            using var image = GetViewport().GetTexture().GetImage();
+            require(image.SavePng(System.IO.Path.ChangeExtension(hintCapture, null) + $"-{list.Mode}-hint.png") == Error.Ok, "the hint capture saved");
+        }
+        GetViewport().PushInput(new InputEventMouseMotion { Position = over, GlobalPosition = over });
+        await Frames(1);
         // Capture both bottom arrows idle, hovered and held, without releasing over a button (which would act).
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } stateCapture)
         {

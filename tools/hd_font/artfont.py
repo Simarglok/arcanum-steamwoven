@@ -29,6 +29,8 @@ MAX_FRAMES = 512
 MAX_SIDE = 512
 INTERFACE_INDEX = "art/interface/interface.mes"
 INTERFACE_FOLDER = "art/interface/"
+TIG_FONT_PATH = "art/morph15font.art"  # ARC-UI-3503: the text library's default font, held by tig.dat
+TIG_FONT_NUMBER = 0  # it has no interface art number; its `file` is the whole path
 
 
 class FontError(ValueError):
@@ -79,6 +81,8 @@ def discover_sources(game_dir: Path, module: str = "Arcanum") -> list[Source]:
     for entry in reversed(base):
         found.append(Source("dat", entry, entry.name.lower()))
     found.append(Source("dir", game_dir, "game folder"))
+    if (tig := case_file(game_dir, "tig.dat")) is not None:  # mounted first by the original, so the lowest priority
+        found.append(Source("dat", tig, "tig.dat"))
     return found
 
 
@@ -289,3 +293,12 @@ def load_font(content: Content, number: int) -> FontArt:
         raise FontError(f"art {number}: {INTERFACE_FOLDER}{name} not found in any content source")
     data, source = found
     return FontArt(number, name, source, decode_font_art(data, f"art {number} {name}"), data)
+
+
+def load_tig_font(content: Content) -> FontArt:
+    """ARC-UI-3503: the default font `art/morph15font.art` (not the interface art of the same file name)."""
+    found = content.find(TIG_FONT_PATH)
+    if found is None:
+        raise FontError(f"{TIG_FONT_PATH} not found in any content source")
+    data, source = found
+    return FontArt(TIG_FONT_NUMBER, TIG_FONT_PATH, source, decode_font_art(data, TIG_FONT_PATH), data)

@@ -229,14 +229,15 @@ public partial class TerrainViewerApp
     /// <summary>The player's load of a save (F8, the load window, the menu's Last Save): like <see cref="LoadGame"/> but behind the load screen. The result goes to
     /// <paramref name="done"/>: at once when the load is refused before anything shows (busy, no save listed, a fade waits) or runs immediately, else on the frame
     /// that runs it. A refused load clears the screen and keeps the running game.</summary>
-    private void LoadGameShown(GameSessionSaveSlot slot, string prefix, AreaHeroLoad? heroTables, AreaLoadMessageRoute messages, Action<bool>? done)
+    /// <param name="picture">ARC-UI-3503: what the load screen shows behind the clock (<see cref="AreaLoadPicture"/>).</param>
+    private void LoadGameShown(GameSessionSaveSlot slot, string prefix, AreaHeroLoad? heroTables, AreaLoadMessageRoute messages, Action<bool>? done, AreaLoadPicture picture = AreaLoadPicture.Black)
     {
         // With no save listed the original's quick load returns before its load function (no load, no screen); a busy viewer refuses in LoadGame.
         // A queued transfer is superseded by the load at once (LoadGame), as before, so it shows no screen of its own.
         var showable = QuickBusyReason() == QuickBusy.None && !TransitionFadePending && slot.Exists;
         // ARC-UI-1574: a player's load refuses while another waits for its screen (it must not drop the first); only a load that is not a player's supersedes it.
         if (!LoadScreenDeferred || !showable) { var ok = LoadGame(slot, prefix, heroTables, messages, supersedePending: false); done?.Invoke(ok); return; }
-        BeginTransitionLoad();
+        BeginTransitionLoad(picture);
         _pendingLoad = new(slot, prefix, heroTables, messages, done);
     }
 
@@ -589,7 +590,7 @@ public partial class TerrainViewerApp
         {
             QuickKey(Key.F8);
             require(_pendingLoad is not null && ReferenceEquals(before, _areaSession) && _transitionScreen.Loading && _transitionScreen.Alpha >= 1
-                && _transitionLoads == screens + 1 && _transitionPanel is { Visible: true }, $"{what}: the load screen shows from the key, before the load runs: pending={_pendingLoad is not null} loads={_transitionLoads - screens}");
+                && _transitionScreen.Picture == AreaLoadPicture.Black && _transitionLoads == screens + 1 && _transitionPanel is { Visible: true }, $"{what}: the load screen shows from the key, before the load runs: pending={_pendingLoad is not null} loads={_transitionLoads - screens}");
             AreaSmokeFrame();
             require(_pendingLoad is not null && ReferenceEquals(before, _areaSession) && _transitionScreen.Loading && _transitionPanel is { Visible: true },
                 $"{what}: a frame was drawn with the screen before the session was adopted");

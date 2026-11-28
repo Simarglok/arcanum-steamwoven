@@ -240,7 +240,13 @@ public partial class AreaSaveListArtView : Control
         }
         // MW23: the cover over the preview, whatever it shows.
         if (Art(AreaSaveListArtLayout.CoverArt) is { } cover) DrawTextureRect(cover, new Rect2(px, py, cover.GetWidth(), cover.GetHeight()), false);
-        // MW25: the lens (what the original draws into it is not read, F0).
+        // MW25, MW34: with no game behind the window (the main menu) the lens shows black; from play the original copies the view around the PC into it
+        // (not drawn here yet: the background shows).
+        if (LensBlack)
+        {
+            var (lensX, lensY, lensWidth, lensHeight) = AreaSaveListArtLayout.Lens;
+            DrawCircle(new Vector2(lensX + lensWidth / 2f, lensY + lensHeight / 2f), lensWidth / 2f - 1, Colors.Black);
+        }
         if (Art(AreaSaveListArtLayout.LensArt) is { } lens)
             DrawTextureRect(lens, new Rect2(AreaSaveListArtLayout.Lens.X, AreaSaveListArtLayout.Lens.Y, lens.GetWidth(), lens.GetHeight()), false);
         foreach (var button in AllButtons)
@@ -262,11 +268,26 @@ public partial class AreaSaveListArtView : Control
         return null;
     }
 
+    /// <summary>ARC-UI-3503: the window was opened with no game behind it: the lens is black.</summary>
+    public bool LensBlack
+    {
+        get => _lensBlack;
+        set { if (_lensBlack == value) return; _lensBlack = value; QueueRedraw(); }
+    }
+
+    private bool _lensBlack;
+
+    /// <summary>ARC-UI-3503 (MW33): the pointer came over a button or the info toggle (its hint's <c>MainMenu.mes</c> number) or left it (null).</summary>
+    public event Action<int?>? HintChanged;
+
+    private int? HintAt(AreaSaveListArtButton? button, bool toggle) => button is { } over ? AreaSaveListArtLayout.Hint(over, _mode) : toggle ? AreaSaveListArtLayout.ToggleHint : null;
+
     public override void _Notification(int what)
     {
         if (what != NotificationMouseExit || (_hovered is null && !_overToggle)) return;
         (_hovered, _overToggle) = (null, false);
         QueueRedraw();
+        HintChanged?.Invoke(null);
     }
 
     public override void _GuiInput(InputEvent input)
@@ -279,6 +300,7 @@ public partial class AreaSaveListArtView : Control
                 if (over == _hovered && overToggle == _overToggle) break;
                 (_hovered, _overToggle) = (over, overToggle);
                 QueueRedraw();
+                HintChanged?.Invoke(HintAt(over, overToggle));
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown, Pressed: true } wheel
                 when AreaSaveListArtLayout.Contains(AreaSaveListArtLayout.WheelArea, wheel.Position.X, wheel.Position.Y):
