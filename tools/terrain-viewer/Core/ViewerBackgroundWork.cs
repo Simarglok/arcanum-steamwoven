@@ -11,7 +11,7 @@ public sealed class ViewerBackgroundWork
     private readonly ConcurrentDictionary<Task, byte> _running = new();
     private volatile bool _closing;
 
-    /// <summary>True from the first <see cref="Close"/>: queued work is dropped and nothing new calls into the engine.</summary>
+    /// <summary>True from the first <see cref="Close"/>: work that is still queued drops itself.</summary>
     public bool Closing => _closing;
 
     /// <summary>The tracked tasks that have not been forgotten yet (a task is forgotten as it ends).</summary>
@@ -31,8 +31,8 @@ public sealed class ViewerBackgroundWork
     /// that fails or is cancelled has ended like any other. Returns how many ran at the call and how many still run after it.</summary>
     public (int Waited, int Left) Close(TimeSpan timeout)
     {
+        var tasks = _running.Keys.Where(task => !task.IsCompleted).ToArray(); // before the flag, which may end a task at once
         _closing = true;
-        var tasks = _running.Keys.Where(task => !task.IsCompleted).ToArray();
         try { Task.WaitAll(tasks, timeout); }
         catch (AggregateException) { } // every task ended; its own owner reads its failure
         return (tasks.Length, tasks.Count(task => !task.IsCompleted));

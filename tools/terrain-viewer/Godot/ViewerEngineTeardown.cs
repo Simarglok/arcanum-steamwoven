@@ -14,7 +14,7 @@ internal static class ViewerEngineTeardown
     /// <summary>The background tasks that call into the engine.</summary>
     public static ViewerBackgroundWork Work { get; } = new();
 
-    /// <summary>Main thread, once, at the end of the main app's <c>_ExitTree</c>.</summary>
+    /// <summary>Main thread, once, at the end of the <c>_ExitTree</c> of the app that is the main scene (never a self-test's child).</summary>
     public static void Run()
     {
         var clock = Stopwatch.StartNew();

@@ -1081,8 +1081,8 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
   SIGABRT and the smoke's own exit code was lost. A worker thread still inside an engine call at quit does the same.
   The main app now ends its `_ExitTree` by waiting (at most 5 s) for the background tasks that call into the engine
   (`ViewerEngineTeardown.Work`: a new such task is started through its `Track`) and by running every pending finalizer;
-  the log says `ARC-DEV-3304 engine teardown background=N left=0 ms=T`. A signal after that line is a new fault: read
-  the crash report (`~/Library/Logs/DiagnosticReports/Godot-*.ips`) and the thread beside the main one.
+  the log says `ARC-DEV-3304 engine teardown background=N left=0 ms=T`. This fix does not explain a signal after that
+  line: read the crash report (`~/Library/Logs/DiagnosticReports/Godot-*.ips`) and the thread beside the main one.
 - **Godot finalizer-thread crash (ARC-DEV-2412).** Godot 4.7.2 .NET sometimes dies on the .NET finalizer thread inside a
   Godot type's `Finalize` (the log's C# backtrace ends `Godot.StringName.Dispose` / `Godot.StringName.Finalize`, once with
   `Godot.DisposablesTracker.UnregisterDisposable` after a fatal `System.AccessViolationException`), as `handle_crash:
