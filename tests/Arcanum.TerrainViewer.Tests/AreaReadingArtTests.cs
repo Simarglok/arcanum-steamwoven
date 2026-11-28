@@ -239,10 +239,13 @@ public sealed class AreaReadingArtTests
     public void A_whole_note_is_drawn_in_the_handwriting_face()
     {
         AreaReadingArtDocument Note(string text) => new(WrittenSubtype.Note, 489, false, [], [Message(text)], [], text);
-        foreach (var text in new[] { "Dear X,\nbody body body\nYours, Y", "X-\nbody body body\nY", "one line only", string.Join(' ', Enumerable.Repeat("word", 1000)) })
+        // Only the note's face is asked for: a draw that takes glyphs or metrics from another font fails.
+        AreaArtFont OnlyNoteFont(int art) => art == AreaReadingArtLayout.NoteFont ? Font(10) : throw new AssertFailedException("font " + art);
+        foreach (var (text, count) in new[] { ("Dear X,\nbody body body\nYours, Y", 3), ("X-\nbody body body\nY", 3), ("one line only", 1), (string.Join(' ', Enumerable.Repeat("word", 1000)), 30) })
         {
-            var lines = AreaReadingFlow.Single(Note(text), Fonts);
-            Assert.IsTrue(lines.Count > 0 && lines.All(line => line.Font == AreaReadingArtLayout.NoteFont), text.Split('\n')[0]);
+            var lines = AreaReadingFlow.Single(Note(text), OnlyNoteFont);
+            Assert.AreEqual(count, lines.Count, "the whole text, and no more than the rectangle's 300 / 10 lines");
+            Assert.IsTrue(lines.All(line => line.Font == AreaReadingArtLayout.NoteFont), text.Split('\n')[0]);
         }
     }
 
