@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import io
 import struct
+import sys
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from tools.steamwoven_ui import fixtures, image_archive as ia, image_rescue as rescue
 
@@ -292,18 +294,105 @@ class ArchiveTests(unittest.TestCase):
         self.reg.save()
         self.assertEqual("rejected", self.row(row["file"])["status"])
 
-    def test_writing_holds_the_lock_until_the_registry_is_saved(self) -> None:
-        try:
-            import fcntl
-        except ImportError:
-            self.skipTest("no flock")
-        with ia.writing(self.root) as reg:
-            ia.add_file(reg, "ARC-UI-6", self.image("m.png"), kind="master")
-            with (self.root / "registry.lock").open("a") as peer, self.assertRaises(BlockingIOError):
+    def test_a_row_another_session_removed_comes_back_when_put_with_its_file(self) -> None:
+        row, other = self.stale_pair("final")
+        ia.mark(other, "ARC-UI-6", row["file"], "rejected")
+        other.save()
+        (self.root / "ARC-UI-6" / "final" / "m.png").write_bytes((self.root / "ARC-UI-6" / row["file"]).read_bytes())
+        self.reg.put(self.reg.rows[("archive", "ARC-UI-6", "final/m.png")])
+        self.reg.save()
+        self.assertIsNotNone(self.row("final/m.png"))
+
+    def test_sources_both_sessions_added_are_kept(self) -> None:
+        row, other = self.stale_pair()
+        for reg, name in ((other, "b.png"), (self.reg, "c.png")):
+            ia.add_file(reg, "ARC-UI-6", self.image(name), kind="master")
+            reg.save()
+        self.assertEqual(3, len(self.row(row["file"])["sources"]))
+
+    def test_a_replaced_row_takes_no_sources_of_the_old_content(self) -> None:
+        row, _ = self.stale_pair()
+        (self.root / "ARC-UI-6" / row["file"]).unlink()
+        ia.add_file(self.reg, "ARC-UI-6", self.image("new.png", 3), kind="master", name="m.png")
+        self.reg.save()
+        self.assertEqual([str(self.tmp / "src" / "new.png")], self.row(row["file"])["sources"])
+
+    def test_a_status_marked_on_disk_beats_a_stale_sessions_status(self) -> None:
+        for added_by_both in (False, True):
+            with self.subTest(added_by_both=added_by_both):
+                task, src = f"ARC-UI-{7 + added_by_both}", self.image(f"s{added_by_both}.png", added_by_both)
+                row = ia.add_file(self.reg, task, src, kind="master", status="intermediate" if added_by_both else "unknown")
+                if added_by_both:
+                    other = ia.Registry(self.root)
+                    ia.scan(other, task)
+                else:
+                    self.reg.save()
+                    other = ia.Registry(self.root)
+                    ia.add_file(self.reg, task, src, kind="master", status="intermediate")
+                ia.mark(other, task, row["file"], "final", "accepted")
+                other.save()
+                self.reg.save()
+                held = ia.Registry(self.root).rows[("archive", task, row["file"])]
+                self.assertEqual(("final", "accepted"), (held["status"], held["note"]))
+
+    def test_a_save_without_a_registry_file_keeps_the_loaded_rows(self) -> None:
+        row, _ = self.stale_pair()
+        (self.root / "registry.jsonl").unlink()
+        self.reg.save()
+        self.assertIsNotNone(self.row(row["file"]))
+
+    def locked(self, root: Path | None = None) -> bool:
+        import fcntl
+        with ((root or self.root) / "registry.lock").open("a") as peer:
+            try:
                 fcntl.flock(peer, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        with (self.root / "registry.lock").open("a") as peer:
-            fcntl.flock(peer, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+        return False
+
+    @unittest.skipIf(sys.platform == "win32", "no flock")
+    def test_writing_holds_the_lock_from_load_to_save_also_after_an_error(self) -> None:
+        held: list[bool] = []
+        write = ia.Registry._write
+
+        def checked(reg: ia.Registry) -> None:
+            held.append(self.locked())
+            write(reg)
+
+        with mock.patch.object(ia.Registry, "_write", checked), self.assertRaises(RuntimeError):
+            with ia.writing(self.root) as reg:
+                held.append(self.locked())
+                ia.add_file(reg, "ARC-UI-6", self.image("m.png"), kind="master")
+                raise RuntimeError
+        self.assertEqual([True, True], held)
+        self.assertFalse(self.locked())
         self.assertIsNotNone(self.row("master/m.png"))
+
+    @unittest.skipIf(sys.platform == "win32", "no flock")
+    def test_every_command_that_writes_does_so_under_the_lock(self) -> None:
+        held: list[bool] = []
+
+        def watch(function):
+            def checked(registry, *args, **kwargs):
+                held.append(self.locked(registry.root))
+                return function(registry, *args, **kwargs)
+            return checked
+
+        src = str(self.image("m.png"))
+        rows = [(Path(src), "ARC-UI-6", "path", "master", "unknown", "")] * 3
+        with mock.patch.object(ia, "archive_root", lambda *_: self.root), redirect_stdout(io.StringIO()), \
+                mock.patch.object(ia, "add_file", watch(ia.add_file)), mock.patch.object(ia, "mark", watch(ia.mark)), \
+                mock.patch.object(ia, "scan", watch(ia.scan)):
+            self.assertEqual(0, ia.main(["add", "ARC-UI-6", src, "--kind", "master"]))
+            self.assertEqual(0, ia.main(["mark", "ARC-UI-6", "master/m.png", "rejected"]))
+            self.assertEqual(0, ia.main(["scan", "ARC-UI-6"]))
+            main = self.tmp / "main"
+            with mock.patch.object(rescue.prompt_library, "main_checkout", lambda: main), mock.patch.object(rescue, "TaskMap"), \
+                    mock.patch.object(rescue, "gather", lambda *_: rows), mock.patch.object(rescue, "LOCK_BATCH", 2), \
+                    mock.patch.object(rescue, "register_pipeline", watch(lambda *_: 0)):
+                self.assertEqual(0, rescue.run(["codex", "pipeline"], False))
+        self.assertEqual([True] * 7, held)
+        self.assertEqual(1, len(ia.Registry(main / "local/steamwoven-ui/archive").rows))
 
     def test_scan_registers_hand_copied_files(self) -> None:
         (self.root / "ARC-UI-9" / "final").mkdir(parents=True)

@@ -6,8 +6,9 @@ Every image a task produces (raw Codex outputs, collages, fitted masters, compos
 the accepted version also under `<TASK>/final/`, and each file has one row in `archive/registry.jsonl`
 (task, file, kind, status, sources, hash, size, date). Nothing here is committed: the images are derived from the
 player's own data (SWI-PRV-1). Standard library only.
-Parallel sessions share the registry: `add`, `mark` and `scan` run one at a time (`registry.lock`), and a save
-applies only what its session added, changed or removed to the rows on disk (ARC-DEV-3439).
+Parallel sessions share the registry: its writers (`add`, `mark`, `scan`, `image_rescue.py run`) take turns
+(`registry.lock`), and a save applies only what its session added, changed or removed to the rows on disk, where
+another session's newer status stays (ARC-DEV-3439).
 
     image_archive.py dir ARC-UI-3040                 # create and print the task folder (use it as --out of any tool)
     image_archive.py add ARC-UI-3040 A.png B.png --kind composite [--status unknown] [--note TEXT]
@@ -185,12 +186,16 @@ class Registry:
                 if base is None or self._has_file(mine):  # a row another session removed comes back only with its file
                     merged[key] = mine
                 continue
-            if base is not None:
-                changed = {f: v for f, v in mine.items() if v != base.get(f)}
-            else:  # both sessions added this row: our unknown status does not replace theirs
-                changed = {f: v for f, v in mine.items() if mine["status"] != "unknown" or f not in ("status", "note")}
-            if "sources" in changed:
-                changed["sources"] = sorted(set(theirs["sources"]) | set(changed["sources"]))
+            changed = {f: v for f, v in mine.items() if base is None or v != base.get(f)}
+            if base is None:  # both added the row: ours only gives a status the one on disk lacks
+                newer = theirs["status"] != "unknown" or mine["status"] == "unknown"
+            else:
+                newer = (theirs["status"], theirs["note"]) != (base["status"], base["note"])
+            if newer:  # a status set on disk since we loaded is never replaced
+                changed.pop("status", None)
+                changed.pop("note", None)
+            if "sources" in changed and mine["sha256"] == theirs["sha256"] and (base is None or theirs["sources"] != base["sources"]):
+                changed["sources"] = sorted(set(theirs["sources"]) | set(mine["sources"]))
             merged[key] = {**theirs, **changed}
         return merged
 
