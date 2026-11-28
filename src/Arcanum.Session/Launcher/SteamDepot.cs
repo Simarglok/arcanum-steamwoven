@@ -101,9 +101,9 @@ public static class SteamDepot
         return candidates.AsReadOnly();
     }
 
-    /// <summary>The downloaded depot's folder: of the candidates that are game folders the one holding the most bytes (an abandoned partial
-    /// download does not hide a finished one; equal ones keep their order), else the first that exists (so the import can say what it
-    /// lacks); null when none exists.</summary>
+    /// <summary>The downloaded depot's folder: of the candidates that are game folders the one holding the most bytes (so a smaller,
+    /// abandoned download does not hide a finished one; equal ones keep their order), else the first that exists (so the import can say
+    /// what it lacks); null when none exists.</summary>
     public static string? Find(SteamPlatform platform)
     {
         var existing = Candidates(platform).Where(Directory.Exists).ToArray();

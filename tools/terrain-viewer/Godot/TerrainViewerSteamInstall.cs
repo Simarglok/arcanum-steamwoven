@@ -84,7 +84,7 @@ public partial class TerrainViewerApp
         catch (Exception error)
         {
             // Whatever escapes must still end the busy state, or Play and the folder buttons stay off for good.
-            result = new(SteamImportStatus.CopyFailed, error.GetType().Name + ": " + error.Message);
+            result = new(SteamImportStatus.CopyFailed, error.GetType().Name + ": " + error.Message, Partial: true);
         }
         finally { _installCancel = null; }
         GD.Print($"ARC-DEV-3515 steam import result status={result.Status} detail={result.Detail ?? "none"} folder={result.Folder?.Path ?? "none"}");

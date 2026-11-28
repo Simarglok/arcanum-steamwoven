@@ -40,6 +40,8 @@ public sealed record SteamImportOptions
     /// <summary>Why the ready folder's archives are damaged (a file cut short, or holes an unfinished download left), or null when they
     /// are not; the callback gets the compressed bytes checked and to check.</summary>
     public Func<GameFolderCheck, Action<long, long>?, CancellationToken, string?> VerifyArchives { get; init; } = SteamDepotImporter.VerifyArchives;
+    /// <summary>Why the game cannot open the whole folder's content (a layout it refuses), or null when it can.</summary>
+    public Func<GameFolderCheck, string?> OpenContent { get; init; } = SteamDepotImporter.OpenContent;
 }
 
 /// <summary>
@@ -99,7 +101,19 @@ public sealed class SteamDepotImporter
             }
             return null;
         }
-        catch (DatException error) { return name + ": " + error.Message; }
+        // A file Steam still holds is as unfinished as a damaged one.
+        catch (Exception error) when (error is DatException or IOException or UnauthorizedAccessException) { return name + ": " + error.Message; }
+    }
+
+    /// <summary>The default <see cref="SteamImportOptions.OpenContent"/>: the folder's content is opened as the game opens it.</summary>
+    public static string? OpenContent(GameFolderCheck check)
+    {
+        ArgumentNullException.ThrowIfNull(check);
+        if (check.Plan is not { } plan) return "the folder is not a game folder";
+        var opened = ContentStack.Open(plan);
+        if (opened.Status != ContentStackStatus.Ready) return opened.Status + (opened.Detail is { Length: > 0 } detail ? " " + detail : "");
+        opened.Stack!.Dispose();
+        return null;
     }
 
     /// <summary>Copies <paramref name="sourceFolder"/> into <paramref name="targetFolder"/> (a new folder whose parent exists, or an
@@ -121,7 +135,8 @@ public sealed class SteamDepotImporter
             return new(SteamImportStatus.InvalidPath, "path");
         }
         if (!Directory.Exists(source)) return new(SteamImportStatus.SourceMissing, source);
-        var writing = false;
+        var copying = false; // a failure from here on is the copy's, not the download's
+        var writing = false; // a file exists in the target
         try
         {
             // Compared with links resolved: a link to the download must not become a way to write into it.
@@ -134,9 +149,9 @@ public sealed class SteamDepotImporter
             var downloaded = GameFolderLocator.Check(source);
             if (!downloaded.Ready)
             {
-                // A file that is not there yet is an unfinished download; anything else would not change by waiting.
+                // A file that is not there yet, or cannot be read yet, is an unfinished download; anything else would not change by waiting.
                 var missing = downloaded.Status is GameFolderStatus.MissingTig or GameFolderStatus.MissingModule or GameFolderStatus.MissingModuleArchive
-                    or GameFolderStatus.MissingActorArchive or GameFolderStatus.MissingTerrainArchive;
+                    or GameFolderStatus.MissingActorArchive or GameFolderStatus.MissingTerrainArchive or GameFolderStatus.Unreadable;
                 return new(missing ? SteamImportStatus.Incomplete : SteamImportStatus.UnsupportedSource,
                     downloaded.Status + (downloaded.Detail is { Length: > 0 } detail ? " " + detail : ""));
             }
@@ -149,6 +164,7 @@ public sealed class SteamDepotImporter
                 : (bytes, of) => progress(new(SteamImportStage.Verifying, 0, files.Count, bytes, of, null));
             progress?.Invoke(new(SteamImportStage.Verifying, 0, files.Count, 0, 0, null));
             if (_options.VerifyArchives(downloaded, verified, cancel) is { } damaged) return new(SteamImportStatus.Incomplete, damaged);
+            if (_options.OpenContent(downloaded) is { } closed) return new(SteamImportStatus.UnsupportedSource, closed);
 
             // 2. Is there room?
             var existing = target;
@@ -158,8 +174,9 @@ public sealed class SteamDepotImporter
 
             // 3. Copy.
             cancel.ThrowIfCancellationRequested();
-            writing = true;
-            if (await Copy(source, target, files, total, progress, cancel).ConfigureAwait(false) is { } failed) return failed with { Partial = true };
+            copying = true;
+            if (await Copy(source, target, files, total, () => writing = true, progress, cancel).ConfigureAwait(false) is { } failed)
+                return failed with { Partial = writing };
 
             // 4. A download still running would have changed the folder meanwhile.
             var (after, againRefusal) = List(source, cancel);
@@ -175,7 +192,7 @@ public sealed class SteamDepotImporter
         catch (OperationCanceledException) { return new(SteamImportStatus.Cancelled, Partial: writing); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException or NotSupportedException)
         {
-            return new(writing ? SteamImportStatus.CopyFailed : SteamImportStatus.UnsupportedSource, error.Message, Partial: writing);
+            return new(copying ? SteamImportStatus.CopyFailed : SteamImportStatus.UnsupportedSource, error.Message, Partial: writing);
         }
     }
 
@@ -226,8 +243,9 @@ public sealed class SteamDepotImporter
         return (files, null);
     }
 
-    /// <summary>Null when every listed file was written with its listed size.</summary>
-    private static async Task<SteamImportResult?> Copy(string source, string target, List<Entry> files, long total,
+    /// <summary>Null when every listed file was written with its listed size; <paramref name="writing"/> is called once a file exists in
+    /// the target.</summary>
+    private static async Task<SteamImportResult?> Copy(string source, string target, List<Entry> files, long total, Action writing,
         Action<SteamImportProgress>? progress, CancellationToken cancel)
     {
         Directory.CreateDirectory(target);
@@ -243,6 +261,7 @@ public sealed class SteamDepotImporter
             await using (var input = new FileStream(Path.Combine(source, file.Relative), FileMode.Open, FileAccess.Read, FileShare.ReadWrite, BufferBytes, useAsync: true))
             await using (var output = new FileStream(to, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferBytes, useAsync: true))
             {
+                writing();
                 int read;
                 while ((read = await input.ReadAsync(buffer, cancel).ConfigureAwait(false)) > 0)
                 {

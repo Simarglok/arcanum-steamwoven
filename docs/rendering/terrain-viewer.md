@@ -177,7 +177,8 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   empty folder, and `SteamDepotImporter` copies the download into it off the main thread (Steam owns its content folder and may
   clear it). It refuses an unfinished download (a game file missing, fewer than 99 % of the manifest's 1,199,679,598 bytes, an
   archive that does not open or holds a compressed entry that does not unpack, files that change during the copy; zeros left in
-  uncompressed entries or loose files are not detected, so the console's `Depot download complete` is what to wait for), a link,
+  uncompressed entries or loose files are not detected, so the console's `Depot download complete` is what to wait for), content
+  the game cannot open, a link,
   a used target and too little free space, then checks
   the copy with `GameFolderLocator.Check` and chooses it. It does not require the verified `Arcanum.exe`: the folder line says
   which executable it is, and Play prepares missing first-start files only from the verified one. The launcher asks for no Steam

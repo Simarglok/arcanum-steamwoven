@@ -41,7 +41,7 @@ public sealed class SteamDepotImporterTests
     }
 
     private static SteamImportOptions Options(long? minimum = null, Func<string, long?>? space = null)
-        => new() { MinimumBytes = minimum ?? Total, FreeSpace = space ?? (_ => long.MaxValue), VerifyArchives = (_, _, _) => null };
+        => new() { MinimumBytes = minimum ?? Total, FreeSpace = space ?? (_ => long.MaxValue), VerifyArchives = (_, _, _) => null, OpenContent = _ => null };
 
     private Task<SteamImportResult> Import(SteamImportOptions? options = null, string? target = null, Action<SteamImportProgress>? progress = null,
         CancellationToken cancel = default)
@@ -201,6 +201,24 @@ public sealed class SteamDepotImporterTests
         Assert.AreEqual(SteamImportStatus.Incomplete, holed.Status, holed.Detail);
         StringAssert.Contains(holed.Detail, "arcanum1.dat");
         Assert.IsFalse(Directory.Exists(Path.Combine(_root, "second")));
+    }
+
+    [TestMethod]
+    public async Task AFolderTheGameCannotOpenIsRefusedAndAFailureBeforeTheFirstFileLeavesNothingToMention()
+    {
+        var closed = await Import(Options() with { OpenContent = _ => "IgnoreListUnsupported" });
+        Assert.AreEqual(SteamImportStatus.UnsupportedSource, closed.Status);
+        Assert.IsFalse(Directory.Exists(_target));
+        if (OperatingSystem.IsWindows()) return; // folder permissions are set another way there
+        Directory.CreateDirectory(_target);
+        File.SetUnixFileMode(_target, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            var refused = await Import();
+            Assert.AreEqual(SteamImportStatus.CopyFailed, refused.Status, refused.Detail);
+            Assert.IsFalse(refused.Partial);
+        }
+        finally { File.SetUnixFileMode(_target, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); }
     }
 
     [TestMethod]
