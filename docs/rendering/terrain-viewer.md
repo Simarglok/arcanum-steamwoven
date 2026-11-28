@@ -166,6 +166,25 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   error line, the wrong executable, a cancel) is named in words and leaves the chosen folder as it was; files a failed or cancelled
   run wrote stay in the target (the player empties it or picks another). It builds no prototypes: they come at the first Play
   (ARC-DEV-069, next bullet).
+- **Install from Steam…** (ARC-DEV-3515) is for a player who owns Arcanum on Steam (app 500810, a Windows release with one
+  content depot, 500811). The button shows three steps in place of the help text: **Open the Steam console**
+  (`steam://open/console`), **Copy command** (`download_depot 500810 500811`, pasted into the console by the player) and, once
+  the console says `Depot download complete`, **Import the download…**. `SteamDepot` (Godot-free, `src/Arcanum.Session/Launcher`)
+  looks for `steamapps/content/app_500810/depot_500811` at fixed folders only: on Windows under the Steam folder named in the
+  registry (`SteamPath`, `InstallPath`) and `Program Files (x86)\Steam`; on macOS under
+  `~/Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS`, `~/Library/Application Support/Steam` and a Windows
+  Steam in each CrossOver bottle; **Choose the downloaded folder…** picks it elsewhere. The folder dialog then asks for a new or
+  empty folder, and `SteamDepotImporter` copies the download into it off the main thread (Steam owns its content folder and may
+  clear it). It refuses an unfinished download (a game file missing, fewer than 99 % of the manifest's 1,199,679,598 bytes, an
+  archive that does not open or holds a compressed entry that does not unpack, files that change during the copy; zeros left in
+  uncompressed entries or loose files are not detected, so the console's `Depot download complete` is what to wait for), content
+  the game cannot open, a link,
+  a used target and too little free space, then checks
+  the copy with `GameFolderLocator.Check` and chooses it. It does not require the verified `Arcanum.exe`: the folder line says
+  which executable it is, and Play prepares missing first-start files only from the verified one. The launcher asks for no Steam
+  credential or API key and reads no Steam account or settings file (on Windows only the two install folder registry values).
+  Log lines start with `ARC-DEV-3515`. Checked with synthetic folders (Session tests, launcher self-test); the depot id was read
+  from a public mirror of Steam's app information (2026-11-28), and a real Steam download has not been imported yet.
 - **The game data at Play (ARC-DEV-069, [research](../research/prototype-extraction.md#e4-results-arc-dev-069)).** Before the game
   starts on a folder (Play, or the start from a stored folder) `PrototypeProvisioner` checks that the folder has its prototype
   files: an installation the original ran has them (nothing is done); otherwise the files are built once from the player's own

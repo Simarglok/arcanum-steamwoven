@@ -72,6 +72,14 @@ public partial class LauncherPanel : CanvasLayer
     /// <summary>The installer file and the empty folder to unpack into were picked.</summary>
     public event Action<string, string>? InstallChosen;
     public event Action? CancelInstallRequested;
+    /// <summary>ARC-DEV-3515: "Install from Steam…" shows or hides its steps.</summary>
+    public event Action? SteamGuideRequested;
+    public event Action? SteamConsoleRequested;
+    public event Action? SteamCopyRequested;
+    /// <summary>"Import the download…" pressed; the host finds the downloaded depot, then calls <see cref="PickSteamTarget"/>.</summary>
+    public event Action? SteamImportRequested;
+    /// <summary>The downloaded folder and the new or empty folder to copy it into were picked.</summary>
+    public event Action<string, string>? SteamImportChosen;
     public event Action? PlayRequested;
     public event Action? ResetRequested;
     public event Action? QuitRequested;
@@ -91,6 +99,8 @@ public partial class LauncherPanel : CanvasLayer
         "Separate rendering thread: " + (_renderThread.ButtonPressed ? "on" : "off"),
         // ARC-UI-3453: appended, so the numbers above stay.
         "Skip start-up movies: " + (_skipStartupMovies.ButtonPressed ? "on" : "off"),
+        // ARC-DEV-3515: appended, so the numbers above stay.
+        "Steam steps: " + (_steamGuide.Visible ? "shown" : "hidden"),
     ];
     private static string Chosen(HBoxContainer row) => row.GetChildren().OfType<Button>().FirstOrDefault(button => button.ButtonPressed)?.Text ?? "none";
     internal bool HdEnabledForSelfTest => !_hd1.GetChildren().OfType<Button>().First().Disabled;
@@ -148,7 +158,8 @@ public partial class LauncherPanel : CanvasLayer
         _cancelInstall = MakeButton("CancelInstall", "Cancel unpacking", () => CancelInstallRequested?.Invoke());
         _cancelInstall.Visible = false;
         var chooseRow = new HBoxContainer { Name = "ChooseRow" };
-        chooseRow.AddChild(_choose); chooseRow.AddChild(_install); chooseRow.AddChild(_cancelInstall);
+        chooseRow.AddChild(_choose); chooseRow.AddChild(_install); chooseRow.AddChild(MakeSteamButton()); chooseRow.AddChild(_cancelInstall);
+        MakeSteamGuide(dark);
         _rules = new HBoxContainer { Name = "Rules" };
         _rules.AddChild(new Label { Text = "Rules:", Modulate = dark, CustomMinimumSize = new Vector2(120, 30) });
         foreach (var mode in Enum.GetValues<RuleMode>())
@@ -203,7 +214,7 @@ public partial class LauncherPanel : CanvasLayer
                     + "The game folder is only read, never written. An installation that the original game never started has no prototype files; "
                     + "the first Play prepares them from your own Arcanum.exe (about half a minute) and keeps them in Steamwoven's settings folder. "
                     + "Without Windows, \"Install from GOG installer…\" unpacks the GOG offline installer (setup_arcanum_….exe) with the free innoextract tool into a new folder you pick, and chooses it.";
-        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hd1, _hdPack, _hdZoom, _hdNote, startRow, _holdToQuit, _renderThread, _debugMode, actions, _notice, new Control { Name = "HintGap", CustomMinimumSize = new Vector2(0, 8) }, hint }) contents.AddChild(control);
+        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _steamGuide, _rules, _hd1, _hdPack, _hdZoom, _hdNote, startRow, _holdToQuit, _renderThread, _debugMode, actions, _notice, new Control { Name = "HintGap", CustomMinimumSize = new Vector2(0, 8) }, hint }) contents.AddChild(control);
         _dialog = new FileDialog
         {
             Name = "ChooseGameFolder", FileMode = FileDialog.FileModeEnum.OpenDir, Access = FileDialog.AccessEnum.Filesystem, UseNativeDialog = true,
@@ -323,6 +334,7 @@ public partial class LauncherPanel : CanvasLayer
             foreach (var button in _candidates.GetChildren().OfType<Button>()) button.Disabled = screen.Busy;
             _notice.Text = screen.Notice ?? "";
             _notice.Visible = _notice.Text.Length > 0;
+            RenderSteam(screen);
             RenderHd();
         }
         finally { _rendering = false; }

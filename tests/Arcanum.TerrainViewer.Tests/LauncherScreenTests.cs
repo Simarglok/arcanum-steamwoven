@@ -163,6 +163,53 @@ public sealed class LauncherScreenTests
         Assert.IsTrue(screen.CanPlay);
     }
 
+    /// <summary>ARC-DEV-3515: the Steam steps and the copy's state on the screen.</summary>
+    [TestMethod]
+    public void The_Steam_steps_show_and_while_the_download_is_copied_Play_is_off_and_the_result_is_chosen_or_named()
+    {
+        var detected = Game(Path.Combine(_root, "Applications", "Arcanum"));
+        var screen = new LauncherScreen(Read(LauncherSettings.Defaults), GameFolderStartup.Resolve(LauncherSettings.Defaults, Mac()), LauncherShowReason.FirstRun);
+        Assert.IsFalse(screen.SteamGuideOpen);
+        screen.ToggleSteamGuide();
+        Assert.IsTrue(screen.SteamGuideOpen);
+        StringAssert.Contains(LauncherScreen.SteamGuideText, "Depot download complete");
+        screen.SteamCommandCopied();
+        StringAssert.Contains(screen.Notice!, "download_depot 500810 500811");
+        screen.SteamConsoleOpened(false);
+        StringAssert.Contains(screen.Notice!, "steam://open/console");
+        screen.SteamDownloadNotFound(["first", "second"]);
+        StringAssert.Contains(screen.Notice!, "first; second");
+
+        Assert.IsTrue(screen.BeginSteamImport("depot", "target"));
+        Assert.IsFalse(screen.BeginSteamImport("depot", "other"), "one copy at a time");
+        Assert.IsFalse(screen.BeginInstall("setup.exe", "other"));
+        Assert.IsFalse(screen.CanPlay);
+        Assert.AreEqual("Cancel copying", screen.CancelText);
+        Assert.IsNull(screen.Play());
+        Assert.AreEqual("Wait for the copy to finish, or cancel it.", screen.Notice);
+        screen.ToggleSteamGuide();
+        Assert.IsTrue(screen.SteamGuideOpen, "the steps stay while copying");
+        screen.SteamImportProgress(new(SteamImportStage.Copying, 3, 74, 5 * 1024 * 1024, 100 * 1024 * 1024, "arcanum1.dat"));
+        Assert.AreEqual("Copying the game files… 3/74 files, 5/100 MB", screen.Notice);
+
+        screen.SteamImportDone(new(SteamImportStatus.Incomplete, "5 of about 100 MB are there"));
+        Assert.AreEqual(detected, screen.Folder!.Path, "an unfinished download leaves the folder as it was");
+        StringAssert.Contains(screen.Notice!, "The download is not complete (5 of about 100 MB are there)");
+        Assert.IsFalse(screen.Notice!.Contains("Files may be left", StringComparison.Ordinal), "nothing was written");
+        screen.BeginSteamImport("depot", "partly");
+        screen.SteamImportDone(new(SteamImportStatus.Cancelled, Partial: true));
+        StringAssert.Contains(screen.Notice!, "Files may be left in partly");
+        Assert.IsTrue(screen.SteamGuideOpen && screen.CanPlay);
+
+        var copied = Game(Path.Combine(_root, "copied"));
+        screen.BeginSteamImport("depot", copied);
+        screen.SteamImportDone(new(SteamImportStatus.Imported, null, GameFolderLocator.Check(copied)));
+        Assert.IsFalse(screen.Busy);
+        Assert.IsFalse(screen.SteamGuideOpen);
+        Assert.AreEqual($"Copied the Steam download into {copied}; the folder is chosen. Press Play to start.", screen.Notice);
+        Assert.AreEqual(copied, screen.Play()!.GameRoot);
+    }
+
     /// <summary>ARC-DEV-069: the game data (prototype files) being prepared on the first Play: the screen is busy like during an unpack, shows the
     /// progress, and a failure is named in words that never tell the player to run Arcanum.exe.</summary>
     [TestMethod]

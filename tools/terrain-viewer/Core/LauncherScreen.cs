@@ -42,15 +42,21 @@ public sealed class LauncherScreen
     /// <summary>The ready fixed candidates the start found (GOG registry, default folders, CrossOver bottles).</summary>
     public IReadOnlyList<GameFolderCheck> Candidates => _candidates;
     public bool CanPlay => !Busy && Folder is { Ready: true, Identity: not null };
-    /// <summary>ARC-DEV-074: a GOG installer is being unpacked, or (ARC-DEV-069) the game data is being prepared; the folder, Play and Reset are
-    /// off until it ends (<see cref="InstallDone"/>, <see cref="PrototypesDone"/>).</summary>
+    /// <summary>ARC-DEV-074: a GOG installer is being unpacked, (ARC-DEV-3515) a Steam download is being copied, or (ARC-DEV-069) the game
+    /// data is being prepared; the folder, Play and Reset are off until it ends (<see cref="InstallDone"/>, <see cref="SteamImportDone"/>,
+    /// <see cref="PrototypesDone"/>).</summary>
     public bool Busy { get; private set; }
-    /// <summary>ARC-DEV-069: the game data (the prototype files) is being prepared for the folder Play opened; the other busy state is the unpack.</summary>
+    /// <summary>ARC-DEV-069: the game data (the prototype files) is being prepared for the folder Play opened; the other busy states are the
+    /// unpack and the copy.</summary>
     public bool Preparing { get; private set; }
     /// <summary>The text of the Cancel button while <see cref="Busy"/>.</summary>
-    public string CancelText => Preparing ? "Cancel" : "Cancel unpacking";
+    public string CancelText => Preparing ? "Cancel" : Import is null ? "Cancel unpacking" : "Cancel copying";
     /// <summary>The installer being unpacked and its target folder; null when none is.</summary>
     public (string Installer, string Target)? Install { get; private set; }
+    /// <summary>ARC-DEV-3515: the Steam download being copied and its target folder; null when none is.</summary>
+    public (string Source, string Target)? Import { get; private set; }
+    /// <summary>ARC-DEV-3515: the steps of "Install from Steam…" are shown (instead of the help text).</summary>
+    public bool SteamGuideOpen { get; private set; }
     public bool FileUsable => FileStatus is LauncherSettingsReadStatus.Missing or LauncherSettingsReadStatus.Read or LauncherSettingsReadStatus.Invalid;
     public string? Notice { get; private set; }
 
@@ -111,7 +117,12 @@ public sealed class LauncherScreen
     /// null (with the notice) when no ready folder is chosen.</summary>
     public LauncherSettings? Play()
     {
-        if (Busy) { Notice = Preparing ? "Wait for the game data to be prepared, or cancel it." : "Wait for the unpacking to finish, or cancel it."; return null; }
+        if (Busy)
+        {
+            Notice = Preparing ? "Wait for the game data to be prepared, or cancel it."
+                : Import is null ? "Wait for the unpacking to finish, or cancel it." : "Wait for the copy to finish, or cancel it.";
+            return null;
+        }
         if (!CanPlay)
         {
             Notice = Folder is null ? "Choose the game folder first." : "Not a game folder the game can open: " + Describe(Folder);
@@ -165,6 +176,80 @@ public sealed class LauncherScreen
         {
             UseFolder(folder);
             Notice = $"Unpacked the GOG installer into {folder.Path}; the folder is chosen. Press Play to start.";
+        }
+        else Notice = Describe(result, target);
+    }
+
+    /// <summary>ARC-DEV-3515: the steps of "Install from Steam…" in order; they name nothing of the player's account.</summary>
+    public static string SteamGuideText =>
+        "Install from your own Steam copy (Steam running, signed in to the account that owns Arcanum):\n"
+        + "1. Press \"Open the Steam console\". If no console shows, quit Steam and start it with the -console option.\n"
+        + "2. Press \"Copy command\", paste it into the console and press Enter. Steam downloads about 1.2 GB.\n"
+        + "3. Wait for \"Depot download complete\", then press \"Import the download…\" and pick a new or empty folder.";
+
+    /// <summary>"Install from Steam…" shows the steps, or hides them.</summary>
+    public void ToggleSteamGuide()
+    {
+        if (Busy) return;
+        SteamGuideOpen = !SteamGuideOpen;
+        Notice = null;
+    }
+
+    public void SteamConsoleOpened(bool opened)
+    {
+        if (Busy) return;
+        Notice = opened ? "Asked Steam to open its console."
+            : "Steam could not be opened from here. Start Steam with the -console option, or open " + SteamDepot.ConsoleUri + " in a browser.";
+    }
+
+    public void SteamCommandCopied()
+    {
+        if (Busy) return;
+        Notice = "Copied \"" + SteamDepot.ConsoleCommand + "\". Paste it into the Steam console and press Enter.";
+    }
+
+    /// <summary>No downloaded depot in the usual folders (<paramref name="looked"/>).</summary>
+    public void SteamDownloadNotFound(IReadOnlyList<string> looked)
+    {
+        ArgumentNullException.ThrowIfNull(looked);
+        if (Busy) return;
+        Notice = "No downloaded depot was found" + (looked.Count > 0 ? " (looked in " + string.Join("; ", looked) + ")" : "")
+                 + ". Finish the download first, or press \"Choose the downloaded folder…\" and pick the folder the console names.";
+    }
+
+    /// <summary>ARC-DEV-3515: the copy of the download <paramref name="source"/> into <paramref name="target"/> starts; false (and nothing
+    /// changes) while something else runs.</summary>
+    public bool BeginSteamImport(string source, string target)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        if (Busy) return false;
+        Busy = true;
+        Import = (source, target);
+        Notice = "Checking the download…";
+        return true;
+    }
+
+    public void SteamImportProgress(SteamImportProgress progress)
+    {
+        ArgumentNullException.ThrowIfNull(progress);
+        if (!Busy || Import is null) return;
+        Notice = Describe(progress);
+    }
+
+    /// <summary>The copy ended: a checked folder becomes the folder Play opens (the steps close); anything else is named in words and
+    /// leaves the folder as it was.</summary>
+    public void SteamImportDone(SteamImportResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        var target = Import?.Target;
+        Busy = false;
+        Import = null;
+        if (result.Succeeded && result.Folder is { Ready: true } folder)
+        {
+            UseFolder(folder);
+            SteamGuideOpen = false;
+            Notice = $"Copied the Steam download into {folder.Path}; the folder is chosen. Press Play to start.";
         }
         else Notice = Describe(result, target);
     }
@@ -323,6 +408,45 @@ public sealed class LauncherScreen
             GogInstallStatus.NotAGameFolder => "The unpacked folder is not a game folder the game can open" + detail + "." + partial,
             GogInstallStatus.FingerprintMismatch => "The unpacked Arcanum.exe is not the verified 1.0.7.4 executable" + detail + "." + partial,
             GogInstallStatus.Cancelled => "Unpacking was cancelled." + partial,
+            _ => result.Status + detail,
+        };
+    }
+
+    /// <summary>The copy's progress line: the stage, the files and the megabytes.</summary>
+    public static string Describe(SteamImportProgress progress)
+    {
+        ArgumentNullException.ThrowIfNull(progress);
+        return progress.Stage switch
+        {
+            SteamImportStage.Checking => "Checking the download…",
+            SteamImportStage.Verifying => "Checking the downloaded archives…"
+                + (progress.BytesTotal > 0 ? $" {progress.BytesDone / (1024 * 1024)}/{progress.BytesTotal / (1024 * 1024)} MB" : ""),
+            SteamImportStage.Copying => $"Copying the game files… {progress.FilesDone}/{progress.FilesTotal} files, "
+                + $"{progress.BytesDone / (1024 * 1024)}/{progress.BytesTotal / (1024 * 1024)} MB",
+            _ => "Checking the copied game folder…",
+        };
+    }
+
+    /// <summary>A failed or refused copy in words (<paramref name="target"/> names where partial files may remain).</summary>
+    public static string Describe(SteamImportResult result, string? target = null)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        var detail = result.Detail is { Length: > 0 } text ? $" ({text})" : "";
+        var partial = target is null || !result.Partial ? "" : $" Files may be left in {target}; empty it or choose another folder before trying again.";
+        return result.Status switch
+        {
+            SteamImportStatus.Imported => "Copied.",
+            SteamImportStatus.InvalidPath => "That folder cannot be used" + detail + ".",
+            SteamImportStatus.SourceMissing => "The downloaded folder does not exist" + detail + ".",
+            SteamImportStatus.Incomplete => "The download is not complete" + detail + ". Wait for \"Depot download complete\" in the Steam console, "
+                + "or run the command again; a folder you chose must be depot_" + SteamDepot.DepotId + " itself.",
+            SteamImportStatus.UnsupportedSource => "That folder cannot be copied" + detail + "." + partial,
+            SteamImportStatus.TargetNotEmpty => "Choose a new or empty folder to copy into; that one has files in it" + detail + ".",
+            SteamImportStatus.NotEnoughSpace => "Not enough free disk space to copy" + detail + ".",
+            SteamImportStatus.SourceChanged => "Steam seems to be still downloading" + detail + "." + partial,
+            SteamImportStatus.CopyFailed => "Copying failed" + detail + "." + partial,
+            SteamImportStatus.NotAGameFolder => "The copied folder is not a game folder the game can open" + detail + "." + partial,
+            SteamImportStatus.Cancelled => "Copying was cancelled." + partial,
             _ => result.Status + detail,
         };
     }

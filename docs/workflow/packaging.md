@@ -220,6 +220,8 @@ Nothing else under `artifacts/packages` is written by `daily` itself, so the bug
   synthetic tests only), the main menu, the SmartScreen steps of the player instruction, a new game reaching the map and a
   save and load are still to be confirmed by the owner (map files are read on Windows since ARC-DEV-049, tested on macOS
   only); the Windows build is not signed (a free signature would need a free certificate route, none chosen).
+- An import of a real Steam download (**Install from Steam…**, ARC-DEV-3515, synthetic tests only) on macOS or Windows,
+  including whether its `Arcanum.exe` lets the first Play prepare the game data, is the owner's check ([#3516](https://github.com/Simarglok/arcanum-steamwoven/issues/3516)).
 - Bundling `innoextract` into the package, so the player needs no separate install (the "A+" option of the GOG installer research, ARC-RES-087), is not built.
 - The icon on a Windows 11 PC (Explorer, taskbar) and in the Dock of a running macOS package, still to be confirmed by
   the owner ([#3469](https://github.com/Simarglok/arcanum-steamwoven/issues/3469)); notarization (needs a paid Apple Developer ID), automatic updates.

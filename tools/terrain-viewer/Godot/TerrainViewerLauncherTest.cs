@@ -213,6 +213,8 @@ public partial class TerrainViewerApp
         Require(Lines()[5].StartsWith("Unpacking was cancelled.", StringComparison.Ordinal) && _launcher!.Folder?.Path != cancelled, "a cancel is named: " + Lines()[5]);
         _launcherUnpackerForSelfTest = null;
 
+        await LauncherSteamForSelfTest(directory, settingsPath, Require, Start, Play, () => started);
+
         // ARC-DEV-069: an installation without prototype files is prepared on the first Play, off the main thread, with its progress on the screen.
         await Start(true);
         _launcherPanel!.ChooseForSelfTest(game);
@@ -293,12 +295,15 @@ public partial class TerrainViewerApp
             await Start(true);
             Require(HdLines().SequenceEqual(["HD: Off", "HD pack: Auto"]) && _launcherPanel.HdEnabledForSelfTest && Lines()[11] == "World zoom: hidden",
                 "the HD lines default to Off, Auto and the world zoom row is hidden while HD is Off (an old visual profile line alone does not turn HD on): " + string.Join(" | ", HdLines()) + " | " + Lines()[11]);
-            Require(Lines().Length == 14 && !Lines().Any(line => line.StartsWith("Generated interface", StringComparison.Ordinal)) && !Lines().Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
+            Require(Lines().Length == 15 && !Lines().Any(line => line.StartsWith("Generated interface", StringComparison.Ordinal)) && !Lines().Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
                 "the launcher has one HD row, no HD graphics, HD interface or HD lighting line: " + Lines().Length);
             _launcherPanel.HdForSelfTest(true);
             _launcherPanel.HdPackForSelfTest(HdPackSourceMode.GameFolder);
             Require(HdLines().SequenceEqual(["HD: On", "HD pack: Game"]) && Lines()[11] == "World zoom: Auto", "the choices show and the world zoom row appears with HD On: " + string.Join(" | ", HdLines()) + " | " + Lines()[11]);
             await Layout("HD On with the world zoom row");
+            _launcherPanel.SteamGuideForSelfTest();
+            await SteamStepsFit("HD On with the world zoom row", Require);
+            _launcherPanel.SteamGuideForSelfTest();
             Require(new VisualProfileSettingsStore(false).Load() == VisualProfile.Hd
                     && new GameSettingsStore(false).Load() is { HdInterface: true, HdPackSource: HdPackSourceMode.GameFolder }, "each choice was saved at once in the one settings file");
             Require(System.IO.File.ReadAllText(gameSettingsPath).Contains("hd=1", StringComparison.Ordinal) && System.IO.File.ReadAllText(gameSettingsPath).Contains("visual profile=hd", StringComparison.Ordinal),
@@ -390,6 +395,12 @@ public partial class TerrainViewerApp
                 System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full)!);
                 using var image = GetViewport().GetTexture().GetImage();
                 Require(image is not null && image.SavePng(full) == Error.Ok, "the launcher screenshot was not written");
+                // ARC-DEV-3515: the same screen with the Steam steps shown.
+                panel.SteamGuideForSelfTest();
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                using var steam = GetViewport().GetTexture().GetImage();
+                Require(steam is not null && steam.SavePng(full[..^4] + "-steam.png") == Error.Ok, "the Steam steps screenshot was not written");
+                panel.SteamGuideForSelfTest();
             }
             _prepareTask = null;
             panel.PlayForSelfTest();
