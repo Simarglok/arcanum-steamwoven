@@ -47,6 +47,8 @@ public partial class TerrainViewerApp : Node
 
     public override void _Ready()
     {
+        // ARC-DEV-3304: read now, because a settings test of the main app turns SelfTestBootstrap on later.
+        _mainScene = GetTree().CurrentScene == this;
         // ARC-DEV-051: the bug report's 120 s log is filled from the first line on.
         BugReportLogger.Install();
         // ARC-DEV-047: the packaged commit (or a source run) and the user:// folder this build reads and writes.
@@ -1358,6 +1360,7 @@ public partial class TerrainViewerApp : Node
         if (!SelfTestBootstrap) GD.Print($"ARC-DEV-059 viewer failure {text}");
         _hud?.SetDiagnosticText(text, _nativeSmoke || SelfTestBootstrap, failure: true);
     }
+    private bool _mainScene;
     public override void _ExitTree()
     {
         if (_exiting) return;
@@ -1390,6 +1393,8 @@ public partial class TerrainViewerApp : Node
         // ARC-DEV-032: the main app (not a self-test's child) removes the automated run's own folder after its last save.
         if (!SelfTestBootstrap) ViewerAutomatedStorage.Delete();
         if (!SelfTestBootstrap) BugReportLogger.Remove();
+        // ARC-DEV-3304: last, after everything above let go of its engine objects.
+        if (_mainScene) ViewerEngineTeardown.Run();
     }
 }
 

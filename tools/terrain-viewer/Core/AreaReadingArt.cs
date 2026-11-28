@@ -5,7 +5,11 @@ using Arcanum.World;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>One placed line of the reading window's text: the font art it is drawn in, its top left in the window and its glyphs (each with its x from the line's left).</summary>
-public sealed record AreaReadingLine(int Font, int X, int Y, IReadOnlyList<(int X, AreaArtGlyph Glyph)> Glyphs);
+public sealed record AreaReadingLine(int Font, int X, int Y, IReadOnlyList<(int X, AreaArtGlyph Glyph)> Glyphs)
+{
+    /// <summary>The size the glyphs and their advances are drawn at from (X, Y): 1 except on a note drawn smaller to fit (<see cref="AreaReadingFlow.Note"/>).</summary>
+    public float Scale { get; init; } = 1f;
+}
 
 /// <summary>A page of a book or a plaque: its lines and where the text goes on (message index and character offset), null when it ended.</summary>
 public sealed record AreaReadingPage(IReadOnlyList<AreaReadingLine> Lines, (int Index, int Offset)? Next);
@@ -307,15 +311,52 @@ public static class AreaReadingFlow
         return lines;
     }
 
+    /// <summary>The smallest size in percent a too long note is drawn at, and the step the sizes are tried in (ARC-UI-3494).</summary>
+    public const int MinimumNotePercent = 50, NotePercentStep = 2;
+
+    /// <summary>ARC-UI-3494 (owner decision 2026-11-28, both rule modes): a note whose text does not fit <paramref name="rect"/> is drawn whole at the largest size of 98 %, 96 %, ... 50 % at which it
+    /// does, broken anew at that size; the original draws its first lines only (WR24). Empty lines and spaces at the end do not make a note too long. A note that fits, or that no size holds, is
+    /// drawn as the original does (<see cref="Draw"/>).</summary>
+    public static IReadOnlyList<AreaReadingLine> Note(AreaArtFont font, int fontArt, string text, AreaReadingRect rect)
+    {
+        ArgumentNullException.ThrowIfNull(font);
+        ArgumentNullException.ThrowIfNull(text);
+        var ink = text.TrimEnd('\n', ' ', '\t').Length;
+        // Whether the draw itself, broken as it breaks the whole text, reaches the last visible character within the box's lines.
+        bool Holds(AreaReadingRect box)
+        {
+            var start = 0;
+            for (var rows = box.Height / font.LineHeight; rows > 0; rows--)
+            {
+                var (end, _) = Break(font, text, start, box.Width);
+                if (end < 0) return false;
+                start = end + 1;
+                if (start >= ink) return true;
+            }
+            return false;
+        }
+        if (font.LineHeight > 0 && !Holds(rect))
+            for (var percent = 100 - NotePercentStep; percent >= MinimumNotePercent; percent -= NotePercentStep)
+            {
+                // The rectangle as the smaller text sees it, in the font's own units.
+                var wide = rect with { Width = rect.Width * 100 / percent, Height = rect.Height * 100 / percent };
+                if (!Holds(wide)) continue;
+                return Draw(font, fontArt, text, wide, false)
+                    .Select(line => line with { Y = rect.Y + ((line.Y - rect.Y) * percent + 50) / 100, Scale = percent / 100f }).ToArray();
+            }
+        return Draw(font, fontArt, text, rect, false);
+    }
+
     /// <summary>The text of a note, a telegram, a newspaper or a plaque (not a book, which has pages, nor a picture, which has none). A note is drawn whole in the handwriting face
-    /// <see cref="AreaReadingArtLayout.NoteFont"/> (Pepper20) in every look; with HD on the pack's frames of it are drawn (ARC-UI-3484, owner decision 2026-11-28).</summary>
+    /// <see cref="AreaReadingArtLayout.NoteFont"/> (Pepper20) in every look, smaller when it would not fit (<see cref="Note"/>); with HD on the pack's frames of it are drawn (ARC-UI-3484, owner
+    /// decision 2026-11-28).</summary>
     public static IReadOnlyList<AreaReadingLine> Single(AreaReadingArtDocument document, Func<int, AreaArtFont> fontOf)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(fontOf);
         return document.Subtype switch
         {
-            WrittenSubtype.Note => Draw(fontOf(AreaReadingArtLayout.NoteFont), AreaReadingArtLayout.NoteFont, document.Joined, AreaReadingArtLayout.NoteText, false),
+            WrittenSubtype.Note => Note(fontOf(AreaReadingArtLayout.NoteFont), AreaReadingArtLayout.NoteFont, document.Joined, AreaReadingArtLayout.NoteText),
             WrittenSubtype.Telegram => Telegram(document, fontOf),
             WrittenSubtype.Newspaper => Newspaper(document, fontOf),
             WrittenSubtype.Plaque => Page(document.Body, (0, 0), AreaReadingArtLayout.PlaqueText, fontOf).Lines,

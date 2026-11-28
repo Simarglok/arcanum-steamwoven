@@ -119,7 +119,10 @@ only for a player viewer (no dead check). Action 94 (set a written item's first 
   496 at (213, 77) and (675, 77), shown only when there is such a page). The text is the game's own in the original's fonts (`AreaReadingFlow`): a book flows its messages over pages of 200 × 290 at
   (227, 57) and (476, 57) by pixel height (the fit test 0x56C800: a message that does not fit is cut at its last fitting break and goes on on the next page, at most 100 pages), a note in
   (349, 49, 215 × 300), a telegram's eleven form lines at their points with its body in (327, 126, 250 × 240), a newspaper's masthead, headline and four columns with the fillers, a plaque (white) in
-  (269, 40, 428 × 327). Code: `AreaReadingArtLayout` and `AreaReadingFlow` (Godot-free, `AreaReadingArt.cs`), `AreaReadingArtView` and the loading in `TerrainViewerAreaReadingArt.cs`. PROJECT: the
+  (269, 40, 428 × 327). Code: `AreaReadingArtLayout` and `AreaReadingFlow` (Godot-free, `AreaReadingArt.cs`), `AreaReadingArtView` and the loading in `TerrainViewerAreaReadingArt.cs`. **A long note (ARC-UI-3494, owner decision 2026-11-28,
+  both rule modes):** the original draws the lines that fit and shows the rest nowhere (ledger WR24); the viewer draws such a note whole at the largest size of 98 %, 96 %, ... 50 % at which it fits,
+  broken anew at that size (`AreaReadingFlow.Note`; empty lines at its end do not count; a note that no size holds is cut as in the original). Among the installed notes only the one at start line 1170
+  is too long (84 %). PROJECT: the
   wheel, Left/Right, Page Up/Down and the menu directions turn a book's pages too; the picture art is read when first shown. **Handheld text (ARC-UI-1462):** a line of Garmond8 (the newspaper masthead's "Price" lines and tagline, message 2, 3 or 5) that would be under 9 px at the screen factor is drawn with Garmond9 (art 483, loaded beside the
   other fonts and optional: without it the line keeps its glyphs; `AreaReadingText.ShownFont`), its layout measured with that font's glyphs and laid out again when the window's screen factor changes (`AreaReadingArtView.Compose`);
   at screen factor 2 and up nothing changes. Garmond6 (481, the telegram's printed legend and fine print) keeps its own 6 px glyphs by owner decision: its boxes are printed for it (`AreaReadingText.PrintedLegendFont`). The text-only

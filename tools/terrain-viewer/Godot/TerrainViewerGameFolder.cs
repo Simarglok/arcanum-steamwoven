@@ -218,7 +218,7 @@ public partial class TerrainViewerApp
         try
         {
             var stage = (GogInstallStage?)null;
-            result = await Task.Run(() => unpacker.UnpackAsync(installer, target, progress =>
+            result = await ViewerEngineTeardown.Work.Track(Task.Run(() => unpacker.UnpackAsync(installer, target, progress =>
             {
                 // Progress comes from the tool's reader threads: the screen is updated on the main thread, the log line only at a stage change.
                 if (stage != progress.Stage) { stage = progress.Stage; GD.Print($"ARC-DEV-074 installer unpack stage={progress.Stage} files={progress.FilesTotal} bytes={progress.BytesTotal}"); }
@@ -228,7 +228,7 @@ public partial class TerrainViewerApp
                     launcher.InstallProgress(progress);
                     _launcherPanel?.Render(launcher);
                 }).CallDeferred();
-            }, cancel.Token));
+            }, cancel.Token)));
         }
         catch (OperationCanceledException) { result = new(GogInstallStatus.Cancelled); }
         catch (Exception error)
@@ -330,7 +330,7 @@ public partial class TerrainViewerApp
             try
             {
                 var stage = (PrototypeProvisionStage?)null;
-                result = await Task.Run(() => ProvidePrototypes(folder, progress =>
+                result = await ViewerEngineTeardown.Work.Track(Task.Run(() => ProvidePrototypes(folder, progress =>
                 {
                     // Progress comes from the build's thread: the screen is updated on the main thread, the log line only at a stage change.
                     if (stage != progress.Stage) { stage = progress.Stage; GD.Print($"ARC-DEV-069 prototypes stage={progress.Stage}"); }
@@ -340,7 +340,7 @@ public partial class TerrainViewerApp
                         if (launcher is not null) { if (_launcher != launcher) return; launcher.PrototypesProgress(progress); _launcherPanel?.Render(launcher); }
                         else ShowStatus("Diagnostic mode unresolved | loading stage=GameData | " + LauncherScreen.Describe(progress));
                     }).CallDeferred();
-                }, cancel.Token));
+                }, cancel.Token)));
             }
             catch (OperationCanceledException) { result = new(PrototypeProvisionStatus.Cancelled); }
             catch (Exception error)
