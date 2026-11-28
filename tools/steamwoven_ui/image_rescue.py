@@ -33,6 +33,7 @@ SOURCES = ("composites", "worktrees", "scratch", "loose", "tmp", "codex", "pipel
 CODE_RE = re.compile(r"ARC-[A-Z]+-\d+", re.I)
 SKIP_PARTS = {"venv", "site-packages", "node_modules", ".git", "bin", "obj", "__pycache__"}
 SINCE = "2026-11-01"
+LOCK_BATCH = 100  # files copied and registered per turn of the registry lock
 PIXEL_NUMBERS = {"2560", "2880", "3840", "2160", "4096", "2880"}  # screen sizes that look like task numbers
 # Pipeline batch (folder name under inbox/outbox/codex-work/work) -> task, from merged PR titles; unlisted batches go to _unsorted/batch-<name>.
 BATCH_TASK = {
@@ -315,12 +316,15 @@ def register_pipeline(reg: ia.Registry, main: Path) -> int:
 
 def run(sources: list[str], dry: bool) -> int:
     main, home = prompt_library.main_checkout(), Path.home()
-    reg = ia.Registry(main / "local/steamwoven-ui/archive")
+    root = main / "local/steamwoven-ui/archive"
     tm = TaskMap(main, home)
     total = collections.Counter()
     for source in sources:
         if source == "pipeline":
-            n = 0 if dry else register_pipeline(reg, main)
+            n = 0
+            if not dry:
+                with ia.writing(root) as reg:
+                    n = register_pipeline(reg, main)
             print(f"pipeline: {n} rows registered in place")
             continue
         rows = gather(source, main, home, tm)
@@ -332,21 +336,18 @@ def run(sources: list[str], dry: bool) -> int:
                 print(f"   {t:34} {n}")
             continue
         copied = 0
-        for i, (src, task, tb, kind, status, note) in enumerate(rows, 1):
-            before = len(reg.rows)
-            try:
-                row = ia.add_file(reg, task, src, kind=kind, status=status, note=note, basis={"task_basis": tb, "kind_basis": "heuristic"})
-            except OSError as error:
-                print(f"  skip {src}: {error}", file=sys.stderr)
-                continue
-            copied += len(reg.rows) - before
-            if i % 500 == 0:
-                reg.save()
-        reg.save()
+        for start in range(0, len(rows), LOCK_BATCH):  # other writers get their turn between batches
+            with ia.writing(root) as reg:
+                for src, task, tb, kind, status, note in rows[start:start + LOCK_BATCH]:
+                    before = len(reg.rows)
+                    try:
+                        ia.add_file(reg, task, src, kind=kind, status=status, note=note, basis={"task_basis": tb, "kind_basis": "heuristic"})
+                    except OSError as error:
+                        print(f"  skip {src}: {error}", file=sys.stderr)
+                        continue
+                    copied += len(reg.rows) - before
         total[source] = copied
         print(f"   copied {copied} new, {len(rows) - copied} already archived")
-    if not dry:
-        reg.save()
     return 0
 
 
