@@ -140,7 +140,7 @@ public partial class AreaMenuArtView : Control
         (_controls, _arrows, _controlFocus, _arrowHovered, _arrowHeld) = ([], [], -1, -1, -1);
     }
 
-    /// <summary>ARC-UI-2577, ARC-UI-2891: the full-screen layout of the Steamwoven interface for the window now (the plate fitted to the window's height, black beside it), or null while the layout is off (the HD option off, the older smokes' suspension, or a window below f = 0.25).</summary>
+    /// <summary>ARC-UI-2577, ARC-UI-2891: the full-screen layout of the Steamwoven interface for the window now (the plate fitted to the window's height, black beside it unless the 16:9 plate covers it, ARC-UI-3483), or null while the layout is off (the HD option off, the older smokes' suspension, or a window below f = 0.25).</summary>
     internal SteamwovenFullScreenPlan? FullScreenPlan
     {
         get

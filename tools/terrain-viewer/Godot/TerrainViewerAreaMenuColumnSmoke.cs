@@ -104,7 +104,11 @@ public partial class TerrainViewerApp
                         // ARC-UI-2924: the two-strip screens' buttons are hit where the plan draws them.
                         if (screen.Hovered is { } hovered) await CheckTwoStripHitsAsync(tag, layout, screen.Spots, hovered, frames, require);
                         // ARC-UI-2461: with the synthetic kit the full-screen menus draw its plates.
-                        if (syntheticKit is not null && screen.Name is "main" or "options" && !art.WidePlateForSelfTest) await CheckKitPlateAsync(tag, layout, screen.Name, art, frames, require);
+                        if (syntheticKit is not null && screen.Name is "main" or "options")
+                        {
+                            if (art.WidePlateForSelfTest) GD.Print($"ARC-UI-3483 [{tag}] kit plate check skipped: the pack's 16:9 plate is drawn");
+                            else await CheckKitPlateAsync(tag, layout, screen.Name, art, frames, require);
+                        }
                         // ARC-UI-3039, ARC-UI-3040: with the synthetic kit the pre-made browser and the new character screen draw their two strips and their bodies.
                         if (syntheticKit is not null && screen.Name == "premade") { await CheckKitCharacterScreenAsync(tag, layout, KitPremadeView(panel.PremadeArtForSelfTest), firstPremade, syntheticKit, frames, require); firstPremade = false; premadeKitCases++; }
                         if (syntheticKit is not null && screen.Name == "newcharacter") { await CheckKitCharacterScreenAsync(tag, layout, KitNewCharacterView(panel.NewCharacterArtForSelfTest), firstNewCharacter, syntheticKit, frames, require); firstNewCharacter = false; newCharacterKitCases++; }
@@ -278,11 +282,13 @@ public partial class TerrainViewerApp
         Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
         static int Sum(Color c) => c.R8 + c.G8 + c.B8;
         var rowY = layout.Zone.Y + layout.Zone.Height / 2;
-        // ARC-UI-3483: the pack's 16:9 plate lies over the black beside the table scene.
-        if (layout.Zone.X > 4 && art?.WidePlateForSelfTest != true)
+        // ARC-UI-3483: the pack's 16:9 plate lies over the black beside the table scene, so only what is outside its width stays black.
+        var wide = art?.WidePlateForSelfTest == true;
+        var plateLeft = wide ? layout.Zone.X - (int)Math.Ceiling((600 * 16 / 9.0 - 800) / 2 * layout.Factor) : layout.Zone.X;
+        if (plateLeft > 4)
         {
             var far = Pixel(1, rowY);
-            var near = Pixel(layout.Zone.X - 2, rowY);
+            var near = Pixel(plateLeft - 2, rowY);
             require(Sum(far) == 0 && Sum(near) == 0, $"[{tag}] the black is black (far {far}, near {near})");
         }
     }
