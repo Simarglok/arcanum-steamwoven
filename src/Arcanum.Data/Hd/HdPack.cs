@@ -53,6 +53,25 @@ public sealed class HdPack
     /// <summary>Decoded HD RGBA bytes of all sprite entries (scale² · w · h · 4 each).</summary>
     public long SpriteRgbaBytes => _sprites.Values.Sum(e => (long)Scale * Scale * e.Legacy.Width * e.Legacy.Height * 4);
 
+    /// <summary>ARC-UI-122: an optional local 16:9 main-menu plate, independent of sprite dimensions.</summary>
+    public HdPngImage? ReadMainMenuBackdrop() => ReadMainMenuBackdropReport().Image;
+
+    /// <summary>ARC-DEV-343: the same read with the outcome named, so a log can say which file of which pack was used (no path).</summary>
+    public HdMainMenuBackdropRead ReadMainMenuBackdropReport()
+    {
+        if (Review == HdReviewStatus.Rejected) return new(null, "PackRejected", null, 0, 0);
+        var bytes = ReadFile(Directory, "main-menu-16x9.png", 40 * 1024 * 1024, out _);
+        if (bytes is null) return new(null, "NoFile", null, 0, 0);
+        var sha12 = HdPackPath.Sha256(bytes)[..12];
+        if (HdPng.ReadHeader(bytes).Header is not { } header) return new(null, "BadHeader", sha12, 0, 0);
+        if (header.Width > 3840 || (long)header.Width * 9 != (long)header.Height * 16) return new(null, "WrongSize", sha12, header.Width, header.Height);
+        var image = HdPng.Decode(bytes, 3840 * 2160).Image;
+        if (image is null) return new(null, "BadImage", sha12, header.Width, header.Height);
+        for (var i = 3; i < image.Rgba.Length; i += 4)
+            if (image.Rgba[i] != byte.MaxValue) return new(null, "NotOpaque", sha12, header.Width, header.Height);
+        return new(image, "Used", sha12, header.Width, header.Height);
+    }
+
     public static HdPackOpenResult Open(string directory, HdPackOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(directory);

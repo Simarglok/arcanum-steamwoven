@@ -1,3 +1,4 @@
+using Arcanum.Data.Hd;
 using Arcanum.Presentation.Steamwoven;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -28,6 +29,8 @@ public readonly record struct AreaMenuControlView(string Label, AreaOptionKind K
 public partial class AreaMenuArtView : Control
 {
     private Texture2D? _background;
+    private HdPack? _widescreenPack;
+    private Texture2D? _widescreenBackground;
     private AreaArtFontFace? _font;
     private IReadOnlyList<string> _labels = [];
     private IReadOnlyList<(int X, int Y, int Width, int Height)> _buttons = [];
@@ -157,7 +160,35 @@ public partial class AreaMenuArtView : Control
     private SteamwovenLayoutOptions? _planOptions;
     private bool _hadPlan;
 
-    /// <summary>ARC-DEV-334: the 800 × 600 plate's scale and top left in the window (the whole factor of the bars, ARC-UI-3003: the pack's 16:9 plate is gone), also for the
+    /// <summary>ARC-UI-3483: true while the window shown draws the pack's 16:9 plate, for the smokes (no black beside the composition then).</summary>
+    internal bool WidePlateForSelfTest => WidescreenBackground() is not null;
+
+    private Texture2D? WidescreenBackground()
+    {
+        // ARC-UI-3483 (owner decision 2026-11-28): HD draws the 16:9 plate in every layout; the HD option off keeps the original's 4:3 art.
+        if (_window is not { } window || !AreaMenuArtLayout.UsesWidescreenPlate(window) || !InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack) return null;
+        if (ReferenceEquals(_widescreenPack, pack)) return _widescreenBackground;
+        _widescreenPack = pack;
+        _widescreenBackground = null;
+        var read = pack.ReadMainMenuBackdropReport();
+        // ARC-DEV-343: name the file the menu really uses (no path): the pack, where it came from, the file's hash and size.
+        var gamePacks = System.IO.Path.GetFullPath(ProjectSettings.GlobalizePath("user://hd-packs"));
+        var origin = System.IO.Path.GetFullPath(pack.Directory).StartsWith(gamePacks + System.IO.Path.DirectorySeparatorChar, StringComparison.Ordinal) ? "game-folder" : "other-folder";
+        GD.Print($"ARC-DEV-343 main menu backdrop file=main-menu-16x9.png status={read.Status} sha12={read.Sha12 ?? "none"} size={read.Width}x{read.Height} pack={pack.Id} manifest-sha12={pack.Identity.ManifestSha256[..12]} pack-from={origin}");
+        if (read.Image is { } backdrop)
+        {
+            using var image = Image.CreateFromData(backdrop.Width, backdrop.Height, false, Image.Format.Rgba8, backdrop.Rgba);
+            image.GenerateMipmaps();
+            _widescreenBackground = new CanvasTexture
+            {
+                DiffuseTexture = ImageTexture.CreateFromImage(image),
+                TextureFilter = TextureFilterEnum.LinearWithMipmaps,
+            };
+        }
+        return _widescreenBackground;
+    }
+
+    /// <summary>ARC-DEV-334: the 800 × 600 plate's scale and top left in the window (fractional fit for the wide main menu), also for the
     /// original's dialog box the in-play menu's quit question puts on the same plate.</summary>
     public (float Factor, Vector2 Position) PlateFit()
     {
@@ -165,12 +196,15 @@ public partial class AreaMenuArtView : Control
         if (FullScreenPlan is { } layout) return ((float)layout.Factor, new Vector2(layout.Zone.X, layout.Zone.Y));
         var size = GetViewportRect().Size;
         var plate = new Vector2(AreaMenuArtLayout.ScreenWidth, AreaMenuArtLayout.ScreenHeight);
-        var factor = AreaGameBarPanel.ScreenFactor(size);
+        var widescreen = WidescreenBackground() is not null;
+        var factor = widescreen ? Math.Min(size.X / plate.X, size.Y / plate.Y) : AreaGameBarPanel.ScreenFactor(size);
         var position = (size - plate * factor) / 2;
-        return (factor, new Vector2(AreaGameBarPanel.ScreenLeft(size, (int)factor), MathF.Round(position.Y)));
+        if (!widescreen)
+            position = new Vector2(AreaGameBarPanel.ScreenLeft(size, (int)factor), MathF.Round(position.Y));
+        return (factor, position);
     }
 
-    /// <summary>Centres the interactive 800 × 600 plate.</summary>
+    /// <summary>Centres the interactive 800 × 600 plate, using fractional fit for the wide main menu.</summary>
     public void Place()
     {
         var (factor, position) = PlateFit();
@@ -179,7 +213,7 @@ public partial class AreaMenuArtView : Control
         // A fractional layout scale is sampled linear (as the strips of the prototype are); the original's whole factors stay Nearest.
         var layoutOn = FullScreenPlan is not null;
         TextureFilter = layoutOn ? TextureFilterEnum.Linear : TextureFilterEnum.Nearest;
-        // The plate follows the layout: a switch of it with no new Render still redraws.
+        // The plate (the pack's 16:9 one or the original's) follows the layout: a switch of it with no new Render still redraws.
         if (layoutOn != _hadPlan) { _hadPlan = layoutOn; QueueRedraw(); }
     }
 
@@ -188,9 +222,17 @@ public partial class AreaMenuArtView : Control
         if (_background is null || _font is null) return;
         var width = (float)AreaMenuArtLayout.ScreenWidth;
         var height = (float)AreaMenuArtLayout.ScreenHeight;
+        // ARC-UI-3483: with HD the table-scene menus draw the pack's 16:9 plate. It is wider than the 800 × 600 composition, on the same
+        // transform as the labels, and its sides lie outside the control's hit rectangle (cropped by a narrower window).
+        if (WidescreenBackground() is { } wide)
+        {
+            if (FullScreenPlan is { } shown && SteamwovenKitStore.SetFor(shown.Layout.Step) is { } unused) SteamwovenKitStore.Retain("plate", unused, []);
+            var drawnWidth = height * 16 / 9;
+            DrawTextureRect(wide, new Rect2((width - drawnWidth) / 2, 0, drawnWidth, height), false);
+        }
         // ARC-UI-2461: the kit's plate for this menu's background, when the set has it at the composition's size; the plate is the 800 × 600 composition itself.
         // SWI-LAY-5: the plate is sampled nearest where its baked pixels are the device pixels (a canvas texture of its own, so the labels and controls keep the view's linear sampling), else linear.
-        if (KitPlatePart() is { } kit && SteamwovenKitStore.Texture(kit.Set, kit.Part.Id) is { } kitPlate)
+        else if (KitPlatePart() is { } kit && SteamwovenKitStore.Texture(kit.Set, kit.Part.Id) is { } kitPlate)
         {
             SteamwovenKitStore.Retain("plate", kit.Set, [kit.Part.Id]);
             DrawTextureRect(KitPlateTexture(kitPlate, kit.Part), new Rect2(0, 0, width, height), false);
@@ -236,6 +278,8 @@ public partial class AreaMenuArtView : Control
     private (SteamwovenKitSet Set, SteamwovenKitPart Part)? KitPlatePart()
     {
         if (FullScreenPlan is not { } plan || _window is not { } window || AreaMenuArtLayout.Background(window) is not { } art) return null;
+        // ARC-UI-3483: the 16:9 plate wins over a kit plate of the table scene.
+        if (WidescreenBackground() is not null) return null;
         if (SteamwovenKitStore.SetFor(plan.Layout.Step) is not { } set || SteamwovenKitComposer.Plate(set, art) is not { } part) return null;
         return (set, part);
     }

@@ -227,17 +227,24 @@ public static partial class TerrainViewerSelfTest
         GD.Print("ARC-UI-089 self-test interface HD switch PASS");
     }
 
-    // ARC-UI-3003 (owner decision of #3003, option C): the pack's main-menu-16x9.png is ignored. With a valid 16:9 file in the pack the table-scene
-    // menus keep the whole-factor plate of the bars (centred, the original's art, black or empty beside it), never a plate fitted to the window.
+    // ARC-UI-122: the same synthetic wide art follows viewport changes without moving input off the label.
     private static async Task AssertMainMenuBackdropAsync(Node host, HdPack pack, bool native, Action<bool, string> require)
     {
         var path = System.IO.Path.Combine(pack.Directory, "main-menu-16x9.png");
+        require(pack.ReadMainMenuBackdrop() is null && pack.ReadMainMenuBackdropReport() is { Status: "NoFile", Sha12: null }, "missing main-menu backdrop falls back");
+        System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 10, new byte[16 * 10 * 4]));
+        require(pack.ReadMainMenuBackdrop() is null && pack.ReadMainMenuBackdropReport() is { Status: "WrongSize", Width: 16, Height: 10, Sha12.Length: 12 }, "main-menu backdrop rejects the wrong aspect");
         var rgba = new byte[16 * 9 * 4];
+        rgba[3] = 255;
+        System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 9, rgba));
+        require(pack.ReadMainMenuBackdrop() is null && pack.ReadMainMenuBackdropReport() is { Status: "NotOpaque" }, "main-menu backdrop rejects transparency");
         for (var i = 0; i < rgba.Length; i += 4) { rgba[i + 1] = 160; rgba[i + 3] = 255; }
         System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 9, rgba));
+
+        require(pack.ReadMainMenuBackdrop() is { Width: 16, Height: 9 } && pack.ReadMainMenuBackdropReport() is { Status: "Used", Sha12.Length: 12 }, "valid main-menu backdrop opens");
         if (!native)
         {
-            GD.Print("ARC-UI-3003 self-test main-menu plate ignored PASS (window checks skipped: headless)");
+            GD.Print("ARC-UI-122 self-test main-menu backdrop file PASS (window checks skipped: headless)");
             return;
         }
 
@@ -276,15 +283,15 @@ public static partial class TerrainViewerSelfTest
                 var actualSize = viewport.GetVisibleRect().Size;
                 require(actualSize.IsEqualApprox(size), $"main viewport requested {size} and got {actualSize}");
                 menu.Render(AreaMenuWindow.Main, ["One", "Two"], 1);
-                var factor = (float)AreaGameBarPanel.ScreenFactor(size);
-                var expectedPosition = new Vector2(AreaGameBarPanel.ScreenLeft(size, (int)factor), MathF.Round((size.Y - 600 * factor) / 2));
+                var factor = size.Y / 600f;
+                var expectedPosition = new Vector2((size.X - 800 * factor) / 2, 0);
                 require(menu.Position.IsEqualApprox(expectedPosition) && menu.Scale.IsEqualApprox(new(factor, factor)),
-                    $"main-menu plate keeps the whole-factor layout at {size}");
+                    $"main-menu plate is centred with a uniform scale at {size}");
                 await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 using var capture = viewport.GetTexture().GetImage();
                 require(capture.GetSize() == size, $"main-menu readback requested {size} and got {capture.GetSize()}");
-                require(capture.GetPixel(size.X / 2, size.Y / 2).G8 != 160 && capture.GetPixel(0, 0).G8 != 160 && capture.GetPixel(size.X - 1, size.Y - 1).G8 != 160,
-                    $"the pack's 16:9 plate is not drawn at {size}");
+                require(capture.GetPixel(0, 0).G8 == 160 && capture.GetPixel(size.X - 1, size.Y - 1).G8 == 160,
+                    $"main-menu art covers opposite corners at {size}");
                 var centre = menu.ButtonCentreForSelfTest(0)!.Value;
                 viewport.PushInput(new InputEventMouseMotion { Position = centre, GlobalPosition = centre }, inLocalCoords: true);
                 require(menu.HoveredForSelfTest == 0, $"main-menu hover at {size}");
@@ -293,25 +300,42 @@ public static partial class TerrainViewerSelfTest
                     viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = down,
                         Position = centre, GlobalPosition = centre, ButtonMask = down ? MouseButtonMask.Left : 0 }, inLocalCoords: true);
                 require(clicked == 0 && menu.LabelsForSelfTest.SequenceEqual(["Back"]), $"main-menu click opens the sub-menu at {size}");
-                // The single-player window, drawn after the click, stays on the same transform and the same art.
+                // ARC-DEV-344: the single-player window, drawn after the click, takes the same wide plate on the same transform.
                 require(menu.Scale.IsEqualApprox(new(factor, factor)) && menu.Position.IsEqualApprox(expectedPosition),
-                    $"single-player menu keeps the whole-factor transform at {size}");
+                    $"single-player menu keeps the wide plate transform at {size}");
                 await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 using var subCapture = viewport.GetTexture().GetImage();
-                require(subCapture.GetPixel(size.X / 2, size.Y / 2).G8 != 160 && subCapture.GetPixel(0, 0).G8 != 160,
-                    $"the pack's 16:9 plate is not drawn behind the single-player menu at {size}");
+                require(subCapture.GetPixel(0, 0).G8 == 160 && subCapture.GetPixel(size.X - 1, size.Y - 1).G8 == 160,
+                    $"single-player menu art covers opposite corners at {size}");
                 foreach (var window in new[] { AreaMenuWindow.NewGame, AreaMenuWindow.InPlay, AreaMenuWindow.InPlayLimited })
                 {
                     menu.Render(window, ["One"], 0);
                     require(menu.Scale.IsEqualApprox(new(factor, factor)) && menu.Position.IsEqualApprox(expectedPosition),
-                        $"{window} menu keeps the whole-factor transform at {size}");
+                        $"{window} menu keeps the wide plate transform at {size}");
                 }
                 // The options window has its own wooden board (556): it stays on the whole-factor layout.
                 menu.Render(AreaMenuWindow.Options, ["One"], 0);
                 require(menu.Scale.X == AreaGameBarPanel.ScreenFactor(size), $"options menu keeps whole scale at {size}");
+                // ARC-UI-3483: under the Steamwoven layout the table scene draws the same wide plate round the plan's 4:3 zone.
+                var suspended = SteamwovenHud.Suspended;
+                SteamwovenHud.Suspended = false;
+                try
+                {
+                    var plan = SteamwovenColumnMenu.Plan(size.X, size.Y, SteamwovenHud.Options);
+                    require(plan is not null, $"the Steamwoven layout has a plan at {size}");
+                    menu.Render(AreaMenuWindow.Main, ["One"], 0);
+                    require(menu.WidePlateForSelfTest && menu.Position.IsEqualApprox(new(plan!.Zone.X, plan.Zone.Y)) && Mathf.IsEqualApprox(menu.Scale.X, (float)plan.Factor),
+                        $"Steamwoven main menu draws the wide plate on the plan's zone at {size}");
+                    await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var layoutCapture = viewport.GetTexture().GetImage();
+                    require(layoutCapture.GetPixel(0, 0).G8 == 160 && layoutCapture.GetPixel(size.X - 1, size.Y - 1).G8 == 160,
+                        $"Steamwoven main-menu art covers opposite corners at {size}");
+                }
+                finally { SteamwovenHud.Suspended = suspended; }
             }
             InterfaceHd.Configure(pack, false);
             menu.Render(AreaMenuWindow.Main, ["One"], 0);
+            require(!menu.WidePlateForSelfTest, "HD interface off keeps the original's 4:3 art");
             require(menu.Scale == Vector2.One, "main menu keeps whole scale with HD interface off");
             menu.Render(AreaMenuWindow.SinglePlayer, ["One"], 0);
             require(menu.Scale == Vector2.One, "single-player menu keeps whole scale with HD interface off");
@@ -329,7 +353,7 @@ public static partial class TerrainViewerSelfTest
             viewport.ContentScaleAspect = originalScaleAspect;
             viewport.ContentScaleFactor = originalScaleFactor;
         }
-        GD.Print("ARC-UI-3003 self-test main-menu plate ignored PASS (1920x1080, 2560x1440, 1600x1000)");
+        GD.Print("ARC-UI-122 self-test main-menu backdrop PASS (1920x1080, 2560x1440, 1600x1000)");
     }
 
     // ARC-UI-112: an HD interface frame drawn below its 4× scale is filtered (trilinear mips through its canvas texture) even under a parent

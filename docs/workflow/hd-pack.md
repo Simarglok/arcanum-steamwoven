@@ -22,7 +22,7 @@ reopens it, and the build/import tooling ARC-DEV-003 stays deferred ([decision](
    pack.
 2. **Never replace the installed pack folder as a whole**, and never delete, move or re-create it. The installed
    pack holds work that no rebuild reproduces (the Codex repairs in the slices `character-hd114` and `interface-refinement02-soft`,
-   `recipe-refinement02.json`, an old unlisted `main-menu-16x9.png`, which the game no longer reads, ARC-UI-3003). Change it only with `hd_pack.py apply`, `relayout`, `refresh` or `rollback`.
+   `recipe-refinement02.json`, the unlisted main-menu picture `main-menu-16x9.png`, ARC-UI-3483). Change it only with `hd_pack.py apply`, `relayout`, `refresh` or `rollback`.
 3. **Every command that writes is run with `--dry-run` first**, the output is read, and only then the real run.
    A command given to the owner was run with `--dry-run` or `--help` first (launch-check rule).
 4. **Build into staging, never into an installed pack or the iCloud copy.** Staging is
@@ -43,7 +43,7 @@ reopens it, and the build/import tooling ARC-DEV-003 stays deferred ([decision](
 | Code, format, this page, synthetic tests | repository | yes | `tools/hd-interface-import`, `tools/hd_pack`, `docs/` |
 | Original art frames, ChatGPT sheets and results, fit/pack outputs, plans, handoffs | `local/res094/`, `local/res095/` (group folders, `ready/`, `character_repair/`, `topbar*/`, `combat119/`, `arc-ui-*/`) | **no** (`/local/` is ignored) | the work area; the pipeline scripts are in git: [`tools/hd_pack/res095/`](../../tools/hd_pack/res095/README.md) (`fit_res095.py`, `pack_res095.py`, `build_res095.py`; ARC-DEV-341) and read and write only the main checkout's `local/res094`, `local/res095` |
 | Staging build | `local/res095/pack-out/interface-redraw-4x/` | no | rebuilt from `ready/plan.json`; may be wiped by `stage --fresh` |
-| **Installed pack the packaged game reads** (since ARC-DEV-350 only when the iCloud copy is not used: the *HD pack* setting [chooses](#hd-pack-source-arc-dev-350); the viewer of `./arcanum area` reads another folder) | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `layout-map.tsv`, `INDEX.md`, `index.tsv`, `interface/<screen>/<kind>/` (the [layout](#pack-layout-arc-dev-376); before ARC-DEV-376 the folders `interface/`, `character-hd114/`, `refinement02/`), `main-menu-16x9.png` (outside the manifest; ignored by the game since ARC-UI-3003) |
+| **Installed pack the packaged game reads** (since ARC-DEV-350 only when the iCloud copy is not used: the *HD pack* setting [chooses](#hd-pack-source-arc-dev-350); the viewer of `./arcanum area` reads another folder) | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `layout-map.tsv`, `INDEX.md`, `index.tsv`, `interface/<screen>/<kind>/` (the [layout](#pack-layout-arc-dev-376); before ARC-DEV-376 the folders `interface/`, `character-hd114/`, `refinement02/`), `main-menu-16x9.png` (outside the manifest; the 16:9 main-menu picture, ARC-UI-3483) |
 | Traced interface fonts (ARC-DEV-355) | `local/hd-font/out/<art>-<name>/` (frames, `font.json`, `receipt.json`) | **no** | local 4× coverage glyph frames from the player's own fonts, written by [`tools/hd_font`](hd-font.md); built into a **separate staging pack** `local/res095/pack-out/interface-fonts/` and added to the installed pack only by `apply --add-new` ([below](#traced-fonts-in-the-pack-arc-dev-361)), never by a rebuild of the pack |
 | Backups of every change | `~/Library/Application Support/Arcanum Steamwoven Game/hd-pack-backups/<TASK>-<old manifest sha12>/` | no | the old manifest, the replaced files, `RECEIPT.json` |
 | iCloud copy (ARC-DEV-349) | `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Arcanum Steamwoven/hd_pack/` (reached as the one symlink `local/hd-packs`; the folder keeps its own name `hd_pack`, the pack is `hd_pack/interface-redraw-4x`) | no | cross-device store inside the owner's Obsidian vault; a **mirror of the installed pack**, never a build target ([below](#icloud-copy-arc-dev-349)). It replaced the Google Drive copy (`~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Steamwoven/hd_pack/`), which stays untouched, is no longer updated and is deleted only with the owner's say-so |
@@ -331,9 +331,13 @@ listed and kept. After it, `status --installed <the iCloud copy> --allow-symlink
 shows the same manifest sha as the installed pack. Whether a second device has synced is a separate check on that
 device. Importing the copy on another device is `HdPackImport` (the format page), never a copy over a pack.
 
-### Which main-menu PNG the game loads (ARC-DEV-343, retired)
+### Which main-menu PNG the game loads (ARC-DEV-343, ARC-UI-3483)
 
-None. Until ARC-UI-3003 the viewer read `main-menu-16x9.png` at the root of the active pack and logged an `ARC-DEV-343 main menu backdrop ...` line; the code (`AreaMenuArtView.WidescreenBackground`, `HdPack.ReadMainMenuBackdropReport`) and the log line are gone, and the table-scene menus draw the pack's 4× art (Steamwoven layout) or the original's whole-factor plate (HD off). Which *pack* is active is still chosen as described under [HD pack source](#hd-pack-source-arc-dev-350); the startup lines `ARC-RENDER-014 visual profile=... pack=<id> ...` and `ARC-UI-006 ... pack-source=...` say which pack opened.
+The menu picture is the file `main-menu-16x9.png` at the **root of the one active HD pack** ([format](../formats/hd-pack.md#widescreen-main-menu-art));
+with HD interface art on, the table-scene menus draw it, and the log line `ARC-DEV-343 main menu backdrop file=main-menu-16x9.png
+status=... sha12=... pack=...` names the file read. A missing or refused file leaves the pack's 4:3 art. Which *pack* is active is
+chosen as described under [HD pack source](#hd-pack-source-arc-dev-350). No `hd_pack.py` command changes this file (the `menu-art`
+command was retired, ARC-DEV-3030): changing it is a separate task, with a backup and the owner's go.
 
 ### HD pack source (ARC-DEV-350)
 
@@ -346,7 +350,7 @@ applies at the **next start**, and the launcher screen's note says at once what 
 | **Game** | the game folder `user://hd-packs/` alone: the installed copy |
 | **Custom** | the folder chosen in the system folder dialog (a folder that holds `manifest.json` is the pack itself, any other is a folder of packs), then the game folder; entering Custom always opens the dialog, cancelling keeps the saved folder |
 
-*Whole* is a stat of every manifest file and the recipe (an unlisted `main-menu-16x9.png` does not count): the file is there, has the manifest's byte
+*Whole* is a stat of every manifest file, the recipe and `main-menu-16x9.png` (when the folder has it): the file is there, has the manifest's byte
 size, and is **not online-only**. The manifest and every `*.json` of the pack folder are checked the same way **before** the pack is opened (opening
 reads and hashes them), so an evicted manifest is skipped without a download; every pack of a folder is tried, not only the first. A file the cloud provider keeps only in the cloud (macOS *Optimize Mac Storage*: `dataless` in `ls -lO`, read once
 per folder, or an old `.name.icloud` placeholder) counts as online-only, because reading it would make the game wait for a download in the middle of a
@@ -372,7 +376,7 @@ run opens no box.
 
 ### The second device and the iCloud copy (ARC-DEV-343, ARC-DEV-349)
 
-What `mirror` does for unlisted files such as an old `main-menu-16x9.png` (ignored by the game since ARC-UI-3003) and `recipe-refinement02.json` (code and `test_hd_pack.py`, not a live cloud run): they are not in the manifest, but
+What `mirror` does for unlisted files such as `main-menu-16x9.png` and `recipe-refinement02.json` (code and `test_hd_pack.py`, not a live cloud run): they are not in the manifest, but
 `mirror` copies **every** file of the source pack except `.DS_Store`, so they
 travel with it; an unlisted file is compared by SHA-256 on every run (a listed one by the manifest's hash and size), so a
 changed one is noticed and copied. Run `mirror` after every `apply`, or the iCloud copy keeps the old picture.
@@ -392,7 +396,7 @@ What the iCloud copy does on another device:
 - An **editor-binary run** there (`Godot --path`, rare) reads the checkout's `local/hd-packs/` (the iCloud symlink) in place, but only when its own `user://hd-packs/` has no usable pack (item 2 above) and *HD* is on.
 - **There is no command that installs the iCloud copy as a pack.** `HdPackImport` (the format page) is a library function used by
   tests only; it copies the manifest, one recipe and the listed entries and **drops every unlisted file, so it never brings
-  an old `main-menu-16x9.png`**. `hd_pack.py mirror` refuses a destination inside the game's folder. The way left is a hand copy of the
+  the `main-menu-16x9.png`**. `hd_pack.py mirror` refuses a destination inside the game's folder. The way left is a hand copy of the
   whole `hd_pack/interface-redraw-4x` into an empty `hd-packs/` of the second device (a first install only; then `status` and `verify --deep`
   there, and never over an existing pack). A follow-up task would add a checked install command; until then do not tell the owner the
   second device "syncs through iCloud" without saying that this hand copy is meant.
@@ -572,7 +576,7 @@ PR; the owner's 2026-11-08 instruction for ARC-UI-114 to use only Codex sub-agen
   unless `--allow-symlink`, and refuses any symlink inside a pack.
 - **Superseded local scripts.** `local/res095/tools/rebuild_hd.sh` (now stubbed to refuse), `apply_update.sh`, `merge_update.py` and `full_hd.sh`
   are replaced by `stage`, `plan` and `apply`; they stay in `local/` as history only.
-- **Unlisted files.** Recipe files outside the entries (and an ignored old `main-menu-16x9.png`) are not copied by the importer or by
+- **Unlisted files.** Recipe files outside the entries (and `main-menu-16x9.png`) are not copied by the importer or by
   `HdPackImport`; a whole-folder replace silently loses them.
 - **Same file name, new content.** A local repair may keep a file's name while its content changes (the installed
   `combat_button-f0-…` differs from the same-named staged file by hash), so the name suffix is not the content hash.

@@ -67,10 +67,16 @@ nothing. One pack is active at a time; the viewer chooses it (ARC-UI-006): `ARC_
 first pack that opened and is not rejected in `user://hd-packs/` and, in a source run, the checkout's
 `local/hd-packs/`.
 
-### Widescreen main-menu art (retired)
+### Widescreen main-menu art
 
-An optional `main-menu-16x9.png` at the pack root used to back the table-scene menus (ARC-UI-122, ARC-DEV-344). Since ARC-UI-3003 (owner decision of
-[#3003](https://github.com/Simarglok/arcanum-steamwoven/issues/3003), option C) the viewer does not read it: a full-screen menu is one centred 4:3 plate with black sides, and the pack's own 4× table-scene art stands at `s`. A pack that still has the file is valid; the file is ignored.
+The viewer uses an optional `main-menu-16x9.png` at the root of the active pack when HD interface art is on. The file sits
+outside the sprite manifest. It is an opaque, non-interlaced 8-bit RGBA PNG with a 16:9 header, up to 3840 × 2160 and 40 MiB.
+Its middle 75 percent of width registers with the original 800 × 600 menu frame. The viewer draws it behind the labels on the
+same transform, in every layout (the Steamwoven one included), and a window narrower than 16:9 crops its sides. It backs every
+menu window that draws the table scene (main menu, Single Player, New Game and the in-play menus; ARC-DEV-344); the options
+window and the other windows keep their own art. With HD interface art off, or with a missing or unusable file, the menu draws
+its normal 4:3 art (ARC-UI-122; retired by ARC-UI-3003 and restored by [ARC-UI-3483](https://github.com/Simarglok/arcanum-steamwoven/issues/3483)). Keep the source and the
+generated art on the player's device.
 
 ## manifest.json
 

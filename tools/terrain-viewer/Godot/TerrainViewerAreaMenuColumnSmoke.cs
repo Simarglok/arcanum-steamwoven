@@ -104,7 +104,7 @@ public partial class TerrainViewerApp
                         // ARC-UI-2924: the two-strip screens' buttons are hit where the plan draws them.
                         if (screen.Hovered is { } hovered) await CheckTwoStripHitsAsync(tag, layout, screen.Spots, hovered, frames, require);
                         // ARC-UI-2461: with the synthetic kit the full-screen menus draw its plates.
-                        if (syntheticKit is not null && screen.Name is "main" or "options") await CheckKitPlateAsync(tag, layout, screen.Name, art, frames, require);
+                        if (syntheticKit is not null && screen.Name is "main" or "options" && !art.WidePlateForSelfTest) await CheckKitPlateAsync(tag, layout, screen.Name, art, frames, require);
                         // ARC-UI-3039, ARC-UI-3040: with the synthetic kit the pre-made browser and the new character screen draw their two strips and their bodies.
                         if (syntheticKit is not null && screen.Name == "premade") { await CheckKitCharacterScreenAsync(tag, layout, KitPremadeView(panel.PremadeArtForSelfTest), firstPremade, syntheticKit, frames, require); firstPremade = false; premadeKitCases++; }
                         if (syntheticKit is not null && screen.Name == "newcharacter") { await CheckKitCharacterScreenAsync(tag, layout, KitNewCharacterView(panel.NewCharacterArtForSelfTest), firstNewCharacter, syntheticKit, frames, require); firstNewCharacter = false; newCharacterKitCases++; }
@@ -278,7 +278,8 @@ public partial class TerrainViewerApp
         Color Pixel(int x, int y) => image.GetPixel(Math.Clamp((int)(x * ratio.X), 0, image.GetWidth() - 1), Math.Clamp((int)(y * ratio.Y), 0, image.GetHeight() - 1));
         static int Sum(Color c) => c.R8 + c.G8 + c.B8;
         var rowY = layout.Zone.Y + layout.Zone.Height / 2;
-        if (layout.Zone.X > 4)
+        // ARC-UI-3483: the pack's 16:9 plate lies over the black beside the table scene.
+        if (layout.Zone.X > 4 && art?.WidePlateForSelfTest != true)
         {
             var far = Pixel(1, rowY);
             var near = Pixel(layout.Zone.X - 2, rowY);
