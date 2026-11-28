@@ -110,14 +110,14 @@ internal static class AreaKitStandIns
     /// <summary>The pack's pit with its 10 x 12 grid, the five count pits and their five signs (art 221, shared by the inventory, loot, steal and barter windows).</summary>
     internal static void Pack(CanvasItem canvas, float scale)
     {
-        Part(canvas, scale, "fixture.pack_pit", 366, 6, () => Field(canvas, scale, 366, 6, 324, 388));
+        Part(canvas, scale, "fixture.pack_pit", 363, 3, () => Field(canvas, scale, 366, 6, 324, 388));
         Cells(canvas, scale, 368, 8, 10, 12);
         for (var k = 0; k < 5; k++)
         {
             var y = 71 + 23 * k;
-            Part(canvas, scale, "fixture.count_pit", 727, y, () => Field(canvas, scale, 727, y, 61, 17));
+            Part(canvas, scale, "fixture.count_pit", 725, y - 1, () => Field(canvas, scale, 727, y, 61, 17));
         }
-        AreaKitFixtures.Draw(canvas, scale, "fixture.count_icons", 690, 68); // a sign has no stand-in: a number without its sign is the old art's loss the kit's part makes good
+        AreaKitFixtures.Draw(canvas, scale, "fixture.count_icons", 690, 67); // a sign has no stand-in: a number without its sign is the old art's loss the kit's part makes good
     }
 
     /// <summary>The holder's pit and grid in the loot and steal windows (10 x 8 cells at 8, 136) or the barter window (10 x 7 at 8, 168), and the barter's quote field.</summary>
@@ -125,13 +125,13 @@ internal static class AreaKitStandIns
     {
         if (barter)
         {
-            Part(canvas, scale, "fixture.holder_pit_barter", 6, 166, () => Field(canvas, scale, 6, 166, 324, 228));
+            Part(canvas, scale, "fixture.holder_pit_barter", 3, 163, () => Field(canvas, scale, 6, 166, 324, 228));
             Cells(canvas, scale, 8, 168, 10, 7);
-            Part(canvas, scale, "fixture.quote_field", 82, 125, () => Field(canvas, scale, 82, 125, 267, 36));
+            Part(canvas, scale, "fixture.quote_field", 79, 122, () => Field(canvas, scale, 82, 125, 267, 36));
         }
         else
         {
-            Part(canvas, scale, "fixture.holder_pit_loot", 6, 134, () => Field(canvas, scale, 6, 134, 324, 260));
+            Part(canvas, scale, "fixture.holder_pit_loot", 2, 130, () => Field(canvas, scale, 6, 134, 324, 260));
             Cells(canvas, scale, 8, 136, 10, 8);
         }
     }
@@ -141,13 +141,14 @@ internal static class AreaKitStandIns
     {
         Drawn.Add(SteamwovenKitWindow.Inventory);
         Pack(canvas, scale);
-        Part(canvas, scale, "fixture.name_pit", 124, 25, () => Field(canvas, scale, 124, 25, 223, 55));
-        Part(canvas, scale, "fixture.doll_pit", 18, 100, () => Field(canvas, scale, 18, 100, 330, 300));
-        Cells(canvas, scale, 23, 107, 10, 9, farEdges: false);
-        Part(canvas, scale, "fixture.weapon_frame", 10, 303, () => QuarterFrame(canvas, scale, 10, 400, 97, true));
-        Part(canvas, scale, "fixture.shield_frame", 244, 303, () => QuarterFrame(canvas, scale, 358, 400, 97, false));
+        Part(canvas, scale, "fixture.name_pit", 113, 21, () => Field(canvas, scale, 124, 25, 223, 55));
+        // ARC-UI-3474: the kit's doll part holds its own grid inside the curved frame (cell wells would cover the wood between it and the weapon and shield panels).
+        if (!Part(canvas, scale, "fixture.doll_pit", 8, 101, () => Field(canvas, scale, 18, 100, 330, 300)))
+            Cells(canvas, scale, 23, 107, 10, 9, farEdges: false);
+        Part(canvas, scale, "fixture.weapon_frame", 21, 311, () => QuarterFrame(canvas, scale, 10, 400, 97, true));
+        Part(canvas, scale, "fixture.shield_frame", 246, 311, () => QuarterFrame(canvas, scale, 358, 400, 97, false));
         // The arrange legend (690, 192, 78, 32): scattered dots, a red arrow, a small grid.
-        Part(canvas, scale, "fixture.arrange_legend", 690, 192, () =>
+        Part(canvas, scale, "fixture.arrange_legend", 691, 193, () =>
         {
             foreach (var (dx, dy) in new (float, float)[] { (0, 4), (6, 0), (6, 9), (12, 5), (14, 12), (19, 1), (20, 9) }) Field(canvas, scale, 693 + dx, 197 + dy, 4, 4, Pale, edge: false);
             Arrow(canvas, scale, 721, 205, 17, 7, RedInk);
@@ -260,22 +261,23 @@ internal static class AreaKitStandIns
     internal static void Schematic(CanvasItem canvas)
     {
         Drawn.Add(SteamwovenKitWindow.Schematic);
-        Part(canvas, 1, "fixture.schem_page", 201, 13, () => Field(canvas, 1, 201, 13, 506, 367, Paper, edge: false));
-        Part(canvas, 1, "grid.schematic", 201, 13, () =>
+        // ARC-UI-3474: the kit's page holds its ruling, the two slot boxes and the bracket to them; the stand-in draws them itself.
+        Part(canvas, 1, "fixture.schem_page", 193, 6, () =>
         {
+            Field(canvas, 1, 201, 13, 506, 367, Paper, edge: false);
             for (var x = 227f; x < 707; x += 32) canvas.DrawLine(new Vector2(x, 13), new Vector2(x, 380), Rule, 1);
             for (var y = 22f; y < 380; y += 32) canvas.DrawLine(new Vector2(201, y), new Vector2(707, y), Rule, 1);
+            Field(canvas, 1, 577, 179, 103, 71, Paper);
+            Field(canvas, 1, 577, 275, 103, 71, Paper);
         });
-        Part(canvas, 1, "fixture.schem_slot", 577, 179, () => Field(canvas, 1, 577, 179, 103, 71, Paper));
-        Part(canvas, 1, "fixture.schem_slot", 577, 275, () => Field(canvas, 1, 577, 275, 103, 71, Paper));
-        Part(canvas, 1, "fixture.schem_channel", 39, 334, () => Field(canvas, 1, 39, 334, 126, 30));
+        Part(canvas, 1, "fixture.schem_channel", 33, 315, () => Field(canvas, 1, 39, 334, 126, 30));
         // The legends: a dark oval, a gear and its sign (the mortarboard of the learned list, the scroll of the found list).
-        Part(canvas, 1, "fixture.gear_hat", 72, 144, () =>
+        Part(canvas, 1, "fixture.gear_hat", 71, 141, () =>
         {
             Disc(canvas, 1, 117, 179, 35, DarkWood); Gear(canvas, 1, 117, 179, 30, Grey);
             Poly(canvas, 1, new(.25f, .25f, .28f), (92, 173), (118, 162), (146, 173), (120, 184)); Poly(canvas, 1, new(.2f, .2f, .23f), (104, 178), (104, 192), (120, 198), (136, 192), (136, 178), (120, 184));
         });
-        Part(canvas, 1, "fixture.gear_scroll", 71, 231, () =>
+        Part(canvas, 1, "fixture.gear_scroll", 65, 228, () =>
         {
             Disc(canvas, 1, 119, 267, 35, DarkWood); Gear(canvas, 1, 119, 267, 30, Grey);
             Field(canvas, 1, 92, 261, 56, 15, new(.85f, .78f, .6f), edge: false); Disc(canvas, 1, 93, 268, 8, new(.8f, .72f, .55f)); Disc(canvas, 1, 147, 268, 8, new(.8f, .72f, .55f));

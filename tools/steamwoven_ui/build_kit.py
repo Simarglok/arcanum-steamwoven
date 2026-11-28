@@ -27,7 +27,7 @@ if str(ROOT) not in sys.path:
 
 from tools.steamwoven_ui import button_kit  # noqa: E402
 from tools.steamwoven_ui import census as census_mod  # noqa: E402
-from tools.steamwoven_ui import fixtures, sheet_parts  # noqa: E402
+from tools.steamwoven_ui import fixtures, sheet_parts, window_parts  # noqa: E402
 from tools.steamwoven_ui import gauge_kit  # noqa: E402
 from tools.steamwoven_ui import hardware_build  # noqa: E402
 from tools.steamwoven_ui import hardware_kit  # noqa: E402
@@ -110,13 +110,15 @@ FIXTURE_BATCH = {"G05": "BD-B", "G15": "BD-F"}  # the window family of a fixture
 
 
 def fixture_part(fixture: fixtures.Fixture) -> dict:
-    """ARC-UI-3098: a required detail the old window arts painted into themselves, a part of its own at the size of its place in the original (`fixtures.py` draws it by rule)."""
+    """ARC-UI-3098: a required detail the old window arts painted into themselves, a part of its own at the size of its place in the original (cut from the player's HD pack, one drawn by rule by `fixtures.py`)."""
     batch = FIXTURE_BATCH.get(fixture.windows[0], "BD-A")
     kind = "grid" if fixture.ident.startswith("grid.") else "fixture"
     if not fixture.cut:
         how = "no original art, drawn by fixtures.py (ARC-UI-3098)"
     elif fixture.ident == sheet_parts.NEEDLE:
         how = "cut from the player's own HD pack by sheet_parts.py (ARC-UI-3321)"
+    elif fixture.ident in window_parts.BY_ID:
+        how = "cut from the player's own HD frame by window_parts.py (ARC-UI-3474)"
     elif fixture.ident in sheet_parts.BY_ID:
         how = "cut from the player's own HD frame by sheet_parts.py (ARC-UI-3321)"
     else:
@@ -477,8 +479,8 @@ def build(arts: list[census_mod.CensusArt], windows: list[census_mod.CensusWindo
     for art, layers in (("335", hardware_build.layers_of("board.charcreatebottombar")), ("336", hardware_build.layers_of("board.charcreatetopbar")),
                         ("184", ["cap.bottom_strip_left", "cap.bottom_strip_right"] + hardware_build.layers_of("board.intbotom")),
                         ("185", ["cap.top_strip_left", "cap.top_strip_right"] + hardware_build.layers_of("board.inttop")),
-                        ("221", ["grid.inventory_cells"]), ("365", ["grid.schematic"])):
-        if art in by_art:  # the real census has all four (a test pins it)
+                        ("221", ["grid.inventory_cells"])):
+        if art in by_art:  # the real census has them all (a test pins it)
             by_art[art]["layers"] = layers
     parts.sort(key=lambda p: (kit_check.KINDS.index(p["kind"]), p["id"]))
     return {"schema": kit_check.SCHEMA,

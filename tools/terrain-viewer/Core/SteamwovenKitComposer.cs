@@ -161,17 +161,16 @@ public static class SteamwovenKitTable
     };
 
     /// <summary>
-    /// ARC-UI-3098 (owner decision 2026-11-24, option A): the required details the old window arts painted into themselves are kit parts of their own (<c>fixture.*</c> and the two grids, kit.json, drawn by
-    /// <c>tools/steamwoven_ui/fixtures.py</c>): part id to its size in original units. The master size is the unit size on the 6 px grid (<see cref="MasterOf"/>); the window draws the part at its place in its own units (the places are
-    /// the old art's, TRD "Elements the old arts held"). A test pins the ids and sizes to kit.json.
+    /// ARC-UI-3098 (owner decision 2026-11-24, option A): the required details the old window arts painted into themselves are kit parts of their own (<c>fixture.*</c> and the item grids' cell well, kit.json, <c>tools/steamwoven_ui/fixtures.py</c>): part id to its size in original units. The master size is the unit size on the 6 px grid (<see cref="MasterOf"/>); the window draws the part at its place in its own units (the places are
+    /// the old art's, TRD "Elements the old arts held"; a part cut from the HD pack includes its shadow, so its box is its own). A test pins the ids and sizes to kit.json.
     /// </summary>
     public static IReadOnlyDictionary<string, (int Width, int Height)> FixtureUnits { get; } = new Dictionary<string, (int, int)>
     {
-        ["grid.inventory_cells"] = (32, 32), ["fixture.pack_pit"] = (324, 388), ["fixture.doll_pit"] = (330, 300), ["fixture.holder_pit_loot"] = (324, 260), ["fixture.holder_pit_barter"] = (324, 228),
-        ["fixture.name_pit"] = (223, 55), ["fixture.quote_field"] = (267, 36), ["fixture.count_pit"] = (61, 17), ["fixture.count_icons"] = (38, 115), ["fixture.weapon_frame"] = (112, 97),
-        ["fixture.shield_frame"] = (114, 97), ["fixture.arrange_legend"] = (78, 32), ["fixture.sheet_name_box"] = (390, 102), ["fixture.sheet_derived_box"] = (488, 128), ["fixture.align_needle"] = (245, 105), ["fixture.stat_oval"] = (80, 44),
-        ["fixture.align_dial"] = (109, 111), ["fixture.health_disc"] = (87, 68), ["fixture.fatigue_disc"] = (87, 67), ["fixture.mt_ruler"] = (60, 332), ["fixture.sheet_stat_names_l"] = (50, 160), ["fixture.sheet_stat_names_r"] = (55, 160), ["fixture.sheet_dial_letters"] = (65, 25), ["fixture.schem_page"] = (506, 367),
-        ["grid.schematic"] = (506, 367), ["fixture.schem_slot"] = (103, 71), ["fixture.schem_channel"] = (126, 30), ["fixture.gear_hat"] = (90, 70), ["fixture.gear_scroll"] = (96, 72),
+        ["grid.inventory_cells"] = (32, 32), ["fixture.pack_pit"] = (332, 396), ["fixture.doll_pit"] = (350, 299), ["fixture.holder_pit_loot"] = (354, 270), ["fixture.holder_pit_barter"] = (353, 236),
+        ["fixture.name_pit"] = (245, 66), ["fixture.quote_field"] = (272, 43), ["fixture.count_pit"] = (64, 20), ["fixture.count_icons"] = (38, 118), ["fixture.weapon_frame"] = (101, 89),
+        ["fixture.shield_frame"] = (101, 89), ["fixture.arrange_legend"] = (68, 34), ["fixture.sheet_name_box"] = (390, 102), ["fixture.sheet_derived_box"] = (488, 128), ["fixture.align_needle"] = (245, 105), ["fixture.stat_oval"] = (80, 44),
+        ["fixture.align_dial"] = (109, 111), ["fixture.health_disc"] = (87, 68), ["fixture.fatigue_disc"] = (87, 67), ["fixture.mt_ruler"] = (60, 332), ["fixture.sheet_stat_names_l"] = (50, 160), ["fixture.sheet_stat_names_r"] = (55, 160), ["fixture.sheet_dial_letters"] = (65, 25), ["fixture.schem_page"] = (533, 381),
+        ["fixture.schem_channel"] = (137, 70), ["fixture.gear_hat"] = (94, 80), ["fixture.gear_scroll"] = (109, 82),
     };
 
     /// <summary>The master pixels of a length in original units: units x 3.6 on the 6 px grid, halves up (the census' rule, <c>kit_check.snap</c>).</summary>
@@ -181,7 +180,7 @@ public static class SteamwovenKitTable
         LootFixtures = ["grid.inventory_cells", "fixture.pack_pit", "fixture.holder_pit_loot", "fixture.count_pit", "fixture.count_icons"],
         BarterFixtures = ["grid.inventory_cells", "fixture.pack_pit", "fixture.holder_pit_barter", "fixture.quote_field", "fixture.count_pit", "fixture.count_icons"],
         CharacterFixtures = ["fixture.sheet_name_box", "fixture.sheet_derived_box", "fixture.stat_oval", "fixture.align_dial", "fixture.align_needle", "fixture.health_disc", "fixture.fatigue_disc", "fixture.mt_ruler", "fixture.sheet_stat_names_l", "fixture.sheet_stat_names_r", "fixture.sheet_dial_letters"],
-        SchematicFixtures = ["fixture.schem_page", "grid.schematic", "fixture.schem_slot", "fixture.schem_channel", "fixture.gear_hat", "fixture.gear_scroll"];
+        SchematicFixtures = ["fixture.schem_page", "fixture.schem_channel", "fixture.gear_hat", "fixture.gear_scroll"];
 
     /// <summary>
     /// ARC-UI-3321: the sheet's + and − buttons as the kit draws them (the art of <see cref="SteamwovenKitTable"/>'s manifest rows <c>plate.&lt;name&gt;</c>, made by <a href="https://github.com/Simarglok/arcanum-steamwoven/issues/3270">#3270</a>): the face
